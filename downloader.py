@@ -5,8 +5,28 @@ Soporta YouTube, Instagram, TikTok, Twitter/X, Twitch, Facebook, SoundCloud y m�
 
 import os
 import re
+import sys
+import shutil
 import yt_dlp
 from typing import Callable, Optional, Dict, Any
+
+def _ensure_ffmpeg():
+    """Garantiza que FFmpeg esté en el PATH del proceso, leyéndolo del registro si es necesario."""
+    if shutil.which("ffmpeg"):
+        return
+    if sys.platform == "win32":
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
+                user_path, _ = winreg.QueryValueEx(key, "Path")
+                for p in user_path.split(";"):
+                    if "ffmpeg" in p.lower() and os.path.isdir(p):
+                        os.environ["PATH"] += os.pathsep + p
+                        return
+        except Exception:
+            pass
+
+_ensure_ffmpeg()
 
 class Downloader:
     def __init__(self):
