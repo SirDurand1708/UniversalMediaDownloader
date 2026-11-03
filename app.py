@@ -59,6 +59,9 @@ class SnaptubeDesktopApp(ctk.CTk):
         self._select_tab("explore")
 
     def _get_active_browser(self):
+        saved = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
+        if os.path.exists(saved) and os.path.getsize(saved) > 0:
+            return None  # downloader usa saved_cookies.txt con máxima prioridad sin tocar el navegador
         b = self.config.get("browser_cookies", "none")
         return None if b == "none" else b
 
@@ -138,11 +141,13 @@ class SnaptubeDesktopApp(ctk.CTk):
         )
         status_box.pack(fill="x", padx=14, pady=16)
 
+        saved_cookie = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
+        has_saved = os.path.exists(saved_cookie) and os.path.getsize(saved_cookie) > 0
         self.session_lbl = ctk.CTkLabel(
             status_box,
-            text=f"● Sesión: {self.config.get('browser_cookies', 'none').capitalize()}",
+            text="● Sesión: Activa" if has_saved else f"● Sesión: {self.config.get('browser_cookies', 'none').capitalize()}",
             font=ctk.CTkFont(size=11, weight="bold"),
-            text_color=theme.STATUS_SUCCESS if self.config.get('browser_cookies') != 'none' else theme.TEXT_MUTED
+            text_color=theme.STATUS_SUCCESS if (has_saved or self.config.get('browser_cookies') != 'none') else theme.TEXT_MUTED
         )
         self.session_lbl.pack(anchor="w", padx=10, pady=(6, 2))
 
@@ -897,45 +902,68 @@ class SnaptubeDesktopApp(ctk.CTk):
         )
         browse_btn.pack(side="left")
 
-        # Bloque 2: Sesión de Navegador (100% Segura y Opcional)
+        # Bloque 2: Sesión de Navegador & Cookies
         box2 = ctk.CTkFrame(settings_scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
         box2.pack(fill="x", pady=8)
 
-        ctk.CTkLabel(box2, text="🔒 Conexión Segura con Navegador (Opcional)", font=ctk.CTkFont(size=14, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=16, pady=(14, 4))
+        ctk.CTkLabel(box2, text="🔒 Conexión Segura con YouTube (Playlists Privadas y +18)", font=ctk.CTkFont(size=14, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=16, pady=(14, 4))
         
         desc = (
-            "Permite acceder a tus playlists privadas o videos con restricción de edad (+18) "
-            "leyendo de forma segura la sesión que ya tienes abierta en tu navegador.\n"
-            "✦ 100% Seguro: Jamás se solicitan correos ni contraseñas."
+            "Para descargar videos con restricción de edad o tus playlists privadas, se requiere sesión activa.\n"
+            "✦ Cómo sincronizar con Vivaldi sin bloqueos de Windows:\n"
+            "  1. Cierra Vivaldi durante 5 segundos y haz clic en '📸 Sincronizar Sesión de Vivaldi Ahora'.\n"
+            "  2. O bien, carga un archivo cookies.txt exportado desde tu navegador."
         )
         ctk.CTkLabel(box2, text=desc, font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY, justify="left").pack(anchor="w", padx=16, pady=(0, 10))
 
-        row_browser = ctk.CTkFrame(box2, fg_color="transparent")
-        row_browser.pack(fill="x", padx=16, pady=(0, 14))
-
-        ctk.CTkLabel(row_browser, text="Navegador a sincronizar:", font=ctk.CTkFont(size=12)).pack(side="left", padx=(0, 10))
-
-        current_browser = self.config.get("browser_cookies", "none")
-        browser_names = ["Desactivado (Recomendado)", "Google Chrome", "Microsoft Edge", "Vivaldi", "Mozilla Firefox", "Brave", "Opera"]
-        browser_map = {
-            "none": "Desactivado (Recomendado)",
-            "chrome": "Google Chrome",
-            "edge": "Microsoft Edge",
-            "vivaldi": "Vivaldi",
-            "firefox": "Mozilla Firefox",
-            "brave": "Brave",
-            "opera": "Opera"
-        }
-        reverse_map = {v: k for k, v in browser_map.items()}
-
-        self.browser_combo = ctk.CTkComboBox(
-            row_browser,
-            values=browser_names,
-            width=230,
-            command=lambda val: self._on_browser_changed(reverse_map.get(val, "none"))
+        saved_cookie_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
+        self.cookie_status_lbl = ctk.CTkLabel(
+            box2,
+            text="✔ Sesión guardada en archivo local (Sin bloqueos de navegador)" if os.path.exists(saved_cookie_file) else "ℹ No hay sesión guardada en archivo local (Usando modo anónimo)",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=theme.STATUS_SUCCESS if os.path.exists(saved_cookie_file) else theme.TEXT_MUTED
         )
-        self.browser_combo.set(browser_map.get(current_browser, "Desactivado (Recomendado)"))
-        self.browser_combo.pack(side="left", padx=(0, 10))
+        self.cookie_status_lbl.pack(anchor="w", padx=16, pady=(0, 10))
+
+        btn_row_cookies = ctk.CTkFrame(box2, fg_color="transparent")
+        btn_row_cookies.pack(fill="x", padx=16, pady=(0, 14))
+
+        self.sync_vivaldi_btn = ctk.CTkButton(
+            btn_row_cookies,
+            text="📸 Sincronizar Sesión de Vivaldi Ahora",
+            height=34,
+            fg_color=theme.BTN_PRIMARY_BG,
+            hover_color=theme.BTN_PRIMARY_HOVER,
+            text_color=theme.BTN_PRIMARY_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=self._sync_vivaldi_snapshot
+        )
+        self.sync_vivaldi_btn.pack(side="left", padx=(0, 8))
+
+        load_cookie_btn = ctk.CTkButton(
+            btn_row_cookies,
+            text="📄 Cargar cookies.txt",
+            height=34,
+            fg_color=theme.BTN_SECONDARY_BG,
+            hover_color=theme.BTN_SECONDARY_HOVER,
+            text_color=theme.BTN_SECONDARY_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=self._load_cookie_file
+        )
+        load_cookie_btn.pack(side="left", padx=(0, 8))
+
+        del_cookie_btn = ctk.CTkButton(
+            btn_row_cookies,
+            text="🗑 Limpiar Sesión",
+            width=110,
+            height=34,
+            fg_color=theme.BTN_DANGER_BG,
+            hover_color=theme.BTN_DANGER_HOVER,
+            text_color=theme.BTN_DANGER_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=self._clear_saved_cookies
+        )
+        del_cookie_btn.pack(side="left")
 
         # Bloque 3: Diagnóstico del Sistema
         box3 = ctk.CTkFrame(settings_scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
@@ -960,6 +988,72 @@ class SnaptubeDesktopApp(ctk.CTk):
             text=f"● Sesión: {key.capitalize()}",
             text_color=theme.STATUS_SUCCESS if key != "none" else theme.TEXT_MUTED
         )
+
+    def _sync_vivaldi_snapshot(self):
+        saved_cookie_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
+        self.sync_vivaldi_btn.configure(state="disabled", text="Extrayendo...")
+
+        def _worker():
+            try:
+                self.downloader.export_browser_cookies_snapshot("vivaldi")
+                self.after(0, lambda: self._on_cookie_sync_success())
+            except Exception as e:
+                err = str(e)
+                self.after(0, lambda: self._on_cookie_sync_error(err))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _on_cookie_sync_success(self):
+        self.sync_vivaldi_btn.configure(state="normal", text="📸 Sincronizar Sesión de Vivaldi Ahora")
+        self.cookie_status_lbl.configure(
+            text="✔ Sesión guardada con éxito (Sin bloqueos de navegador)",
+            text_color=theme.STATUS_SUCCESS
+        )
+        self.session_lbl.configure(text="● Sesión: Vivaldi (Copiada)", text_color=theme.STATUS_SUCCESS)
+        messagebox.showinfo(
+            "Sesión Sincronizada",
+            "¡Listo! Se ha guardado una copia segura de tu sesión de Vivaldi.\n\n"
+            "Ya puedes volver a abrir Vivaldi y usarlo normalmente; la app usará esta copia para siempre sin bloqueos."
+        )
+
+    def _on_cookie_sync_error(self, err_msg: str):
+        self.sync_vivaldi_btn.configure(state="normal", text="📸 Sincronizar Sesión de Vivaldi Ahora")
+        messagebox.showwarning(
+            "Navegador en uso",
+            "No se pudieron leer las cookies porque Vivaldi aún está abierto en tu equipo.\n\n"
+            "Pasos:\n"
+            "1. Cierra todas las ventanas de Vivaldi.\n"
+            "2. Espera 3 segundos y presiona este botón nuevamente.\n"
+            "3. Una vez guardado, podrás abrir Vivaldi y usarlo como siempre."
+        )
+
+    def _load_cookie_file(self):
+        path = filedialog.askopenfilename(
+            title="Seleccionar archivo cookies.txt",
+            filetypes=[("Archivos de texto", "*.txt"), ("Todos los archivos", "*.*")]
+        )
+        if path:
+            dest = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
+            import shutil
+            shutil.copy(path, dest)
+            self.cookie_status_lbl.configure(
+                text="✔ Archivo cookies.txt cargado con éxito",
+                text_color=theme.STATUS_SUCCESS
+            )
+            self.session_lbl.configure(text="● Sesión: cookies.txt", text_color=theme.STATUS_SUCCESS)
+            messagebox.showinfo("Éxito", "El archivo cookies.txt ha sido importado correctamente.")
+
+    def _clear_saved_cookies(self):
+        dest = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
+        if os.path.exists(dest):
+            os.remove(dest)
+        self.config.set("browser_cookies", "none")
+        self.cookie_status_lbl.configure(
+            text="ℹ Sesión eliminada. Usando modo anónimo por defecto.",
+            text_color=theme.TEXT_MUTED
+        )
+        self.session_lbl.configure(text="● Sesión: Anónima", text_color=theme.TEXT_MUTED)
+        messagebox.showinfo("Sesión Limpiada", "Se ha eliminado el archivo de cookies y se ha restablecido el modo anónimo.")
 
     def _change_download_dir(self):
         chosen = filedialog.askdirectory(initialdir=self.download_dir)

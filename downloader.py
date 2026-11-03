@@ -58,6 +58,22 @@ class DownloaderEngine:
     def cancel_task(self, task_id: str):
         self._cancel_flags[task_id] = True
 
+    def export_browser_cookies_snapshot(self, browser: str = "vivaldi") -> str:
+        """
+        Extrae las cookies del navegador y las guarda en un archivo local 'saved_cookies.txt'.
+        Requiere que el navegador esté cerrado brevemente para evitar el bloqueo de archivo de Windows.
+        """
+        dest_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'cookiesfrombrowser': (browser.lower(),),
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            jar = ydl.cookiejar
+            jar.save(dest_path, ignore_discard=True, ignore_expires=True)
+        return dest_path
+
     def _base_opts(self, browser: Optional[str] = None, cookiefile: Optional[str] = None) -> Dict[str, Any]:
         opts: Dict[str, Any] = {
             'quiet': True,
@@ -66,10 +82,13 @@ class DownloaderEngine:
             'windowsfilenames': True,
             'js_runtimes': {'node': {}},
         }
-        if browser and browser.lower() != 'none':
-            opts['cookiesfrombrowser'] = (browser.lower(),)
-        elif cookiefile and os.path.exists(cookiefile):
+        saved_cookie = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
+        if cookiefile and os.path.exists(cookiefile):
             opts['cookiefile'] = cookiefile
+        elif os.path.exists(saved_cookie) and os.path.getsize(saved_cookie) > 0:
+            opts['cookiefile'] = saved_cookie
+        elif browser and browser.lower() != 'none':
+            opts['cookiesfrombrowser'] = (browser.lower(),)
         return opts
 
     def search_youtube(self, query: str, max_results: int = 6, browser: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -85,10 +104,12 @@ class DownloaderEngine:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 data = ydl.extract_info(search_query, download=False)
         except Exception as e:
-            # Si el navegador tiene bloqueadas las cookies, reintentar automáticamente en modo anónimo
             if browser and ('cookie' in str(e).lower() or '7271' in str(e)):
                 return self.search_youtube(query, max_results=max_results, browser=None)
             raise Exception(clean_error_text(str(e)))
+
+        if not data and browser:
+            return self.search_youtube(query, max_results=max_results, browser=None)
 
         entries = data.get('entries', []) if data else []
         for e in entries:
@@ -135,83 +156,87 @@ class DownloaderEngine:
                 return self.inspect_url(url, browser=None, cookiefile=cookiefile)
             raise Exception(clean_error_text(str(e)))
 
-            is_playlist = (
-                res.get('_type') == 'playlist' or 
-                ('entries' in res and len(res.get('entries', [])) > 1)
-            )
+        if not res:
+            if browser:
+                return self.inspect_url(url, browser=None, cookiefile=cookiefile)
+            raise Exception("No se pudo obtener la información del contenido multimedia.")
 
-            # --- CASO 1: ES UNA PLAYLIST O ÁLBUM ---
-            if is_playlist:
-                raw_entries = res.get('entries', [])
-                entries = []
-                for idx, e in enumerate(raw_entries, 1):
-                    if not e:
-                        continue
-                    v_id = e.get('id', '')
-                    item_url = e.get('url') or f"https://www.youtube.com/watch?v={v_id}"
-                    
-                    thumb = None
-                    thumbs = e.get('thumbnails', [])
-                    if thumbs:
-                        thumb = thumbs[-1].get('url')
-                    elif v_id:
-                        thumb = f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
+        is_playlist = (
+            res.get('_type') == 'playlist' or 
+            ('entries' in res and len(res.get('entries', [])) > 1)
+        )
 
-                    entries.append({
-                        'index': idx,
-                        'id': v_id,
-                        'title': e.get('title', f'Pista {idx}'),
-                        'uploader': e.get('uploader') or e.get('channel') or 'Desconocido',
-                        'duration': format_duration(e.get('duration')),
-                        'raw_duration': e.get('duration', 0),
-                        'url': item_url,
-                        'thumbnail': thumb,
-                    })
-
+        # --- CASO 1: ES UNA PLAYLIST O ÁLBUM ---
+        if is_playlist:
+            raw_entries = res.get('entries', [])
+            entries = []
+            for idx, e in enumerate(raw_entries, 1):
+                if not e:
+                    continue
+                v_id = e.get('id', '')
+                item_url = e.get('url') or f"https://www.youtube.com/watch?v={v_id}"
+                
                 thumb = None
-                thumbs = res.get('thumbnails', [])
+                thumbs = e.get('thumbnails', [])
                 if thumbs:
                     thumb = thumbs[-1].get('url')
-                elif entries and entries[0].get('thumbnail'):
-                    thumb = entries[0]['thumbnail']
+                elif v_id:
+                    thumb = f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
 
-                return {
-                    'is_playlist': True,
-                    'title': res.get('title', 'Lista de Reproducción'),
-                    'uploader': res.get('uploader') or res.get('channel') or 'Varios Artistas',
-                    'count': len(entries),
-                    'entries': entries,
+                entries.append({
+                    'index': idx,
+                    'id': v_id,
+                    'title': e.get('title', f'Pista {idx}'),
+                    'uploader': e.get('uploader') or e.get('channel') or 'Desconocido',
+                    'duration': format_duration(e.get('duration')),
+                    'raw_duration': e.get('duration', 0),
+                    'url': item_url,
                     'thumbnail': thumb,
-                    'url': url,
-                    'extractor': res.get('extractor_key', 'Playlist'),
-                }
+                })
 
-            # --- CASO 2: ES UN VIDEO INDIVIDUAL ---
-            # Si es video individual, podemos hacer una inspección detallada de formatos
-            formats = res.get('formats', [])
-            heights = set()
-            for f in formats:
-                h = f.get('height')
-                if h and isinstance(h, int) and h > 0:
-                    heights.add(h)
-
-            v_id = res.get('id', '')
-            thumb = res.get('thumbnail')
-            if not thumb and v_id:
-                thumb = f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
+            thumb = None
+            thumbs = res.get('thumbnails', [])
+            if thumbs:
+                thumb = thumbs[-1].get('url')
+            elif entries and entries[0].get('thumbnail'):
+                thumb = entries[0]['thumbnail']
 
             return {
-                'is_playlist': False,
-                'id': v_id,
-                'title': res.get('title', 'Sin título'),
-                'uploader': res.get('uploader') or res.get('channel') or 'Desconocido',
-                'duration': format_duration(res.get('duration')),
-                'raw_duration': res.get('duration', 0),
+                'is_playlist': True,
+                'title': res.get('title', 'Lista de Reproducción'),
+                'uploader': res.get('uploader') or res.get('channel') or 'Varios Artistas',
+                'count': len(entries),
+                'entries': entries,
                 'thumbnail': thumb,
                 'url': url,
-                'available_heights': sorted(list(heights), reverse=True),
-                'extractor': res.get('extractor_key', 'Universal'),
+                'extractor': res.get('extractor_key', 'Playlist'),
             }
+
+        # --- CASO 2: ES UN VIDEO INDIVIDUAL ---
+        formats = res.get('formats', [])
+        heights = set()
+        for f in formats:
+            h = f.get('height')
+            if h and isinstance(h, int) and h > 0:
+                heights.add(h)
+
+        v_id = res.get('id', '')
+        thumb = res.get('thumbnail')
+        if not thumb and v_id:
+            thumb = f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
+
+        return {
+            'is_playlist': False,
+            'id': v_id,
+            'title': res.get('title', 'Sin título'),
+            'uploader': res.get('uploader') or res.get('channel') or 'Desconocido',
+            'duration': format_duration(res.get('duration')),
+            'raw_duration': res.get('duration', 0),
+            'thumbnail': thumb,
+            'url': url,
+            'available_heights': sorted(list(heights), reverse=True),
+            'extractor': res.get('extractor_key', 'Universal'),
+        }
 
     def download(
         self,
@@ -350,11 +375,11 @@ class DownloaderEngine:
         else:
             raise ValueError(f"Formato desconocido: {format_type}")
 
+        info = None
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
         except Exception as e:
-            # Si el navegador tiene bloqueada la base de datos de cookies, reintentar la descarga sin cookies
             if browser and ('cookie' in str(e).lower() or '7271' in str(e)):
                 ydl_opts_retry = dict(ydl_opts)
                 ydl_opts_retry.pop('cookiesfrombrowser', None)
@@ -362,6 +387,15 @@ class DownloaderEngine:
                     info = ydl.extract_info(url, download=True)
             else:
                 raise Exception(clean_error_text(str(e)))
+
+        if not info and browser:
+            ydl_opts_retry = dict(ydl_opts)
+            ydl_opts_retry.pop('cookiesfrombrowser', None)
+            with yt_dlp.YoutubeDL(ydl_opts_retry) as ydl:
+                info = ydl.extract_info(url, download=True)
+
+        if not info:
+            raise Exception("No se pudo completar la descarga del archivo.")
             
             raw_filename = ydl.prepare_filename(info)
             if format_type.startswith('mp3'):
