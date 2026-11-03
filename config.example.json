@@ -1,6 +1,9 @@
 {
+  "audio_download_dir": "",
+  "video_download_dir": "",
   "download_dir": "",
   "browser_cookies": "none",
   "default_format": "mp3_320",
-  "max_workers": 2
+  "max_workers": 2,
+  "clipboard_watch": true
 }

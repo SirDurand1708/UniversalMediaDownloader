@@ -1,6 +1,6 @@
 """
-Gestor de cola de descargas asíncronas para Universal Media Downloader.
-Manejo concurrente, seguro entre hilos, con soporte para cancelación y apagado limpio.
+Gestor de cola de descargas asíncronas para OmniVault Desktop.
+Manejo concurrente, seguro entre hilos, con soporte para reintentos, cancelación y trabajadores dinámicos.
 """
 
 import threading
@@ -61,6 +61,19 @@ class QueueManager:
             t.start()
             self.active_workers.append(t)
 
+    def set_max_workers(self, count: int):
+        """Ajusta dinámicamente el número de hilos de descarga."""
+        with self._lock:
+            target = max(1, min(int(count), 6))
+            self.max_workers = target
+            alive = [w for w in self.active_workers if w.is_alive()]
+            current_alive = len(alive)
+            if target > current_alive and self._running:
+                for idx in range(current_alive, target):
+                    t = threading.Thread(target=self._worker_loop, daemon=True, name=f"DLWorker-{idx+1}")
+                    t.start()
+                    self.active_workers.append(t)
+
     def add_download(
         self,
         url: str,
@@ -106,6 +119,23 @@ class QueueManager:
             count += 1
         return count
 
+    def retry_download(self, task_id: str) -> bool:
+        """Reinicia una descarga que haya fallado o sido cancelada."""
+        with self._lock:
+            task = self.tasks.get(task_id)
+            if not task:
+                return False
+            task.status = "queued"
+            task.percent = 0.0
+            task.speed = "--"
+            task.eta = "--"
+            task.status_text = "En cola de espera..."
+            task.error_msg = ""
+
+        self.task_queue.put(task)
+        self._notify_update(task)
+        return True
+
     def cancel_download(self, task_id: str):
         with self._lock:
             task = self.tasks.get(task_id)
@@ -126,7 +156,6 @@ class QueueManager:
     def stop(self):
         """Detiene la ejecución de los workers de forma limpia."""
         self._running = False
-        # Cancelar tareas activas
         for task in self.get_active_tasks():
             self.cancel_download(task.id)
 

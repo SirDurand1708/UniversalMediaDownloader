@@ -1,5 +1,5 @@
 """
-Gestor de configuración y preferencias de usuario para Universal Media Downloader.
+Gestor de configuración y preferencias de usuario para OmniVault Desktop.
 Manejo seguro, atómico y con soporte para concurrencia.
 """
 
@@ -17,18 +17,25 @@ class ConfigManager:
         self.settings: Dict[str, Any] = self._load()
 
     def _default_settings(self) -> Dict[str, Any]:
-        default_dl = os.path.join(os.path.expanduser("~"), "Downloads")
-        if not os.path.exists(default_dl):
-            try:
-                os.makedirs(default_dl, exist_ok=True)
-            except Exception:
-                default_dl = os.getcwd()
+        user_home = os.path.expanduser("~")
+        
+        # Carpetas predeterminadas especializadas solicitadas por el usuario
+        music_base = os.path.join(user_home, "Music")
+        videos_base = os.path.join(user_home, "Videos")
+        downloads_base = os.path.join(user_home, "Downloads")
+
+        default_audio = os.path.join(music_base, "OmniVault Audios") if os.path.exists(music_base) else os.path.join(downloads_base, "OmniVault Audios")
+        default_video = os.path.join(videos_base, "OmniVault Videos") if os.path.exists(videos_base) else os.path.join(downloads_base, "OmniVault Videos")
+        default_dl = downloads_base if os.path.exists(downloads_base) else user_home
 
         return {
+            "audio_download_dir": default_audio,
+            "video_download_dir": default_video,
             "download_dir": default_dl,
-            "browser_cookies": "none",  # 'none', 'chrome', 'edge', 'firefox', 'brave', 'opera', 'vivaldi'
+            "browser_cookies": "none",
             "default_format": "mp3_320",
             "max_workers": 2,
+            "clipboard_watch": True,
         }
 
     def _load(self) -> Dict[str, Any]:
@@ -42,8 +49,29 @@ class ConfigManager:
                     defaults.update(data)
                 return defaults
         except Exception:
-            # Si el archivo está corrupto, mantenemos defaults
             return defaults
+
+    def get_audio_dir(self) -> str:
+        with self._lock:
+            d = self.settings.get("audio_download_dir")
+        if not d or not isinstance(d, str):
+            d = self._default_settings()["audio_download_dir"]
+        try:
+            os.makedirs(d, exist_ok=True)
+        except Exception:
+            pass
+        return d
+
+    def get_video_dir(self) -> str:
+        with self._lock:
+            d = self.settings.get("video_download_dir")
+        if not d or not isinstance(d, str):
+            d = self._default_settings()["video_download_dir"]
+        try:
+            os.makedirs(d, exist_ok=True)
+        except Exception:
+            pass
+        return d
 
     def save(self):
         """Guarda la configuración de forma atómica y segura entre hilos."""

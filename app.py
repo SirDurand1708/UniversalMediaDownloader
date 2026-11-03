@@ -53,7 +53,6 @@ class OmniVaultApp(ctk.CTk):
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
         # Estado actual
-        self.download_dir = self.config.get("download_dir")
         self.current_media = None
         self.playlist_entries = []
         self.playlist_check_vars = []
@@ -61,8 +60,15 @@ class OmniVaultApp(ctk.CTk):
         self.search_check_vars = []
         self.selected_format = ctk.StringVar(value=self.config.get("default_format", "mp3_320"))
 
+        # Detección inteligente de portapapeles
+        self._last_detected_clipboard = ""
+        self._clipboard_banner_visible = False
+
         self._build_layout()
         self._select_tab("explore")
+
+        # Iniciar monitoreo del portapapeles si está activado
+        self.after(1500, self._check_clipboard_loop)
 
     def _on_close(self):
         """Maneja el cierre ordenado de la aplicación y detiene procesos activos."""
@@ -86,10 +92,15 @@ class OmniVaultApp(ctk.CTk):
         b = self.config.get("browser_cookies", "none")
         return None if b == "none" else b
 
+    def _get_target_dir(self, format_type: str) -> str:
+        """Enruta descargas de audio a la carpeta de música y videos a la carpeta de videos."""
+        if format_type in ["mp3_320", "mp3_192", "m4a_best", "wav"]:
+            return self.config.get_audio_dir()
+        return self.config.get_video_dir()
+
     def _build_layout(self):
-        # Distribución de la cuadrícula principal para máxima responsividad
         self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=0, minsize=200)  # Barra lateral
+        self.grid_columnconfigure(0, weight=0, minsize=210)  # Barra lateral
         self.grid_columnconfigure(1, weight=1)               # Contenedor dinámico principal
 
         # --- BARRA LATERAL ---
@@ -223,12 +234,53 @@ class OmniVaultApp(ctk.CTk):
     # =========================================================================
     def _create_explore_view(self) -> ctk.CTkFrame:
         view = ctk.CTkFrame(self.main_container, fg_color="transparent")
-        view.grid_rowconfigure(2, weight=1)
+        view.grid_rowconfigure(3, weight=1)
         view.grid_columnconfigure(0, weight=1)
+
+        # Banner de Detección Automática de Portapapeles (Smart Auto-Paste)
+        self.clipboard_banner = ctk.CTkFrame(
+            view,
+            fg_color=theme.BG_CARD,
+            corner_radius=theme.CORNER_RADIUS_SM,
+            border_width=1,
+            border_color=theme.ACCENT_CYAN
+        )
+        self.clipboard_lbl = ctk.CTkLabel(
+            self.clipboard_banner,
+            text="",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color=theme.ACCENT_CYAN,
+            anchor="w"
+        )
+        self.clipboard_lbl.pack(side="left", padx=10, pady=6, fill="x", expand=True)
+
+        self.clipboard_paste_btn = ctk.CTkButton(
+            self.clipboard_banner,
+            text="⚡ Analizar enlace copiado",
+            width=160,
+            height=28,
+            fg_color=theme.BTN_PRIMARY_BG,
+            hover_color=theme.BTN_PRIMARY_HOVER,
+            text_color=theme.BTN_PRIMARY_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=self._use_detected_clipboard
+        )
+        self.clipboard_paste_btn.pack(side="left", padx=(0, 6))
+
+        ctk.CTkButton(
+            self.clipboard_banner,
+            text="✖",
+            width=28,
+            height=28,
+            fg_color=theme.BTN_SECONDARY_BG,
+            hover_color=theme.BTN_SECONDARY_HOVER,
+            text_color=theme.BTN_SECONDARY_TEXT,
+            command=self._dismiss_clipboard_banner
+        ).pack(side="left", padx=(0, 8))
 
         # Barra de Búsqueda adaptable
         search_box = ctk.CTkFrame(view, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
-        search_box.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        search_box.grid(row=1, column=0, sticky="ew", pady=(0, 10))
 
         self.search_entry = ctk.CTkEntry(
             search_box,
@@ -269,14 +321,41 @@ class OmniVaultApp(ctk.CTk):
         self.search_btn.pack(side="left", padx=(0, 8))
 
         self.analyze_status = ctk.CTkLabel(view, text="", font=ctk.CTkFont(size=12), text_color=theme.ACCENT_CYAN, anchor="w")
-        self.analyze_status.grid(row=1, column=0, sticky="ew", pady=(0, 6))
+        self.analyze_status.grid(row=2, column=0, sticky="ew", pady=(0, 6))
 
         self.explore_scroll = ctk.CTkScrollableFrame(view, fg_color="transparent", corner_radius=theme.CORNER_RADIUS)
-        self.explore_scroll.grid(row=2, column=0, sticky="nsew")
+        self.explore_scroll.grid(row=3, column=0, sticky="nsew")
         self.explore_scroll.grid_columnconfigure(0, weight=1)
 
         self._show_explore_welcome()
         return view
+
+    def _check_clipboard_loop(self):
+        """Monitorea el portapapeles y notifica amigablemente si el usuario copia un enlace multimedia."""
+        try:
+            if self.config.get("clipboard_watch", True):
+                clip = self.clipboard_get().strip()
+                if is_url(clip) and clip != self._last_detected_clipboard and clip != self.search_entry.get().strip():
+                    self._last_detected_clipboard = clip
+                    short_display = clip if len(clip) <= 45 else clip[:42] + "..."
+                    self.clipboard_lbl.configure(text=f"📋 Enlace detectado: {short_display}")
+                    self.clipboard_banner.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+                    self._clipboard_banner_visible = True
+        except Exception:
+            pass
+        finally:
+            self.after(1800, self._check_clipboard_loop)
+
+    def _use_detected_clipboard(self):
+        if self._last_detected_clipboard:
+            self.search_entry.delete(0, tk.END)
+            self.search_entry.insert(0, self._last_detected_clipboard)
+            self._dismiss_clipboard_banner()
+            self._on_search_submit()
+
+    def _dismiss_clipboard_banner(self):
+        self.clipboard_banner.grid_forget()
+        self._clipboard_banner_visible = False
 
     def _show_explore_welcome(self):
         for widget in self.explore_scroll.winfo_children():
@@ -300,7 +379,6 @@ class OmniVaultApp(ctk.CTk):
             justify="center"
         ).pack(pady=(0, 18), padx=16)
 
-        # Etiquetas de plataformas organizadas en 2 filas responsivas
         chips_box = ctk.CTkFrame(welcome_frame, fg_color="transparent")
         chips_box.pack(pady=(0, 20), padx=10)
 
@@ -339,6 +417,7 @@ class OmniVaultApp(ctk.CTk):
         if not raw_text:
             return
 
+        self._dismiss_clipboard_banner()
         self.search_btn.configure(state="disabled", text="Analizando...")
         self.analyze_status.configure(text="Conectando y analizando contenido...", text_color=theme.ACCENT_CYAN)
 
@@ -374,7 +453,7 @@ class OmniVaultApp(ctk.CTk):
         self.analyze_status.configure(text=f"✖ Error: {cleaned[:70]}", text_color=theme.STATUS_ERROR)
         messagebox.showerror("Error de Contenido", f"No se pudo procesar el enlace:\n\n{cleaned}")
 
-    # --- RESULTADOS DE BÚSQUEDA AUTORRESPONSIVOS ---
+    # --- RESULTADOS DE BÚSQUEDA ---
     def _display_search_results(self, results: list, query: str):
         self.search_btn.configure(state="normal", text="Buscar / Analizar")
         self.analyze_status.configure(text=f"Resultados para '{query}' (Marca casillas para descarga en lote)", text_color=theme.TEXT_SECONDARY)
@@ -388,7 +467,6 @@ class OmniVaultApp(ctk.CTk):
             ctk.CTkLabel(self.explore_scroll, text="No se encontraron contenidos coincidentes.", font=ctk.CTkFont(size=14), text_color=theme.TEXT_MUTED).pack(pady=40)
             return
 
-        # Barra de control múltiple flexible
         batch_bar = ctk.CTkFrame(self.explore_scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
         batch_bar.pack(fill="x", pady=(0, 10), padx=4)
 
@@ -418,7 +496,6 @@ class OmniVaultApp(ctk.CTk):
         )
         self.batch_dl_btn.pack(side="right", padx=10, pady=6)
 
-        # Tarjetas de cada resultado
         for idx, item in enumerate(results):
             var = ctk.BooleanVar(value=False)
             self.search_check_vars.append(var)
@@ -426,7 +503,6 @@ class OmniVaultApp(ctk.CTk):
             card = ctk.CTkFrame(self.explore_scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
             card.pack(fill="x", pady=4, padx=4)
 
-            # Checkbox
             cb = ctk.CTkCheckBox(
                 card, text="", variable=var, width=22, checkbox_width=18, checkbox_height=18,
                 fg_color=theme.BTN_PRIMARY_BG, hover_color=theme.BTN_PRIMARY_HOVER,
@@ -434,7 +510,6 @@ class OmniVaultApp(ctk.CTk):
             )
             cb.pack(side="left", padx=(10, 4))
 
-            # Miniatura 16:9 compacta
             thumb_label = ctk.CTkLabel(card, text="", width=100, height=56, fg_color=theme.BG_INPUT, corner_radius=theme.CORNER_RADIUS_SM)
             thumb_label.pack(side="left", padx=4, pady=6)
 
@@ -489,8 +564,9 @@ class OmniVaultApp(ctk.CTk):
             return
 
         fmt = self.selected_format.get()
+        target_dir = self._get_target_dir(fmt)
         browser = self._get_active_browser()
-        count = self.queue_manager.add_batch(selected_items, format_type=fmt, output_dir=self.download_dir, browser=browser)
+        count = self.queue_manager.add_batch(selected_items, format_type=fmt, output_dir=target_dir, browser=browser)
         messagebox.showinfo("Descarga en Lote", f"Se han añadido {count} elementos a la cola de descargas.")
         self._select_tab("downloads")
 
@@ -505,7 +581,6 @@ class OmniVaultApp(ctk.CTk):
         for widget in self.explore_scroll.winfo_children():
             widget.destroy()
 
-        # Cabecera adaptable de la Playlist
         header_card = ctk.CTkFrame(self.explore_scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS_LG, border_width=1, border_color=theme.BORDER_COLOR)
         header_card.pack(fill="x", pady=8, padx=4)
 
@@ -531,7 +606,6 @@ class OmniVaultApp(ctk.CTk):
         ctk.CTkLabel(info_col, text=data.get("title", ""), font=ctk.CTkFont(size=15, weight="bold"), text_color=theme.TEXT_PRIMARY, anchor="w").pack(fill="x", pady=2)
         ctk.CTkLabel(info_col, text=f"Por: {data.get('uploader')}  •  Total: {data.get('count')} elementos", font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY, anchor="w").pack(fill="x")
 
-        # Barra de Selección y Formato Adaptable (Grid de 2 filas para que no desborde)
         action_box = ctk.CTkFrame(header_card, fg_color=theme.BG_INPUT, corner_radius=theme.CORNER_RADIUS)
         action_box.pack(fill="x", padx=14, pady=(0, 14))
 
@@ -558,7 +632,6 @@ class OmniVaultApp(ctk.CTk):
         )
         self.playlist_count_lbl.pack(side="right", padx=6)
 
-        # Opciones de Formato en 2 filas compactas y responsivas
         fmt_frame = ctk.CTkFrame(action_box, fg_color="transparent")
         fmt_frame.pack(fill="x", padx=10, pady=(0, 8))
 
@@ -594,7 +667,6 @@ class OmniVaultApp(ctk.CTk):
         )
         self.playlist_dl_btn.pack(fill="x", padx=14, pady=(0, 14))
 
-        # Lista de canciones con checkboxes
         for idx, entry in enumerate(self.playlist_entries):
             var = self.playlist_check_vars[idx]
 
@@ -635,12 +707,13 @@ class OmniVaultApp(ctk.CTk):
             return
 
         fmt = self.selected_format.get()
+        target_dir = self._get_target_dir(fmt)
         browser = self._get_active_browser()
-        count = self.queue_manager.add_batch(selected, format_type=fmt, output_dir=self.download_dir, browser=browser)
+        count = self.queue_manager.add_batch(selected, format_type=fmt, output_dir=target_dir, browser=browser)
         messagebox.showinfo("Playlist Encolada", f"Se han añadido {count} descargas a la cola activa.")
         self._select_tab("downloads")
 
-    # --- MODAL DE VIDEO INDIVIDUAL RESPONSIVO ---
+    # --- MODAL DE VIDEO INDIVIDUAL ---
     def _display_single_modal(self, data: dict):
         self.search_btn.configure(state="normal", text="Buscar / Analizar")
         self.analyze_status.configure(text="✔ Contenido verificado listo para descargar", text_color=theme.STATUS_SUCCESS)
@@ -670,16 +743,10 @@ class OmniVaultApp(ctk.CTk):
         info_col = ctk.CTkFrame(header_row, fg_color="transparent")
         info_col.pack(side="left", fill="both", expand=True)
 
-        title_lbl = ctk.CTkLabel(
-            info_col, text=data.get("title", ""), font=ctk.CTkFont(size=15, weight="bold"),
-            text_color=theme.TEXT_PRIMARY, anchor="w", justify="left"
-        )
-        title_lbl.pack(fill="x")
-
+        ctk.CTkLabel(info_col, text=data.get("title", ""), font=ctk.CTkFont(size=15, weight="bold"), text_color=theme.TEXT_PRIMARY, anchor="w", justify="left").pack(fill="x")
         meta = f"{data.get('uploader')}   •   Duración: {data.get('duration')}   •   Fuente: {data.get('extractor')}"
         ctk.CTkLabel(info_col, text=meta, font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY, anchor="w").pack(fill="x", pady=(4, 0))
 
-        # Panel de Opciones (2 Columnas dinámicas que se ajustan al ancho)
         grid_frame = ctk.CTkFrame(card, fg_color=theme.BG_INPUT, corner_radius=theme.CORNER_RADIUS)
         grid_frame.pack(fill="x", padx=14, pady=(0, 14))
         grid_frame.grid_columnconfigure(0, weight=1)
@@ -739,13 +806,14 @@ class OmniVaultApp(ctk.CTk):
             return
 
         fmt = self.selected_format.get()
+        target_dir = self._get_target_dir(fmt)
         url = self.current_media.get("url")
         title = self.current_media.get("title")
         thumb = self.current_media.get("thumbnail")
         browser = self._get_active_browser()
 
         self.queue_manager.add_download(
-            url=url, format_type=fmt, output_dir=self.download_dir,
+            url=url, format_type=fmt, output_dir=target_dir,
             title=title, thumbnail_url=thumb, browser=browser
         )
 
@@ -753,7 +821,7 @@ class OmniVaultApp(ctk.CTk):
         self._select_tab("downloads")
 
     # =========================================================================
-    # VISTA 2: DESCARGAS ACTIVAS
+    # VISTA 2: DESCARGAS ACTIVAS CON BOTÓN DE REINTENTO
     # =========================================================================
     def _create_downloads_view(self) -> ctk.CTkFrame:
         view = ctk.CTkFrame(self.main_container, fg_color="transparent")
@@ -805,6 +873,14 @@ class OmniVaultApp(ctk.CTk):
             status_lbl = ctk.CTkLabel(bot_row, text=task.status_text, font=ctk.CTkFont(size=11), text_color=theme.TEXT_MUTED)
             status_lbl.pack(side="left")
 
+            retry_btn = ctk.CTkButton(
+                bot_row, text="🔄 Reintentar", width=85, height=24,
+                fg_color=theme.BTN_PRIMARY_BG, hover_color=theme.BTN_PRIMARY_HOVER, text_color=theme.BTN_PRIMARY_TEXT,
+                font=ctk.CTkFont(size=10, weight="bold"), command=lambda t_id=task.id: self.queue_manager.retry_download(t_id)
+            )
+            if task.status in ["error", "cancelled"]:
+                retry_btn.pack(side="right", padx=(4, 0))
+
             cancel_btn = ctk.CTkButton(
                 bot_row, text="Cancelar", width=70, height=24,
                 fg_color=theme.BTN_DANGER_BG, hover_color=theme.BTN_DANGER_HOVER, text_color=theme.BTN_DANGER_TEXT,
@@ -813,7 +889,12 @@ class OmniVaultApp(ctk.CTk):
             if task.status in ["queued", "downloading", "converting"]:
                 cancel_btn.pack(side="right")
 
-            self.task_ui_cards[task.id] = {"progress_bar": p_bar, "status_label": status_lbl, "cancel_btn": cancel_btn}
+            self.task_ui_cards[task.id] = {
+                "progress_bar": p_bar,
+                "status_label": status_lbl,
+                "cancel_btn": cancel_btn,
+                "retry_btn": retry_btn
+            }
 
     def _on_task_updated(self, task: DownloadTask):
         def _apply():
@@ -825,8 +906,15 @@ class OmniVaultApp(ctk.CTk):
                 ui = self.task_ui_cards[task.id]
                 ui["progress_bar"].set(task.percent)
                 ui["status_label"].configure(text=task.status_text)
-                if task.status in ["completed", "error", "cancelled"]:
+                if task.status in ["completed"]:
                     ui["cancel_btn"].pack_forget()
+                    ui["retry_btn"].pack_forget()
+                elif task.status in ["error", "cancelled"]:
+                    ui["cancel_btn"].pack_forget()
+                    ui["retry_btn"].pack(side="right", padx=(4, 0))
+                else:
+                    ui["retry_btn"].pack_forget()
+                    ui["cancel_btn"].pack(side="right")
 
         self.after(0, _apply)
 
@@ -834,27 +922,52 @@ class OmniVaultApp(ctk.CTk):
         self.after(0, lambda: self._on_task_updated(task))
 
     # =========================================================================
-    # VISTA 3: MI BIBLIOTECA
+    # VISTA 3: MI BIBLIOTECA CON BÚSQUEDA Y FILTRADO EN VIVO
     # =========================================================================
     def _create_library_view(self) -> ctk.CTkFrame:
         view = ctk.CTkFrame(self.main_container, fg_color="transparent")
-        view.grid_rowconfigure(1, weight=1)
+        view.grid_rowconfigure(2, weight=1)
         view.grid_columnconfigure(0, weight=1)
 
         header = ctk.CTkFrame(view, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 8))
 
         ctk.CTkLabel(header, text="Mi Biblioteca", font=ctk.CTkFont(size=19, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(side="left")
 
-        open_folder_btn = ctk.CTkButton(
-            header, text="📂 Abrir Carpeta", height=32,
+        # Botones para abrir carpetas especializadas
+        btn_box = ctk.CTkFrame(header, fg_color="transparent")
+        btn_box.pack(side="right")
+
+        ctk.CTkButton(
+            btn_box, text="🎵 Carpeta Audios", width=125, height=30,
             fg_color=theme.BTN_SECONDARY_BG, hover_color=theme.BTN_SECONDARY_HOVER, text_color=theme.BTN_SECONDARY_TEXT,
-            font=ctk.CTkFont(size=11, weight="bold"), command=self._open_downloads_folder
+            font=ctk.CTkFont(size=11, weight="bold"), command=self._open_audios_folder
+        ).pack(side="left", padx=3)
+
+        ctk.CTkButton(
+            btn_box, text="🎬 Carpeta Videos", width=125, height=30,
+            fg_color=theme.BTN_SECONDARY_BG, hover_color=theme.BTN_SECONDARY_HOVER, text_color=theme.BTN_SECONDARY_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"), command=self._open_videos_folder
+        ).pack(side="left", padx=3)
+
+        # Barra de Filtrado en Tiempo Real
+        filter_box = ctk.CTkFrame(view, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS_SM, border_width=1, border_color=theme.BORDER_COLOR)
+        filter_box.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+
+        self.library_search_entry = ctk.CTkEntry(
+            filter_box,
+            placeholder_text="🔍  Filtrar biblioteca por nombre, artista o formato...",
+            font=ctk.CTkFont(size=12),
+            height=34,
+            fg_color=theme.BG_INPUT,
+            border_width=0,
+            text_color=theme.TEXT_PRIMARY
         )
-        open_folder_btn.pack(side="right")
+        self.library_search_entry.pack(side="left", fill="x", expand=True, padx=8, pady=4)
+        self.library_search_entry.bind("<KeyRelease>", lambda e: self._refresh_library_list())
 
         self.library_scroll = ctk.CTkScrollableFrame(view, fg_color="transparent", corner_radius=theme.CORNER_RADIUS)
-        self.library_scroll.grid(row=1, column=0, sticky="nsew")
+        self.library_scroll.grid(row=2, column=0, sticky="nsew")
         self.library_scroll.grid_columnconfigure(0, weight=1)
         return view
 
@@ -862,12 +975,22 @@ class OmniVaultApp(ctk.CTk):
         for widget in self.library_scroll.winfo_children():
             widget.destroy()
 
+        filter_txt = self.library_search_entry.get().strip().lower() if hasattr(self, 'library_search_entry') else ""
         items = self.history.get_all()
+
+        if filter_txt:
+            items = [
+                i for i in items
+                if filter_txt in i.get("title", "").lower() or filter_txt in i.get("format_label", "").lower()
+            ]
+
         if not items:
             empty_box = ctk.CTkFrame(self.library_scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS_LG, border_width=1, border_color=theme.BORDER_COLOR)
             empty_box.pack(fill="x", pady=30, padx=14)
-            ctk.CTkLabel(empty_box, text="🎵 Tu biblioteca está vacía", font=ctk.CTkFont(size=17, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(pady=(24, 4))
-            ctk.CTkLabel(empty_box, text="Los audios y videos descargados aparecerán aquí para reproducir al instante.", font=ctk.CTkFont(size=12), text_color=theme.TEXT_SECONDARY).pack(pady=(0, 24))
+            msg_title = "🔍 Sin resultados coincidentes" if filter_txt else "🎵 Tu biblioteca está vacía"
+            msg_sub = f"No se encontró ningún archivo con '{filter_txt}'" if filter_txt else "Los audios y videos descargados aparecerán aquí para reproducir al instante."
+            ctk.CTkLabel(empty_box, text=msg_title, font=ctk.CTkFont(size=17, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(pady=(24, 4))
+            ctk.CTkLabel(empty_box, text=msg_sub, font=ctk.CTkFont(size=12), text_color=theme.TEXT_SECONDARY).pack(pady=(0, 24))
             return
 
         for item in items:
@@ -912,22 +1035,28 @@ class OmniVaultApp(ctk.CTk):
         self.history.delete_item(item_id)
         self._refresh_library_list()
 
-    def _open_downloads_folder(self):
-        if not self.download_dir:
+    def _open_folder_safe(self, folder_path: str):
+        if not folder_path:
             return
-        os.makedirs(self.download_dir, exist_ok=True)
+        os.makedirs(folder_path, exist_ok=True)
         try:
             if sys.platform == "win32":
-                os.startfile(self.download_dir)
+                os.startfile(folder_path)
             elif sys.platform == "darwin":
-                subprocess.Popen(["open", self.download_dir])
+                subprocess.Popen(["open", folder_path])
             else:
-                subprocess.Popen(["xdg-open", self.download_dir])
+                subprocess.Popen(["xdg-open", folder_path])
         except Exception as e:
             print(f"Error abriendo carpeta: {e}")
 
+    def _open_audios_folder(self):
+        self._open_folder_safe(self.config.get_audio_dir())
+
+    def _open_videos_folder(self):
+        self._open_folder_safe(self.config.get_video_dir())
+
     # =========================================================================
-    # VISTA 4: AJUSTES & SESIÓN SEGURA
+    # VISTA 4: AJUSTES (DIRECTORIOS, RENDIMIENTO Y SESIÓN)
     # =========================================================================
     def _create_settings_view(self) -> ctk.CTkFrame:
         view = ctk.CTkFrame(self.main_container, fg_color="transparent")
@@ -943,32 +1072,79 @@ class OmniVaultApp(ctk.CTk):
         settings_scroll.grid(row=1, column=0, sticky="nsew")
         settings_scroll.grid_columnconfigure(0, weight=1)
 
-        # Bloque 1: Carpeta de Descargas
+        # Bloque 1: Carpetas de Descargas Separadas
         box1 = ctk.CTkFrame(settings_scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
         box1.pack(fill="x", pady=6)
 
-        ctk.CTkLabel(box1, text="Carpeta de Descarga Predeterminada", font=ctk.CTkFont(size=13, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=14, pady=(12, 4))
+        ctk.CTkLabel(box1, text="Ubicaciones de Descarga Predeterminadas", font=ctk.CTkFont(size=13, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=14, pady=(12, 4))
+        ctk.CTkLabel(box1, text="Las canciones y audios se guardan en Música, y los videos en la carpeta de Videos.", font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY).pack(anchor="w", padx=14, pady=(0, 10))
 
-        row1 = ctk.CTkFrame(box1, fg_color="transparent")
-        row1.pack(fill="x", padx=14, pady=(0, 12))
+        # Fila Audios
+        ctk.CTkLabel(box1, text="🎵 Carpeta de Audios / Canciones:", font=ctk.CTkFont(size=11, weight="bold"), text_color=theme.TEXT_SECONDARY).pack(anchor="w", padx=14, pady=(2, 2))
+        row_audio = ctk.CTkFrame(box1, fg_color="transparent")
+        row_audio.pack(fill="x", padx=14, pady=(0, 8))
 
-        self.dir_entry = ctk.CTkEntry(row1, height=34, font=ctk.CTkFont(size=12), fg_color=theme.BG_INPUT)
-        self.dir_entry.insert(0, self.download_dir)
-        self.dir_entry.configure(state="readonly")
-        self.dir_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self.audio_dir_entry = ctk.CTkEntry(row_audio, height=32, font=ctk.CTkFont(size=11), fg_color=theme.BG_INPUT)
+        self.audio_dir_entry.insert(0, self.config.get_audio_dir())
+        self.audio_dir_entry.configure(state="readonly")
+        self.audio_dir_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
 
-        browse_btn = ctk.CTkButton(
-            row1, text="📁 Cambiar", width=85, height=34,
+        ctk.CTkButton(
+            row_audio, text="📁 Cambiar", width=80, height=32,
             fg_color=theme.BTN_SECONDARY_BG, hover_color=theme.BTN_SECONDARY_HOVER, text_color=theme.BTN_SECONDARY_TEXT,
-            font=ctk.CTkFont(size=11, weight="bold"), command=self._change_download_dir
-        )
-        browse_btn.pack(side="left")
+            font=ctk.CTkFont(size=11, weight="bold"), command=self._change_audio_dir
+        ).pack(side="left")
 
-        # Bloque 2: Sesión de Navegador & Cookies
+        # Fila Videos
+        ctk.CTkLabel(box1, text="🎬 Carpeta de Videos:", font=ctk.CTkFont(size=11, weight="bold"), text_color=theme.TEXT_SECONDARY).pack(anchor="w", padx=14, pady=(2, 2))
+        row_video = ctk.CTkFrame(box1, fg_color="transparent")
+        row_video.pack(fill="x", padx=14, pady=(0, 12))
+
+        self.video_dir_entry = ctk.CTkEntry(row_video, height=32, font=ctk.CTkFont(size=11), fg_color=theme.BG_INPUT)
+        self.video_dir_entry.insert(0, self.config.get_video_dir())
+        self.video_dir_entry.configure(state="readonly")
+        self.video_dir_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        ctk.CTkButton(
+            row_video, text="📁 Cambiar", width=80, height=32,
+            fg_color=theme.BTN_SECONDARY_BG, hover_color=theme.BTN_SECONDARY_HOVER, text_color=theme.BTN_SECONDARY_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"), command=self._change_video_dir
+        ).pack(side="left")
+
+        # Bloque 2: Rendimiento y Portapapeles
         box2 = ctk.CTkFrame(settings_scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
         box2.pack(fill="x", pady=6)
 
-        ctk.CTkLabel(box2, text="🔒 Conexión Segura con YouTube (Playlists Privadas y +18)", font=ctk.CTkFont(size=13, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=14, pady=(12, 4))
+        ctk.CTkLabel(box2, text="⚡ Rendimiento & Experiencia", font=ctk.CTkFont(size=13, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=14, pady=(12, 4))
+
+        # Descargas simultáneas
+        row_workers = ctk.CTkFrame(box2, fg_color="transparent")
+        row_workers.pack(fill="x", padx=14, pady=(6, 8))
+
+        ctk.CTkLabel(row_workers, text="Descargas simultáneas en paralelo:", font=ctk.CTkFont(size=11, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(side="left")
+
+        current_w = str(self.config.get("max_workers", 2))
+        self.workers_seg = ctk.CTkSegmentedButton(
+            row_workers, values=["1", "2", "3", "4"],
+            height=28, command=self._on_workers_changed
+        )
+        self.workers_seg.set(current_w)
+        self.workers_seg.pack(side="right")
+
+        # Switch Portapapeles
+        self.clip_switch_var = ctk.BooleanVar(value=bool(self.config.get("clipboard_watch", True)))
+        clip_sw = ctk.CTkSwitch(
+            box2, text="Detectar automáticamente enlaces del portapapeles (Smart Auto-Paste)",
+            variable=self.clip_switch_var, font=ctk.CTkFont(size=11),
+            command=self._on_clipboard_watch_toggle
+        )
+        clip_sw.pack(anchor="w", padx=14, pady=(4, 12))
+
+        # Bloque 3: Sesión de Navegador & Cookies
+        box3 = ctk.CTkFrame(settings_scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
+        box3.pack(fill="x", pady=6)
+
+        ctk.CTkLabel(box3, text="🔒 Conexión Segura con YouTube (Playlists Privadas y +18)", font=ctk.CTkFont(size=13, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=14, pady=(12, 4))
 
         desc = (
             "Para descargar videos con restricción de edad o tus playlists privadas, se requiere sesión activa.\n"
@@ -976,19 +1152,18 @@ class OmniVaultApp(ctk.CTk):
             "  1. Cierra Vivaldi durante 5 segundos y haz clic en '📸 Sincronizar Sesión'.\n"
             "  2. O bien, carga un archivo cookies.txt exportado desde tu navegador."
         )
-        ctk.CTkLabel(box2, text=desc, font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY, justify="left").pack(anchor="w", padx=14, pady=(0, 8))
+        ctk.CTkLabel(box3, text=desc, font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY, justify="left").pack(anchor="w", padx=14, pady=(0, 8))
 
         saved_cookie_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
         self.cookie_status_lbl = ctk.CTkLabel(
-            box2,
+            box3,
             text="✔ Sesión guardada en archivo local (Sin bloqueos de navegador)" if os.path.exists(saved_cookie_file) else "ℹ No hay sesión guardada en archivo local (Usando modo anónimo)",
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color=theme.STATUS_SUCCESS if os.path.exists(saved_cookie_file) else theme.TEXT_MUTED
         )
         self.cookie_status_lbl.pack(anchor="w", padx=14, pady=(0, 8))
 
-        # Botones en fila flexible
-        btn_row_cookies = ctk.CTkFrame(box2, fg_color="transparent")
+        btn_row_cookies = ctk.CTkFrame(box3, fg_color="transparent")
         btn_row_cookies.pack(fill="x", padx=14, pady=(0, 12))
 
         self.sync_vivaldi_btn = ctk.CTkButton(
@@ -1028,11 +1203,11 @@ class OmniVaultApp(ctk.CTk):
         )
         del_cookie_btn.pack(side="left")
 
-        # Bloque 3: Diagnóstico del Sistema
-        box3 = ctk.CTkFrame(settings_scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
-        box3.pack(fill="x", pady=6)
+        # Bloque 4: Diagnóstico del Sistema
+        box4 = ctk.CTkFrame(settings_scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
+        box4.pack(fill="x", pady=6)
 
-        ctk.CTkLabel(box3, text="Diagnóstico del Sistema & Privacidad", font=ctk.CTkFont(size=13, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=14, pady=(12, 4))
+        ctk.CTkLabel(box4, text="Diagnóstico del Sistema & Privacidad", font=ctk.CTkFont(size=13, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=14, pady=(12, 4))
 
         ff_found = is_ffmpeg_available()
         ff_detail = f"Habilitado ({FFMPEG_DIR or 'PATH'})" if ff_found else "No detectado (Instala FFmpeg o coloca ffmpeg.exe en la carpeta)"
@@ -1040,14 +1215,43 @@ class OmniVaultApp(ctk.CTk):
         diag_text = (
             f"• Aplicación: OmniVault Desktop (Obsidian & Titanium Edition)\n"
             f"• Python: {sys.version.split()[0]} ({sys.platform})\n"
-            f"• Motor TikTok: Directo HD sin marca de agua activo\n"
+            f"• Motor TikTok: Directo HD sin marca de agua activo con soporte ID3\n"
             f"• Impersonación TLS: Habilitada con curl_cffi\n"
             f"• Motor FFmpeg: {ff_detail}\n"
             f"• Conexión: Cifrada y directa con validación SSL activa"
         )
-        ctk.CTkLabel(box3, text=diag_text, font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY, justify="left").pack(anchor="w", padx=14, pady=(0, 12))
+        ctk.CTkLabel(box4, text=diag_text, font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY, justify="left").pack(anchor="w", padx=14, pady=(0, 12))
 
         return view
+
+    def _on_workers_changed(self, value: str):
+        val_int = int(value)
+        self.config.set("max_workers", val_int)
+        self.queue_manager.set_max_workers(val_int)
+
+    def _on_clipboard_watch_toggle(self):
+        val = self.clip_switch_var.get()
+        self.config.set("clipboard_watch", val)
+        if not val:
+            self._dismiss_clipboard_banner()
+
+    def _change_audio_dir(self):
+        chosen = filedialog.askdirectory(initialdir=self.config.get_audio_dir())
+        if chosen:
+            self.config.set("audio_download_dir", chosen)
+            self.audio_dir_entry.configure(state="normal")
+            self.audio_dir_entry.delete(0, tk.END)
+            self.audio_dir_entry.insert(0, chosen)
+            self.audio_dir_entry.configure(state="readonly")
+
+    def _change_video_dir(self):
+        chosen = filedialog.askdirectory(initialdir=self.config.get_video_dir())
+        if chosen:
+            self.config.set("video_download_dir", chosen)
+            self.video_dir_entry.configure(state="normal")
+            self.video_dir_entry.delete(0, tk.END)
+            self.video_dir_entry.insert(0, chosen)
+            self.video_dir_entry.configure(state="readonly")
 
     def _sync_vivaldi_snapshot(self):
         self.sync_vivaldi_btn.configure(state="disabled", text="Extrayendo...")
@@ -1122,16 +1326,6 @@ class OmniVaultApp(ctk.CTk):
         )
         self.session_lbl.configure(text="● Sesión: Anónima", text_color=theme.TEXT_MUTED)
         messagebox.showinfo("Sesión Limpiada", "Se ha eliminado el archivo de cookies y se ha restablecido el modo anónimo.")
-
-    def _change_download_dir(self):
-        chosen = filedialog.askdirectory(initialdir=self.download_dir)
-        if chosen:
-            self.download_dir = chosen
-            self.config.set("download_dir", chosen)
-            self.dir_entry.configure(state="normal")
-            self.dir_entry.delete(0, tk.END)
-            self.dir_entry.insert(0, self.download_dir)
-            self.dir_entry.configure(state="readonly")
 
 
 if __name__ == "__main__":

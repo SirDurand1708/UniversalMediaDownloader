@@ -127,6 +127,45 @@ def _convert_with_ffmpeg(input_file: str, output_file: str, codec: str = "mp3", 
     except Exception:
         return False
 
+def embed_id3_metadata(mp3_path: str, title: str, artist: str = "", album: str = "", thumbnail_url: str = ""):
+    """Incrusta título, artista y carátula del álbum en archivos MP3 usando mutagen."""
+    if not mp3_path or not os.path.isfile(mp3_path) or not mp3_path.lower().endswith(".mp3"):
+        return
+    try:
+        from mutagen.id3 import ID3, APIC, TIT2, TPE1, TALB, ID3NoHeaderError
+        try:
+            audio = ID3(mp3_path)
+        except ID3NoHeaderError:
+            audio = ID3()
+
+        if title:
+            audio["TIT2"] = TIT2(encoding=3, text=title)
+        if artist:
+            audio["TPE1"] = TPE1(encoding=3, text=artist)
+        if album:
+            audio["TALB"] = TALB(encoding=3, text=album)
+
+        if thumbnail_url and is_url(thumbnail_url):
+            try:
+                headers = {'User-Agent': 'Mozilla/5.0'}
+                req = urllib.request.Request(thumbnail_url, headers=headers)
+                with urllib.request.urlopen(req, timeout=6) as resp:
+                    img_data = resp.read(5 * 1024 * 1024)
+                if img_data:
+                    audio["APIC"] = APIC(
+                        encoding=3,
+                        mime="image/jpeg",
+                        type=3,  # Front cover
+                        desc="Cover",
+                        data=img_data
+                    )
+            except Exception:
+                pass
+
+        audio.save(mp3_path)
+    except Exception:
+        pass
+
 def _fetch_tiktok_api(url: str) -> Optional[Dict[str, Any]]:
     """Extrae metadatos y enlaces directos HD sin marca de agua de TikTok vía API directa."""
     api_url = 'https://www.tikwm.com/api/'
@@ -502,12 +541,14 @@ class DownloaderEngine:
                     if status_callback: status_callback("Convirtiendo a MP3...")
                     if not _convert_with_ffmpeg(temp_file, final_path, codec="mp3", bitrate="320k"):
                         shutil.move(temp_file, final_path)
+                    embed_id3_metadata(final_path, title=tt_data.get('title', ''), artist=tt_data.get('uploader', ''), album="OmniVault TikTok", thumbnail_url=tt_data.get('thumbnail', ''))
                 elif format_type == 'mp3_192':
                     format_label = "MP3 (192 kbps)"
                     final_path = os.path.join(output_dir, f"{safe_title}.mp3")
                     if status_callback: status_callback("Convirtiendo a MP3...")
                     if not _convert_with_ffmpeg(temp_file, final_path, codec="mp3", bitrate="192k"):
                         shutil.move(temp_file, final_path)
+                    embed_id3_metadata(final_path, title=tt_data.get('title', ''), artist=tt_data.get('uploader', ''), album="OmniVault TikTok", thumbnail_url=tt_data.get('thumbnail', ''))
                 elif format_type == 'wav':
                     format_label = "WAV Sin Compresión"
                     final_path = os.path.join(output_dir, f"{safe_title}.wav")
@@ -757,6 +798,15 @@ class DownloaderEngine:
 
             title = info.get('title', os.path.basename(final_path))
             thumbnail = info.get('thumbnail', '')
+
+            if final_path.lower().endswith(".mp3"):
+                embed_id3_metadata(
+                    final_path,
+                    title=title,
+                    artist=info.get('uploader') or info.get('channel') or '',
+                    album="OmniVault",
+                    thumbnail_url=thumbnail
+                )
 
             return {
                 'title': title,
