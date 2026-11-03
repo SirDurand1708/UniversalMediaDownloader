@@ -10,6 +10,8 @@ venv/
 build/
 develop-eggs/
 dist/
+
+# Media & Temporary downloads
 downloads/
 *.mp4
 *.mp3
@@ -17,6 +19,14 @@ downloads/
 *.webm
 *.part
 *.ytdl
+*.tmp
+
+# User credentials, local settings & personal library
+saved_cookies.txt
+cookies*.txt
+*.cookies
+config.json
+library.json
 
 # IDE
 .vscode/

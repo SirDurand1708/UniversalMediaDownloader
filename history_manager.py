@@ -1,20 +1,28 @@
 """
-Gestor de historial y biblioteca local para Snaptube Desktop.
-Guarda y administra las descargas completadas en un archivo JSON local.
+Gestor de historial y biblioteca local para Universal Media Downloader.
+Manejo seguro, atómico y protegido contra inyecciones y ejecuciones no autorizadas.
 """
 
 import json
 import os
 import sys
 import subprocess
+import threading
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "library.json")
 
+# Lista blanca estricta de extensiones multimedia permitidas para reproducción
+ALLOWED_MEDIA_EXTENSIONS = {
+    ".mp3", ".mp4", ".m4a", ".wav", ".webm", ".mkv",
+    ".flac", ".ogg", ".opus", ".aac", ".avi", ".mov"
+}
+
 class HistoryManager:
     def __init__(self, filepath: str = HISTORY_FILE):
         self.filepath = filepath
+        self._lock = threading.Lock()
         self.items: List[Dict[str, Any]] = self._load()
 
     def _load(self) -> List[Dict[str, Any]]:
@@ -22,15 +30,24 @@ class HistoryManager:
             return []
         try:
             with open(self.filepath, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                return data if isinstance(data, list) else []
         except Exception:
             return []
 
     def _save(self):
+        """Guarda la biblioteca atómicamente para prevenir corrupción de datos."""
+        temp_path = f"{self.filepath}.tmp"
         try:
-            with open(self.filepath, "w", encoding="utf-8") as f:
+            with open(temp_path, "w", encoding="utf-8") as f:
                 json.dump(self.items, f, indent=2, ensure_ascii=False)
+            os.replace(temp_path, self.filepath)
         except Exception as e:
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
             print(f"Error guardando biblioteca: {e}")
 
     def add_download(
@@ -42,81 +59,115 @@ class HistoryManager:
         url: str = "",
         thumbnail_url: str = ""
     ) -> Dict[str, Any]:
-        """Añade una descarga completada a la biblioteca."""
+        """Añade una descarga completada a la biblioteca de manera segura entre hilos."""
         file_size = 0
-        if os.path.exists(file_path):
-            file_size = os.path.getsize(file_path)
+        if file_path and os.path.isfile(file_path):
+            try:
+                file_size = os.path.getsize(file_path)
+            except OSError:
+                file_size = 0
 
         entry = {
             "id": datetime.now().strftime("%Y%m%d%H%M%S%f"),
-            "title": title,
-            "file_path": file_path,
-            "format_label": format_label,
-            "media_type": media_type,
-            "url": url,
-            "thumbnail_url": thumbnail_url,
+            "title": str(title or "Sin título"),
+            "file_path": str(file_path or ""),
+            "format_label": str(format_label or ""),
+            "media_type": str(media_type or "audio"),
+            "url": str(url or ""),
+            "thumbnail_url": str(thumbnail_url or ""),
             "file_size": file_size,
             "date": datetime.now().strftime("%d/%m/%Y %H:%M"),
         }
-        # Insertar al inicio (más reciente primero)
-        self.items.insert(0, entry)
-        self._save()
+
+        with self._lock:
+            self.items.insert(0, entry)
+            self._save()
         return entry
 
     def get_all(self) -> List[Dict[str, Any]]:
         """Devuelve todos los elementos, verificando si el archivo aún existe en disco."""
-        valid_items = []
-        for item in self.items:
-            # Marcamos si el archivo existe
-            item["exists_on_disk"] = os.path.exists(item.get("file_path", ""))
-            valid_items.append(item)
-        return valid_items
+        with self._lock:
+            valid_items = []
+            for item in self.items:
+                path = item.get("file_path", "")
+                item["exists_on_disk"] = bool(path and os.path.exists(path))
+                valid_items.append(dict(item))
+            return valid_items
 
     def delete_item(self, item_id: str, delete_file: bool = False):
         """Elimina un elemento del historial y opcionalmente el archivo físico."""
-        target = None
-        for item in self.items:
-            if item.get("id") == item_id:
-                target = item
-                break
-        if target:
-            if delete_file and os.path.exists(target.get("file_path", "")):
-                try:
-                    os.remove(target["file_path"])
-                except Exception:
-                    pass
-            self.items.remove(target)
-            self._save()
+        with self._lock:
+            target = None
+            for item in self.items:
+                if item.get("id") == item_id:
+                    target = item
+                    break
+            if target:
+                if delete_file:
+                    fp = target.get("file_path", "")
+                    if fp and os.path.isfile(fp):
+                        try:
+                            os.remove(fp)
+                        except OSError:
+                            pass
+                self.items.remove(target)
+                self._save()
 
     def clear_all(self):
         """Limpia el historial de la biblioteca."""
-        self.items = []
-        self._save()
+        with self._lock:
+            self.items = []
+            self._save()
 
     @staticmethod
-    def play_media(file_path: str):
-        """Abre el archivo con el reproductor multimedia predeterminado del sistema."""
-        if not os.path.exists(file_path):
+    def play_media(file_path: str) -> bool:
+        """
+        Abre el archivo de forma segura con el reproductor multimedia predeterminado.
+        Valida que el archivo exista y sea un formato multimedia permitido (evita ejecución arbitraria).
+        """
+        if not file_path or not os.path.isfile(file_path):
             return False
-        if sys.platform == "win32":
-            os.startfile(file_path)
-        elif sys.platform == "darwin":
-            subprocess.Popen(["open", file_path])
-        else:
-            subprocess.Popen(["xdg-open", file_path])
-        return True
+
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext not in ALLOWED_MEDIA_EXTENSIONS:
+            print(f"Bloqueada ejecución de archivo con extensión no autorizada: {ext}")
+            return False
+
+        try:
+            if sys.platform == "win32":
+                os.startfile(file_path)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", file_path])
+            else:
+                subprocess.Popen(["xdg-open", file_path])
+            return True
+        except Exception as e:
+            print(f"Error reproduciendo archivo: {e}")
+            return False
 
     @staticmethod
     def reveal_in_folder(file_path: str):
-        """Abre la carpeta que contiene el archivo y lo resalta en el explorador de Windows."""
-        if sys.platform == "win32":
-            if os.path.exists(file_path):
-                subprocess.Popen(f'explorer /select,"{os.path.normpath(file_path)}"')
-            else:
-                folder = os.path.dirname(file_path)
-                if os.path.exists(folder):
+        """Abre la carpeta contenedora y selecciona el archivo de forma segura y multiplataforma."""
+        if not file_path:
+            return
+
+        norm_path = os.path.normpath(file_path)
+        folder = os.path.dirname(norm_path) if os.path.isfile(norm_path) else norm_path
+
+        try:
+            if sys.platform == "win32":
+                if os.path.isfile(norm_path):
+                    # Uso seguro sin concatenar strings en shell
+                    subprocess.Popen(["explorer.exe", f"/select,{norm_path}"])
+                elif os.path.isdir(folder):
                     os.startfile(folder)
-        else:
-            folder = os.path.dirname(file_path)
-            if os.path.exists(folder):
-                subprocess.Popen(["xdg-open", folder])
+            elif sys.platform == "darwin":
+                if os.path.isfile(norm_path):
+                    subprocess.Popen(["open", "-R", norm_path])
+                elif os.path.isdir(folder):
+                    subprocess.Popen(["open", folder])
+            else:
+                if os.path.isdir(folder):
+                    subprocess.Popen(["xdg-open", folder])
+        except Exception as e:
+            print(f"Error revelando archivo en carpeta: {e}")

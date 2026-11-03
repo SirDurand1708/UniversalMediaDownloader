@@ -1,11 +1,12 @@
 """
-Gestor de cola de descargas asíncronas para Snaptube Desktop.
-Permite encolar descargas individuales y por lotes (playlists) sin bloquear la interfaz.
+Gestor de cola de descargas asíncronas para Universal Media Downloader.
+Manejo concurrente, seguro entre hilos, con soporte para cancelación y apagado limpio.
 """
 
 import threading
 import queue
 import time
+import uuid
 from typing import Dict, Any, List, Callable, Optional
 from downloader import DownloaderEngine
 from history_manager import HistoryManager
@@ -30,7 +31,7 @@ class DownloadTask:
         self.browser = browser
         self.format_label = format_type
         self.media_type = "audio" if format_type in ["mp3_320", "mp3_192", "m4a_best", "wav"] else "video"
-        
+
         # Estado
         self.status = "queued"  # queued, downloading, converting, completed, error, cancelled
         self.percent = 0.0
@@ -44,18 +45,19 @@ class QueueManager:
     def __init__(self, downloader: DownloaderEngine, history: HistoryManager, max_workers: int = 2):
         self.downloader = downloader
         self.history = history
-        self.max_workers = max_workers
-        
+        self.max_workers = max(1, min(max_workers, 6))
+
         self.tasks: Dict[str, DownloadTask] = {}
-        self.task_queue = queue.Queue()
+        self.task_queue: queue.Queue = queue.Queue()
         self.active_workers: List[threading.Thread] = []
         self._running = True
+        self._lock = threading.Lock()
 
         self.on_task_updated: Optional[Callable[[DownloadTask], None]] = None
         self.on_task_finished: Optional[Callable[[DownloadTask], None]] = None
 
-        for _ in range(self.max_workers):
-            t = threading.Thread(target=self._worker_loop, daemon=True)
+        for idx in range(self.max_workers):
+            t = threading.Thread(target=self._worker_loop, daemon=True, name=f"DLWorker-{idx+1}")
             t.start()
             self.active_workers.append(t)
 
@@ -68,9 +70,12 @@ class QueueManager:
         thumbnail_url: str = "",
         browser: Optional[str] = None
     ) -> DownloadTask:
-        task_id = f"task_{int(time.time() * 1000)}_{len(self.tasks)}"
+        task_id = f"task_{int(time.time())}_{uuid.uuid4().hex[:6]}"
         task = DownloadTask(task_id, url, format_type, output_dir, title, thumbnail_url, browser=browser)
-        self.tasks[task_id] = task
+
+        with self._lock:
+            self.tasks[task_id] = task
+
         self.task_queue.put(task)
         self._notify_update(task)
         return task
@@ -102,7 +107,8 @@ class QueueManager:
         return count
 
     def cancel_download(self, task_id: str):
-        task = self.tasks.get(task_id)
+        with self._lock:
+            task = self.tasks.get(task_id)
         if task:
             task.status = "cancelled"
             task.status_text = "Descarga cancelada"
@@ -110,25 +116,44 @@ class QueueManager:
             self._notify_update(task)
 
     def get_active_tasks(self) -> List[DownloadTask]:
-        return [t for t in self.tasks.values() if t.status in ["queued", "downloading", "converting"]]
+        with self._lock:
+            return [t for t in self.tasks.values() if t.status in ["queued", "downloading", "converting"]]
 
     def get_all_tasks(self) -> List[DownloadTask]:
-        return list(self.tasks.values())
+        with self._lock:
+            return list(self.tasks.values())
+
+    def stop(self):
+        """Detiene la ejecución de los workers de forma limpia."""
+        self._running = False
+        # Cancelar tareas activas
+        for task in self.get_active_tasks():
+            self.cancel_download(task.id)
 
     def _notify_update(self, task: DownloadTask):
         if self.on_task_updated:
-            self.on_task_updated(task)
+            try:
+                self.on_task_updated(task)
+            except Exception:
+                pass
 
     def _notify_finished(self, task: DownloadTask):
         if self.on_task_finished:
-            self.on_task_finished(task)
+            try:
+                self.on_task_finished(task)
+            except Exception:
+                pass
 
     def _worker_loop(self):
         while self._running:
             try:
-                task: DownloadTask = self.task_queue.get(timeout=1)
+                task: DownloadTask = self.task_queue.get(timeout=0.5)
             except queue.Empty:
                 continue
+
+            if not self._running:
+                self.task_queue.task_done()
+                break
 
             if task.status == "cancelled":
                 self.task_queue.task_done()
@@ -139,7 +164,7 @@ class QueueManager:
             self._notify_update(task)
 
             def progress_cb(percent, speed, eta, msg):
-                if task.status != "cancelled":
+                if task.status != "cancelled" and self._running:
                     task.percent = percent
                     task.speed = speed
                     task.eta = eta
@@ -147,7 +172,7 @@ class QueueManager:
                     self._notify_update(task)
 
             def status_cb(text):
-                if task.status != "cancelled":
+                if task.status != "cancelled" and self._running:
                     task.status = "converting"
                     task.status_text = text
                     self._notify_update(task)
@@ -189,7 +214,7 @@ class QueueManager:
                 if task.status != "cancelled":
                     task.status = "error"
                     task.error_msg = str(e)
-                    task.status_text = f"Error: {str(e)[:60]}"
+                    task.status_text = f"Error: {str(e)[:70]}"
                     self._notify_update(task)
 
             finally:

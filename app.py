@@ -6,12 +6,13 @@ Interfaz prémium 'Obsidian & Titanium' con soporte para Playlists, Selección M
 import os
 import sys
 import threading
+import subprocess
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
 import theme
-from downloader import DownloaderEngine, is_url, clean_error_text
+from downloader import DownloaderEngine, is_url, normalize_url, clean_error_text, is_ffmpeg_available, FFMPEG_DIR
 from queue_manager import QueueManager, DownloadTask
 from history_manager import HistoryManager
 from image_cache import ThumbnailCache
@@ -46,6 +47,9 @@ class SnaptubeDesktopApp(ctk.CTk):
         self.queue_manager.on_task_updated = self._on_task_updated
         self.queue_manager.on_task_finished = self._on_task_finished
 
+        # Protocolo de cierre limpio de ventana
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
         # Estado actual
         self.download_dir = self.config.get("download_dir")
         self.current_media = None
@@ -57,6 +61,21 @@ class SnaptubeDesktopApp(ctk.CTk):
 
         self._build_layout()
         self._select_tab("explore")
+
+    def _on_close(self):
+        """Maneja el cierre ordenado de la aplicación y detiene procesos activos."""
+        active_tasks = self.queue_manager.get_active_tasks()
+        if active_tasks:
+            confirm = messagebox.askyesno(
+                "Descargas en curso",
+                f"Hay {len(active_tasks)} descargas en progreso.\n¿Estás seguro de que deseas salir y cancelar las descargas activas?"
+            )
+            if not confirm:
+                return
+
+        self.queue_manager.stop()
+        self.img_cache.shutdown(wait=False)
+        self.destroy()
 
     def _get_active_browser(self):
         saved = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
@@ -151,11 +170,15 @@ class SnaptubeDesktopApp(ctk.CTk):
         )
         self.session_lbl.pack(anchor="w", padx=10, pady=(6, 2))
 
+        ff_ok = is_ffmpeg_available()
+        ffmpeg_text = "● FFmpeg: Activo" if ff_ok else "⚠ FFmpeg: No detectado"
+        ffmpeg_color = theme.TEXT_MUTED if ff_ok else theme.STATUS_WARNING
+
         privacy_lbl = ctk.CTkLabel(
             status_box,
-            text="Playlists • Lotes • FFmpeg Activo",
-            font=ctk.CTkFont(size=10),
-            text_color=theme.TEXT_MUTED
+            text=ffmpeg_text,
+            font=ctk.CTkFont(size=10, weight="bold" if not ff_ok else "normal"),
+            text_color=ffmpeg_color
         )
         privacy_lbl.pack(anchor="w", padx=10, pady=(0, 6))
 
@@ -305,7 +328,8 @@ class SnaptubeDesktopApp(ctk.CTk):
 
         browser = self._get_active_browser()
         if is_url(raw_text):
-            threading.Thread(target=self._async_inspect_url, args=(raw_text, browser), daemon=True).start()
+            normalized = normalize_url(raw_text)
+            threading.Thread(target=self._async_inspect_url, args=(normalized, browser), daemon=True).start()
         else:
             threading.Thread(target=self._async_search, args=(raw_text, browser), daemon=True).start()
 
@@ -401,7 +425,11 @@ class SnaptubeDesktopApp(ctk.CTk):
             thumb_label.pack(side="left", padx=6, pady=8)
 
             if item.get("thumbnail"):
-                cached = self.img_cache.get_thumbnail(item["thumbnail"], size=(110, 62), callback=lambda img, l=thumb_label: self.after(0, lambda: l.configure(image=img)))
+                cached = self.img_cache.get_thumbnail(
+                    item["thumbnail"],
+                    size=(110, 62),
+                    callback=lambda img, l=thumb_label: self.after(0, lambda: l.configure(image=img) if l.winfo_exists() else None)
+                )
                 if cached:
                     thumb_label.configure(image=cached)
 
@@ -473,7 +501,11 @@ class SnaptubeDesktopApp(ctk.CTk):
         thumb_lbl.pack(side="left", padx=(0, 16))
 
         if data.get("thumbnail"):
-            cached = self.img_cache.get_thumbnail(data["thumbnail"], size=(140, 80), callback=lambda img, l=thumb_lbl: self.after(0, lambda: l.configure(image=img)))
+            cached = self.img_cache.get_thumbnail(
+                data["thumbnail"],
+                size=(140, 80),
+                callback=lambda img, l=thumb_lbl: self.after(0, lambda: l.configure(image=img) if l.winfo_exists() else None)
+            )
             if cached:
                 thumb_lbl.configure(image=cached)
 
@@ -616,7 +648,11 @@ class SnaptubeDesktopApp(ctk.CTk):
         thumb_label.pack(side="left", padx=(0, 16))
 
         if data.get("thumbnail"):
-            cached = self.img_cache.get_thumbnail(data["thumbnail"], size=(180, 101), callback=lambda img, l=thumb_label: self.after(0, lambda: l.configure(image=img)))
+            cached = self.img_cache.get_thumbnail(
+                data["thumbnail"],
+                size=(180, 101),
+                callback=lambda img, l=thumb_label: self.after(0, lambda: l.configure(image=img) if l.winfo_exists() else None)
+            )
             if cached:
                 thumb_label.configure(image=cached)
 
@@ -861,9 +897,18 @@ class SnaptubeDesktopApp(ctk.CTk):
         self._refresh_library_list()
 
     def _open_downloads_folder(self):
-        if os.path.exists(self.download_dir):
+        if not self.download_dir:
+            return
+        os.makedirs(self.download_dir, exist_ok=True)
+        try:
             if sys.platform == "win32":
                 os.startfile(self.download_dir)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", self.download_dir])
+            else:
+                subprocess.Popen(["xdg-open", self.download_dir])
+        except Exception as e:
+            print(f"Error abriendo carpeta: {e}")
 
     # =========================================================================
     # VISTA 4: AJUSTES & SESIÓN SEGURA
@@ -907,7 +952,7 @@ class SnaptubeDesktopApp(ctk.CTk):
         box2.pack(fill="x", pady=8)
 
         ctk.CTkLabel(box2, text="🔒 Conexión Segura con YouTube (Playlists Privadas y +18)", font=ctk.CTkFont(size=14, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=16, pady=(14, 4))
-        
+
         desc = (
             "Para descargar videos con restricción de edad o tus playlists privadas, se requiere sesión activa.\n"
             "✦ Cómo sincronizar con Vivaldi sin bloqueos de Windows:\n"
@@ -971,10 +1016,13 @@ class SnaptubeDesktopApp(ctk.CTk):
 
         ctk.CTkLabel(box3, text="Diagnóstico del Sistema & Privacidad", font=ctk.CTkFont(size=14, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=16, pady=(14, 6))
 
+        ff_found = is_ffmpeg_available()
+        ff_detail = f"Habilitado ({FFMPEG_DIR or 'PATH'})" if ff_found else "No detectado (Coloca ffmpeg.exe en la carpeta del programa)"
+
         diag_text = (
             f"• Python: {sys.version.split()[0]} ({sys.platform})\n"
-            f"• Conexión: Cifrada y Directa (Sin telemetría ni intermediarios)\n"
-            f"• Motor FFmpeg: Habilitado con soporte 4K y codificación LAME MP3\n"
+            f"• Conexión: Cifrada y Directa con Validación SSL (Sin telemetría ni intermediarios)\n"
+            f"• Motor FFmpeg: {ff_detail}\n"
             f"• Runtime JS: Node.js Activo para firmas complejas de YouTube\n"
             f"• Ubicación del proyecto: {os.path.dirname(os.path.abspath(__file__))}"
         )
@@ -990,7 +1038,6 @@ class SnaptubeDesktopApp(ctk.CTk):
         )
 
     def _sync_vivaldi_snapshot(self):
-        saved_cookie_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
         self.sync_vivaldi_btn.configure(state="disabled", text="Extrayendo...")
 
         def _worker():
@@ -1036,6 +1083,10 @@ class SnaptubeDesktopApp(ctk.CTk):
             dest = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
             import shutil
             shutil.copy(path, dest)
+            try:
+                os.chmod(dest, 0o600)
+            except Exception:
+                pass
             self.cookie_status_lbl.configure(
                 text="✔ Archivo cookies.txt cargado con éxito",
                 text_color=theme.STATUS_SUCCESS
@@ -1046,7 +1097,12 @@ class SnaptubeDesktopApp(ctk.CTk):
     def _clear_saved_cookies(self):
         dest = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
         if os.path.exists(dest):
-            os.remove(dest)
+            try:
+                os.remove(dest)
+            except OSError as e:
+                messagebox.showerror("Error", f"No se pudo eliminar el archivo de sesión: {e}")
+                return
+
         self.config.set("browser_cookies", "none")
         self.cookie_status_lbl.configure(
             text="ℹ Sesión eliminada. Usando modo anónimo por defecto.",

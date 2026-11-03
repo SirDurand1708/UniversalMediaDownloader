@@ -2,20 +2,37 @@
 Motor de extracción y descarga multimedia usando yt-dlp y FFmpeg.
 Compatible con YouTube, TikTok, Instagram, Twitter/X, Twitch, SoundCloud y más de 1000 sitios.
 Soporte inteligente: Conexión limpia nativa por defecto + fallback de sesión para +18/privados.
+Seguridad: Validación SSL estricta, saneamiento de errores y limpieza de recursos.
 """
 
 import os
 import re
 import sys
+import glob
 import shutil
-import yt_dlp
+import threading
+import urllib.parse
 from typing import Callable, Optional, Dict, Any, List
+import yt_dlp
 
 def _ensure_ffmpeg() -> Optional[str]:
-    """Garantiza que FFmpeg esté en el PATH del proceso, leyéndolo del registro si es necesario."""
+    """Garantiza que FFmpeg esté en el PATH del proceso, buscando en PATH, registro y carpeta local."""
     found = shutil.which("ffmpeg")
     if found:
-        return os.path.dirname(found)
+        return os.path.dirname(os.path.abspath(found))
+
+    # Buscar en carpeta local del proyecto o subcarpeta 'bin'
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    local_candidates = [
+        base_dir,
+        os.path.join(base_dir, "bin"),
+        os.path.join(base_dir, "ffmpeg"),
+    ]
+    for cand in local_candidates:
+        cand_exe = os.path.join(cand, "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg")
+        if os.path.isfile(cand_exe):
+            os.environ["PATH"] = cand + os.pathsep + os.environ.get("PATH", "")
+            return cand
 
     if sys.platform == "win32":
         try:
@@ -32,8 +49,14 @@ def _ensure_ffmpeg() -> Optional[str]:
 
 FFMPEG_DIR = _ensure_ffmpeg()
 
+def is_ffmpeg_available() -> bool:
+    """Comprueba si FFmpeg está disponible y funcional."""
+    return bool(FFMPEG_DIR or shutil.which("ffmpeg"))
+
 def clean_error_text(err: str) -> str:
     """Elimina códigos de escape ANSI y prefijos redundantes de error."""
+    if not err:
+        return "Error desconocido"
     clean = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', err)
     clean = re.sub(r'(\[0;[0-9]+m)+', '', clean)
     clean = re.sub(r'ERROR:\s*', '', clean)
@@ -41,7 +64,7 @@ def clean_error_text(err: str) -> str:
 
 def format_duration(seconds: Optional[int]) -> str:
     """Convierte segundos en formato MM:SS o HH:MM:SS."""
-    if not seconds:
+    if not seconds or not isinstance(seconds, (int, float)):
         return "--:--"
     m, s = divmod(int(seconds), 60)
     h, m = divmod(m, 60)
@@ -50,16 +73,37 @@ def format_duration(seconds: Optional[int]) -> str:
     return f"{m:02d}:{s:02d}"
 
 def is_url(text: str) -> bool:
-    """Determina si el texto ingresado es una URL o una búsqueda."""
+    """Determina si el texto ingresado es una URL válida HTTP/HTTPS o un término de búsqueda."""
     text = text.strip()
-    return bool(re.match(r'^(https?://|www\.)', text, re.IGNORECASE))
+    if not text:
+        return False
+    if text.lower().startswith("www."):
+        text = "https://" + text
+    try:
+        parsed = urllib.parse.urlparse(text)
+        return parsed.scheme.lower() in ("http", "https") and bool(parsed.netloc)
+    except Exception:
+        return False
+
+def normalize_url(text: str) -> str:
+    """Normaliza un enlace agregando https:// si comienza con www."""
+    text = text.strip()
+    if text.lower().startswith("www."):
+        return "https://" + text
+    return text
 
 class DownloaderEngine:
     def __init__(self):
         self._cancel_flags: Dict[str, bool] = {}
+        self._lock = threading.Lock()
 
     def cancel_task(self, task_id: str):
-        self._cancel_flags[task_id] = True
+        with self._lock:
+            self._cancel_flags[task_id] = True
+
+    def is_cancelled(self, task_id: str) -> bool:
+        with self._lock:
+            return self._cancel_flags.get(task_id, False)
 
     def export_browser_cookies_snapshot(self, browser: str = "vivaldi") -> str:
         """
@@ -75,17 +119,24 @@ class DownloaderEngine:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             jar = ydl.cookiejar
             jar.save(dest_path, ignore_discard=True, ignore_expires=True)
+
+        # Restringir permisos de lectura del archivo de cookies al usuario actual
+        try:
+            os.chmod(dest_path, 0o600)
+        except Exception:
+            pass
+
         return dest_path
 
     def _base_opts(self, browser: Optional[str] = None, cookiefile: Optional[str] = None, use_cookies: bool = False) -> Dict[str, Any]:
         opts: Dict[str, Any] = {
             'quiet': True,
             'no_warnings': True,
-            'nocheckcertificate': True,
+            'nocheckcertificate': False,  # Verificación SSL segura por defecto
             'windowsfilenames': True,
             'js_runtimes': {'node': {}},
         }
-        
+
         # Localización de FFmpeg
         ff = FFMPEG_DIR or shutil.which("ffmpeg")
         if ff:
@@ -105,6 +156,10 @@ class DownloaderEngine:
 
     def search_youtube(self, query: str, max_results: int = 6, browser: Optional[str] = None) -> List[Dict[str, Any]]:
         """Busca videos en YouTube directamente mediante conexión limpia nativa."""
+        query = query.strip()
+        if not query:
+            return []
+
         search_query = f"ytsearch{max_results}:{query}"
         ydl_opts = self._base_opts(use_cookies=False)
         ydl_opts.update({
@@ -124,7 +179,7 @@ class DownloaderEngine:
                 continue
             v_id = e.get('id', '')
             url = e.get('url') or f"https://www.youtube.com/watch?v={v_id}"
-            
+
             thumb = None
             thumbs = e.get('thumbnails', [])
             if thumbs:
@@ -150,6 +205,7 @@ class DownloaderEngine:
         1. Utiliza conexión nativa limpia (evita bloqueos de PO-Token y LatinAutor-UMPG de discográficas).
         2. Si el video es privado o con restricción de edad (+18), utiliza la sesión de cookies.
         """
+        url = normalize_url(url)
         ydl_opts = self._base_opts(use_cookies=False)
         ydl_opts.update({
             'extract_flat': True,
@@ -163,7 +219,7 @@ class DownloaderEngine:
         except Exception as e:
             err = str(e).lower()
             # Si requiere inicio de sesión para verificar edad o es video privado, activar cookies
-            if 'sign in' in err or 'age' in err or 'confirm your age' in err or 'private' in err:
+            if any(k in err for k in ['sign in', 'age', 'confirm your age', 'private', 'login']):
                 ydl_opts_cookies = self._base_opts(browser=browser, cookiefile=cookiefile, use_cookies=True)
                 ydl_opts_cookies.update({'extract_flat': True, 'skip_download': True})
                 try:
@@ -201,7 +257,7 @@ class DownloaderEngine:
                     continue
                 v_id = e.get('id', '')
                 item_url = e.get('url') or f"https://www.youtube.com/watch?v={v_id}"
-                
+
                 thumb = None
                 thumbs = e.get('thumbnails', [])
                 if thumbs:
@@ -276,18 +332,30 @@ class DownloaderEngine:
         cookiefile: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Descarga y convierte el archivo multimedia según el formato solicitado."""
-        self._cancel_flags[task_id] = False
+        url = normalize_url(url)
+        with self._lock:
+            self._cancel_flags[task_id] = False
+
         os.makedirs(output_dir, exist_ok=True)
 
+        # Validación preventiva de FFmpeg
+        requires_ffmpeg = format_type in ['mp3_320', 'mp3_192', 'wav', 'mp4_4k', 'mp4_1080', 'mp4_720', 'mp4_480']
+        if requires_ffmpeg and not is_ffmpeg_available():
+            raise RuntimeError(
+                "FFmpeg no está detectado en el sistema.\n"
+                "Para convertir audio a MP3/WAV o unir audio y video en alta definición, se requiere FFmpeg.\n"
+                "Coloca ffmpeg.exe en la carpeta de la app o instálalo en tu sistema."
+            )
+
         def hook(d):
-            if self._cancel_flags.get(task_id, False):
+            if self.is_cancelled(task_id):
                 raise Exception("Descarga cancelada por el usuario.")
 
             status = d.get('status')
             if status == 'downloading':
                 total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate') or 0
                 downloaded_bytes = d.get('downloaded_bytes', 0)
-                
+
                 percent = 0.0
                 if total_bytes > 0:
                     percent = downloaded_bytes / total_bytes
@@ -301,7 +369,7 @@ class DownloaderEngine:
 
                 speed = re.sub(r'\x1b\[[0-9;]*m', '', d.get('_speed_str', 'N/A')).strip()
                 eta = re.sub(r'\x1b\[[0-9;]*m', '', d.get('_eta_str', 'N/A')).strip()
-                
+
                 msg = f"{int(percent * 100)}%"
                 if progress_callback:
                     progress_callback(percent, speed, eta, msg)
@@ -310,11 +378,10 @@ class DownloaderEngine:
                 if progress_callback:
                     progress_callback(1.0, "", "", "100%")
                 if status_callback:
-                    status_callback("Procesando con FFmpeg...")
+                    status_callback("Procesando archivo con FFmpeg...")
 
         out_template = os.path.join(output_dir, '%(title)s.%(ext)s')
-        
-        # Opciones comunes de formato
+
         format_opts: Dict[str, Any] = {
             'outtmpl': out_template,
             'progress_hooks': [hook],
@@ -402,58 +469,79 @@ class DownloaderEngine:
         else:
             raise ValueError(f"Formato desconocido: {format_type}")
 
-        # Intentar primero con conexión limpia nativa
         ydl_opts_clean = self._base_opts(use_cookies=False)
         ydl_opts_clean.update(format_opts)
 
         info = None
         try:
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts_clean) as ydl:
+                    info = ydl.extract_info(url, download=True)
+            except Exception as e:
+                err = str(e).lower()
+                if "cancelada por el usuario" in err or self.is_cancelled(task_id):
+                    raise Exception("Descarga cancelada por el usuario.")
+
+                if any(k in err for k in ['sign in', 'age', 'confirm your age', 'private', 'login']):
+                    ydl_opts_cookies = self._base_opts(browser=browser, cookiefile=cookiefile, use_cookies=True)
+                    ydl_opts_cookies.update(format_opts)
+                    try:
+                        with yt_dlp.YoutubeDL(ydl_opts_cookies) as ydl:
+                            info = ydl.extract_info(url, download=True)
+                    except Exception as e2:
+                        raise Exception(clean_error_text(str(e2)))
+                else:
+                    raise Exception(clean_error_text(str(e)))
+
+            if not info:
+                raise Exception("No se pudo completar la descarga del archivo multimedia.")
+
             with yt_dlp.YoutubeDL(ydl_opts_clean) as ydl:
-                info = ydl.extract_info(url, download=True)
-        except Exception as e:
-            err = str(e).lower()
-            # Si requiere inicio de sesión, intentar con cookies
-            if 'sign in' in err or 'age' in err or 'confirm your age' in err or 'private' in err:
-                ydl_opts_cookies = self._base_opts(browser=browser, cookiefile=cookiefile, use_cookies=True)
-                ydl_opts_cookies.update(format_opts)
-                try:
-                    with yt_dlp.YoutubeDL(ydl_opts_cookies) as ydl:
-                        info = ydl.extract_info(url, download=True)
-                except Exception as e2:
-                    raise Exception(clean_error_text(str(e2)))
+                raw_filename = ydl.prepare_filename(info)
+
+            if format_type.startswith('mp3'):
+                final_path = os.path.splitext(raw_filename)[0] + '.mp3'
+            elif format_type == 'wav':
+                final_path = os.path.splitext(raw_filename)[0] + '.wav'
+            elif format_type == 'm4a_best':
+                final_path = os.path.splitext(raw_filename)[0] + '.m4a'
             else:
-                raise Exception(clean_error_text(str(e)))
+                final_path = os.path.splitext(raw_filename)[0] + '.mp4'
 
-        if not info:
-            raise Exception("No se pudo completar la descarga del archivo.")
+            if not os.path.exists(final_path):
+                base = os.path.splitext(raw_filename)[0]
+                for ext in ['.mp3', '.mp4', '.m4a', '.wav', '.webm', '.mkv']:
+                    candidate = base + ext
+                    if os.path.exists(candidate):
+                        final_path = candidate
+                        break
 
-        with yt_dlp.YoutubeDL(ydl_opts_clean) as ydl:
-            raw_filename = ydl.prepare_filename(info)
-        
-        if format_type.startswith('mp3'):
-            final_path = os.path.splitext(raw_filename)[0] + '.mp3'
-        elif format_type == 'wav':
-            final_path = os.path.splitext(raw_filename)[0] + '.wav'
-        elif format_type == 'm4a_best':
-            final_path = os.path.splitext(raw_filename)[0] + '.m4a'
-        else:
-            final_path = os.path.splitext(raw_filename)[0] + '.mp4'
+            if not os.path.exists(final_path):
+                raise FileNotFoundError(f"El archivo descargado no se pudo encontrar en el disco: {os.path.basename(final_path)}")
 
-        if not os.path.exists(final_path):
-            base = os.path.splitext(raw_filename)[0]
-            for ext in ['.mp3', '.mp4', '.m4a', '.wav', '.webm', '.mkv']:
-                candidate = base + ext
-                if os.path.exists(candidate):
-                    final_path = candidate
-                    break
+            title = info.get('title', os.path.basename(final_path))
+            thumbnail = info.get('thumbnail', '')
 
-        title = info.get('title', os.path.basename(final_path))
-        thumbnail = info.get('thumbnail', '')
+            return {
+                'title': title,
+                'file_path': final_path,
+                'format_label': format_label,
+                'media_type': media_type,
+                'thumbnail_url': thumbnail,
+            }
 
-        return {
-            'title': title,
-            'file_path': final_path,
-            'format_label': format_label,
-            'media_type': media_type,
-            'thumbnail_url': thumbnail,
-        }
+        finally:
+            with self._lock:
+                self._cancel_flags.pop(task_id, None)
+
+            # Si fue cancelado, limpiar posibles archivos temporales/parciales en el directorio
+            if self.is_cancelled(task_id):
+                try:
+                    for part in glob.glob(os.path.join(output_dir, "*.part")):
+                        if os.path.isfile(part):
+                            os.remove(part)
+                    for ytdl in glob.glob(os.path.join(output_dir, "*.ytdl")):
+                        if os.path.isfile(ytdl):
+                            os.remove(ytdl)
+                except Exception:
+                    pass
