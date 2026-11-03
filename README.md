@@ -1,7 +1,7 @@
-# Universal Media Downloader (Snaptube Pro Desktop) ✦ Edición Privada y Segura
+# ✦ OmniVault Desktop - Universal Media Hub & Playlist Archiver
 
-> **Aplicación para computadoras de escritorio y laptops con diseño prémium *Obsidian & Titanium*.**  
-> Sin anuncios, sin rastreadores, sin riesgo de fuga de credenciales y con soporte nativo de **Playlists y Selección Múltiple**.
+> **Aplicación de escritorio prémium con diseño *Obsidian & Titanium*.**  
+> Sin anuncios, sin rastreadores, sin riesgo de fuga de credenciales, con interfaz completamente responsiva y soporte nativo de **Playlists, Selección Múltiple y TikTok HD sin marcas de agua**.
 
 ---
 
@@ -10,35 +10,44 @@
 - **Negro Obsidiana (`#0F1012`):** Base oscura profunda para menor fatiga visual.
 - **Grafito Oscuro (`#1A1D22`):** Tarjetas y paneles tridimensionales estructurados.
 - **Plata Titanio (`#E2E8F0` / `#FFFFFF`):** Botones de acción principales de alto contraste.
-- **Plata Hielo / Cian (`#38BDF8`):** Barras de progreso e indicadores de actividad.
+- **Plata Hielo / Cian (`#38BDF8`):** Barras de progreso e indicadores luminosos.
 
 ---
 
 ## 🚀 Funcionalidades Principales
 
-### 1. 📋 Soporte Completo de Playlists & Álbumes
+### 1. 🎵 Motor Especializado para TikTok (HD Sin Marcas de Agua)
+- Descarga directa de videos en resolución nativa sin marcas de agua.
+- Extracción de pistas de audio originales (MP3/M4A).
+- Evasión de bloqueos de IP y desafíos anti-bot sin requerir configuración compleja.
+
+### 2. 📋 Soporte Completo de Playlists & Álbumes
 - **Detección inteligente:** Pega cualquier enlace de playlist o álbum completo de YouTube o SoundCloud.
 - **Panel con casillas de verificación:** Selecciona canciones o videos específicos de la lista.
-- **Controles rápidos:** Botones `[✓ Seleccionar Toda la Lista]` y `[✖ Desmarcar Todos]`.
+- **Controles rápidos:** Botones `[✓ Seleccionar Toda]` y `[✖ Desmarcar]`.
 - **Descarga masiva en 1 clic:** Elige el formato y descarga todo el lote directamente a la cola activa.
 
-### 2. 🔍 Búsqueda Directa con Selección Múltiple
+### 3. 🔍 Búsqueda Directa con Selección Múltiple
 - Escribe el nombre de un artista o canción para buscar directamente en YouTube.
 - Marca varios resultados a la vez con casillas para descargarlos juntos.
 - Botón para inspeccionar individualmente y elegir resoluciones avanzadas (1080p, 4K, 60fps).
 
-### 3. 🔒 Sesión Segura de Navegador (Opcional & 100% Privada)
+### 4. 📱 Interfaz 100% Responsiva y Adaptable
+- Diseñada para ajustarse a cualquier resolución de pantalla (desde monitores 4K hasta laptops de 720p o pantallas con escalado DPI).
+- Controles elásticos, rejillas dinámicas para opciones de audio/video y sin desbordamientos de botones.
+
+### 5. 🔒 Sesión Segura de Navegador (Opcional & 100% Privada)
 - Configurable en la pestaña **Ajustes**.
 - Permite descargar **videos con restricción de edad (+18)** o tus **playlists privadas** (como "Videos que me gustan") sincronizando la sesión de tu navegador local (Chrome, Edge, Vivaldi, Firefox, Brave, Opera).
 - **Cero contraseñas:** La aplicación jamás solicita correos ni contraseñas.
 - **Archivos protegidos:** Las cookies y configuraciones locales están excluidas automáticamente de Git mediante `.gitignore`.
 
-### 4. 📥 Gestor de Descargas Concurrentes
+### 6. 📥 Gestor de Descargas Concurrentes
 - Descargas en segundo plano con barra de progreso, velocidad en tiempo real y tiempo restante.
 - Cola multihilo que procesa varias descargas sin congelar la interfaz.
 - Cierre limpio y cancelación segura de archivos parciales (`.part`).
 
-### 5. 🎵 Mi Biblioteca Local
+### 7. 🎵 Mi Biblioteca Local
 - Historial completo de tus archivos descargados guardado de manera atómica.
 - Botón **▶ Reproducir** directo con el reproductor multimedia predeterminado (protegido contra ejecución de ejecutables no deseados).
 - Botón **📁 Ubicación** para abrir y resaltar el archivo en el Explorador de archivos (compatible con Windows, macOS y Linux).
