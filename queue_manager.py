@@ -1,6 +1,6 @@
 """
 Gestor de cola de descargas asíncronas para Snaptube Desktop.
-Permite encolar múltiples descargas y gestionarlas concurrentemente sin bloquear la interfaz.
+Permite encolar descargas individuales y por lotes (playlists) sin bloquear la interfaz.
 """
 
 import threading
@@ -11,13 +11,23 @@ from downloader import DownloaderEngine
 from history_manager import HistoryManager
 
 class DownloadTask:
-    def __init__(self, task_id: str, url: str, format_type: str, output_dir: str, title: str = "", thumbnail_url: str = ""):
+    def __init__(
+        self,
+        task_id: str,
+        url: str,
+        format_type: str,
+        output_dir: str,
+        title: str = "",
+        thumbnail_url: str = "",
+        browser: Optional[str] = None
+    ):
         self.id = task_id
         self.url = url
         self.format_type = format_type
         self.output_dir = output_dir
         self.title = title or "Analizando..."
         self.thumbnail_url = thumbnail_url
+        self.browser = browser
         self.format_label = format_type
         self.media_type = "audio" if format_type in ["mp3_320", "mp3_192", "m4a_best", "wav"] else "video"
         
@@ -41,23 +51,55 @@ class QueueManager:
         self.active_workers: List[threading.Thread] = []
         self._running = True
 
-        # Callbacks hacia la GUI
         self.on_task_updated: Optional[Callable[[DownloadTask], None]] = None
         self.on_task_finished: Optional[Callable[[DownloadTask], None]] = None
 
-        # Iniciar hilos de trabajo
-        for i in range(self.max_workers):
+        for _ in range(self.max_workers):
             t = threading.Thread(target=self._worker_loop, daemon=True)
             t.start()
             self.active_workers.append(t)
 
-    def add_download(self, url: str, format_type: str, output_dir: str, title: str = "", thumbnail_url: str = "") -> DownloadTask:
-        task_id = f"task_{int(time.time() * 1000)}"
-        task = DownloadTask(task_id, url, format_type, output_dir, title, thumbnail_url)
+    def add_download(
+        self,
+        url: str,
+        format_type: str,
+        output_dir: str,
+        title: str = "",
+        thumbnail_url: str = "",
+        browser: Optional[str] = None
+    ) -> DownloadTask:
+        task_id = f"task_{int(time.time() * 1000)}_{len(self.tasks)}"
+        task = DownloadTask(task_id, url, format_type, output_dir, title, thumbnail_url, browser=browser)
         self.tasks[task_id] = task
         self.task_queue.put(task)
         self._notify_update(task)
         return task
+
+    def add_batch(
+        self,
+        items: List[Dict[str, Any]],
+        format_type: str,
+        output_dir: str,
+        browser: Optional[str] = None
+    ) -> int:
+        """Encola una lista de elementos (playlist o selección múltiple)."""
+        count = 0
+        for item in items:
+            url = item.get("url")
+            if not url:
+                continue
+            title = item.get("title", "")
+            thumb = item.get("thumbnail", "")
+            self.add_download(
+                url=url,
+                format_type=format_type,
+                output_dir=output_dir,
+                title=title,
+                thumbnail_url=thumb,
+                browser=browser
+            )
+            count += 1
+        return count
 
     def cancel_download(self, task_id: str):
         task = self.tasks.get(task_id)
@@ -68,7 +110,6 @@ class QueueManager:
             self._notify_update(task)
 
     def get_active_tasks(self) -> List[DownloadTask]:
-        """Devuelve tareas en cola, descargando o convirtiendo."""
         return [t for t in self.tasks.values() if t.status in ["queued", "downloading", "converting"]]
 
     def get_all_tasks(self) -> List[DownloadTask]:
@@ -118,7 +159,8 @@ class QueueManager:
                     format_type=task.format_type,
                     output_dir=task.output_dir,
                     progress_callback=progress_cb,
-                    status_callback=status_cb
+                    status_callback=status_cb,
+                    browser=task.browser
                 )
 
                 if task.status != "cancelled":
@@ -131,7 +173,6 @@ class QueueManager:
                     task.media_type = result.get('media_type', task.media_type)
                     task.thumbnail_url = result.get('thumbnail_url', task.thumbnail_url)
 
-                    # Registrar en la biblioteca
                     self.history.add_download(
                         title=task.title,
                         file_path=task.file_path,

@@ -1,6 +1,7 @@
 """
 Motor de extracción y descarga multimedia usando yt-dlp y FFmpeg.
 Compatible con YouTube, TikTok, Instagram, Twitter/X, Twitch, SoundCloud y más de 1000 sitios.
+Soporte para videos individuales, playlists completas, selección múltiple y sesiones de navegador.
 """
 
 import os
@@ -50,15 +51,28 @@ class DownloaderEngine:
     def cancel_task(self, task_id: str):
         self._cancel_flags[task_id] = True
 
-    def search_youtube(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
-        """Busca videos en YouTube directamente mediante palabras clave."""
-        search_query = f"ytsearch{max_results}:{query}"
-        ydl_opts = {
+    def _base_opts(self, browser: Optional[str] = None, cookiefile: Optional[str] = None) -> Dict[str, Any]:
+        opts: Dict[str, Any] = {
             'quiet': True,
             'no_warnings': True,
+            'nocheckcertificate': True,
+            'windowsfilenames': True,
+            'js_runtimes': {'node': {}},
+        }
+        if browser and browser.lower() != 'none':
+            opts['cookiesfrombrowser'] = (browser.lower(),)
+        elif cookiefile and os.path.exists(cookiefile):
+            opts['cookiefile'] = cookiefile
+        return opts
+
+    def search_youtube(self, query: str, max_results: int = 6, browser: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Busca videos en YouTube directamente mediante palabras clave."""
+        search_query = f"ytsearch{max_results}:{query}"
+        ydl_opts = self._base_opts(browser=browser)
+        ydl_opts.update({
             'extract_flat': True,
             'skip_download': True,
-        }
+        })
         results = []
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             data = ydl.extract_info(search_query, download=False)
@@ -69,7 +83,6 @@ class DownloaderEngine:
                 v_id = e.get('id', '')
                 url = e.get('url') or f"https://www.youtube.com/watch?v={v_id}"
                 
-                # Miniatura
                 thumb = None
                 thumbs = e.get('thumbnails', [])
                 if thumbs:
@@ -82,44 +95,102 @@ class DownloaderEngine:
                     'title': e.get('title', 'Sin título'),
                     'uploader': e.get('uploader') or e.get('channel') or 'Desconocido',
                     'duration': format_duration(e.get('duration')),
+                    'raw_duration': e.get('duration', 0),
                     'url': url,
                     'thumbnail': thumb,
                 })
         return results
 
-    def inspect_url(self, url: str) -> Dict[str, Any]:
-        """Extrae metadatos detallados de cualquier URL compatible."""
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
+    def inspect_url(self, url: str, browser: Optional[str] = None, cookiefile: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Inspecciona una URL universalmente.
+        Detecta si es una playlist/álbum con múltiples videos o un video individual.
+        """
+        ydl_opts = self._base_opts(browser=browser, cookiefile=cookiefile)
+        ydl_opts.update({
+            'extract_flat': True,
             'skip_download': True,
-        }
+        })
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            
-            # Detectar resoluciones disponibles
-            formats = info.get('formats', [])
+            res = ydl.extract_info(url, download=False)
+
+            is_playlist = (
+                res.get('_type') == 'playlist' or 
+                ('entries' in res and len(res.get('entries', [])) > 1)
+            )
+
+            # --- CASO 1: ES UNA PLAYLIST O ÁLBUM ---
+            if is_playlist:
+                raw_entries = res.get('entries', [])
+                entries = []
+                for idx, e in enumerate(raw_entries, 1):
+                    if not e:
+                        continue
+                    v_id = e.get('id', '')
+                    item_url = e.get('url') or f"https://www.youtube.com/watch?v={v_id}"
+                    
+                    thumb = None
+                    thumbs = e.get('thumbnails', [])
+                    if thumbs:
+                        thumb = thumbs[-1].get('url')
+                    elif v_id:
+                        thumb = f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
+
+                    entries.append({
+                        'index': idx,
+                        'id': v_id,
+                        'title': e.get('title', f'Pista {idx}'),
+                        'uploader': e.get('uploader') or e.get('channel') or 'Desconocido',
+                        'duration': format_duration(e.get('duration')),
+                        'raw_duration': e.get('duration', 0),
+                        'url': item_url,
+                        'thumbnail': thumb,
+                    })
+
+                thumb = None
+                thumbs = res.get('thumbnails', [])
+                if thumbs:
+                    thumb = thumbs[-1].get('url')
+                elif entries and entries[0].get('thumbnail'):
+                    thumb = entries[0]['thumbnail']
+
+                return {
+                    'is_playlist': True,
+                    'title': res.get('title', 'Lista de Reproducción'),
+                    'uploader': res.get('uploader') or res.get('channel') or 'Varios Artistas',
+                    'count': len(entries),
+                    'entries': entries,
+                    'thumbnail': thumb,
+                    'url': url,
+                    'extractor': res.get('extractor_key', 'Playlist'),
+                }
+
+            # --- CASO 2: ES UN VIDEO INDIVIDUAL ---
+            # Si es video individual, podemos hacer una inspección detallada de formatos
+            formats = res.get('formats', [])
             heights = set()
             for f in formats:
                 h = f.get('height')
                 if h and isinstance(h, int) and h > 0:
                     heights.add(h)
-            
-            v_id = info.get('id', '')
-            thumb = info.get('thumbnail')
+
+            v_id = res.get('id', '')
+            thumb = res.get('thumbnail')
             if not thumb and v_id:
                 thumb = f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
 
             return {
+                'is_playlist': False,
                 'id': v_id,
-                'title': info.get('title', 'Sin título'),
-                'uploader': info.get('uploader') or info.get('channel') or 'Desconocido',
-                'duration': format_duration(info.get('duration')),
-                'raw_duration': info.get('duration', 0),
+                'title': res.get('title', 'Sin título'),
+                'uploader': res.get('uploader') or res.get('channel') or 'Desconocido',
+                'duration': format_duration(res.get('duration')),
+                'raw_duration': res.get('duration', 0),
                 'thumbnail': thumb,
                 'url': url,
                 'available_heights': sorted(list(heights), reverse=True),
-                'extractor': info.get('extractor_key', 'Universal'),
+                'extractor': res.get('extractor_key', 'Universal'),
             }
 
     def download(
@@ -130,11 +201,10 @@ class DownloaderEngine:
         output_dir: str,
         progress_callback: Optional[Callable[[float, str, str, str], None]] = None,
         status_callback: Optional[Callable[[str], None]] = None,
+        browser: Optional[str] = None,
+        cookiefile: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """
-        Descarga y convierte el archivo multimedia según el formato solicitado.
-        Retorna un diccionario con información del archivo final guardado.
-        """
+        """Descarga y convierte el archivo multimedia según el formato solicitado."""
         self._cancel_flags[task_id] = False
         os.makedirs(output_dir, exist_ok=True)
 
@@ -172,14 +242,11 @@ class DownloaderEngine:
                     status_callback("Procesando con FFmpeg...")
 
         out_template = os.path.join(output_dir, '%(title)s.%(ext)s')
-        ydl_opts: Dict[str, Any] = {
+        ydl_opts = self._base_opts(browser=browser, cookiefile=cookiefile)
+        ydl_opts.update({
             'outtmpl': out_template,
             'progress_hooks': [hook],
-            'quiet': True,
-            'no_warnings': True,
-            'nocheckcertificate': True,
-            'windowsfilenames': True,
-        }
+        })
 
         format_label = "Desconocido"
         media_type = "video"
@@ -266,7 +333,6 @@ class DownloaderEngine:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             
-            # Obtener nombre final del archivo
             raw_filename = ydl.prepare_filename(info)
             if format_type.startswith('mp3'):
                 final_path = os.path.splitext(raw_filename)[0] + '.mp3'
@@ -277,7 +343,6 @@ class DownloaderEngine:
             else:
                 final_path = os.path.splitext(raw_filename)[0] + '.mp4'
 
-            # Si el archivo exacto no existe, buscar coincidencia por nombre base
             if not os.path.exists(final_path):
                 base = os.path.splitext(raw_filename)[0]
                 for ext in ['.mp3', '.mp4', '.m4a', '.wav', '.webm', '.mkv']:

@@ -1,0 +1,25 @@
+[
+  {
+    "id": "20261102202642282642",
+    "title": "SomberMvsic - Hard-Tekk For What",
+    "file_path": "C:\\Users\\DURANTHIR\\Downloads\\SomberMvsic - Hard-Tekk For What.mp3",
+    "format_label": "MP3 (320 kbps HD)",
+    "media_type": "audio",
+    "url": "https://www.youtube.com/watch?v=lSceaHaIGik",
+    "thumbnail_url": "https://i.ytimg.com/vi_webp/lSceaHaIGik/maxresdefault.webp",
+    "file_size": 5884518,
+    "date": "02/11/2026 20:26"
+  },
+  {
+    "id": "20261102202500313134",
+    "title": "Hard-Tekk For What",
+    "file_path": "C:\\Users\\DURANTHIR\\Downloads\\Hard-Tekk For What.mp3",
+    "format_label": "MP3 (320 kbps HD)",
+    "media_type": "audio",
+    "url": "https://www.youtube.com/watch?v=8M2IjCFwrcY",
+    "thumbnail_url": "https://i.ytimg.com/vi_webp/8M2IjCFwrcY/maxresdefault.webp",
+    "file_size": 6028569,
+    "date": "02/11/2026 20:25",
+    "exists_on_disk": true
+  }
+]

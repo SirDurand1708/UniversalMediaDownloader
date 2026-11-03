@@ -1,13 +1,12 @@
 # Snaptube Pro Desktop ✦ Edición Privada y Segura
 
 > **Clon para computadoras de escritorio y laptops de Snaptube con diseño prémium *Obsidian & Titanium*.**  
-> Sin anuncios, sin rastreadores, sin inicio de sesión en páginas dudosas, sin riesgo de robo de datos y sin límites de velocidad.
+> Sin anuncios, sin rastreadores, sin inicio de sesión en páginas dudosas, sin riesgo de robo de datos y con soporte nativo de **Playlists y Selección Múltiple**.
 
 ---
 
 ## 🎨 Paleta de Diseño: *Obsidian & Titanium*
 
-La interfaz fue diseñada con una estética minimalista y sofisticada:
 - **Negro Obsidiana (`#0F1012`):** Base oscura profunda que no cansa la vista.
 - **Grafito Oscuro (`#1A1D22`):** Tarjetas y paneles tridimensionales.
 - **Plata Titanio (`#E2E8F0` / `#FFFFFF`):** Botones de acción principales de alto contraste y tipografía nítida.
@@ -17,34 +16,30 @@ La interfaz fue diseñada con una estética minimalista y sofisticada:
 
 ## 🚀 Funcionalidades Principales
 
-### 1. 🔍 Explorador & Buscador Integrado
-- **Búsqueda directa:** Escribe cualquier palabra clave (ej. *"Daft Punk One More Time"*) y la app buscará directamente en YouTube sin tener que abrir el navegador.
-- **Compatibilidad universal con enlaces:** Pega enlaces directos de **YouTube**, **TikTok** (sin marca de agua), **Instagram Reels**, **Twitter/X**, **Twitch Clips**, **SoundCloud** y más de 1000 sitios.
-- **Modal de Resolución de 2 Columnas (Estilo Snaptube):**
-  - **🎵 Música & Audio:** MP3 320 kbps (HD Máximo con carátula y etiquetas), MP3 192 kbps, M4A Original sin compresión, WAV Audio de estudio.
-  - **🎬 Video MP4:** 4K / 2K Ultra HD (60fps), 1080p Full HD, 720p HD, 480p Ligero.
+### 1. 📋 Soporte Completo de Playlists & Álbumes
+- **Detección inteligente:** Pega cualquier enlace de playlist o álbum completo de YouTube o SoundCloud.
+- **Panel con casillas de verificación:** Selecciona canciones o videos específicos de la lista.
+- **Controles rápidos:** Botones `[✓ Seleccionar Toda la Lista]` y `[✖ Desmarcar Todos]`.
+- **Descarga masiva en 1 clic:** Elige el formato y descarga todo el lote directamente a la cola activa.
 
-### 2. 📥 Gestor de Descargas Activas
-- Cola de descargas asíncrona (descarga varias canciones o videos sin congelar la app).
-- Visualización de porcentaje, velocidad en MB/s, tiempo restante y botón para cancelar.
+### 2. 🔍 Búsqueda Directa con Selección Múltiple
+- Escribe el nombre de un artista o canción para buscar directamente en YouTube.
+- Marca varios resultados a la vez con casillas para descargarlos juntos.
+- Botón para inspeccionar individualmente y elegir resoluciones avanzadas (1080p, 4K, 60fps).
 
-### 3. 🎵 Mi Biblioteca Local
-- Historial permanente de tus archivos descargados.
+### 3. 🔒 Sesión Segura de Navegador (Opcional & 100% Privada)
+- Configurable en la pestaña **Ajustes**.
+- Permite descargar **videos con restricción de edad (+18)** o tus **playlists privadas** (como "Videos que me gustan") sincronizando la sesión de tu navegador local (Chrome, Edge, Vivaldi, Firefox, Brave, Opera).
+- **Cero contraseñas:** La aplicación jamás solicita correos ni claves; lee de forma segura tu sesión abierta local.
+
+### 4. 📥 Gestor de Descargas Concurrentes
+- Descargas en segundo plano con barra de progreso, velocidad en MB/s y tiempo restante.
+- Cola inteligente que procesa varias descargas sin congelar la app.
+
+### 5. 🎵 Mi Biblioteca Local
+- Historial completo de tus archivos descargados.
 - Botón **▶ Reproducir** directo con el reproductor de tu PC.
-- Botón **📁 Ubicación** para resaltar el archivo en el Explorador de Windows.
-- Botón para eliminar del historial.
-
-### 4. ⚙ Ajustes & Diagnóstico
-- Configuración de la carpeta de destino.
-- Diagnóstico del motor FFmpeg y verificación del estado del sistema.
-
----
-
-## 🔒 Privacidad y Seguridad Total
-
-A diferencia de las versiones sospechosas de internet:
-- **100% Código Abierto y Transparente:** Conexión directa y cifrada entre tu equipo y los servidores del video.
-- **Sin cuentas ni telemetría:** No necesitas registrarte ni vincular cuentas personales.
+- Botón **📁 Ubicación** para abrir y resaltar el archivo en el Explorador de Windows.
 
 ---
 
