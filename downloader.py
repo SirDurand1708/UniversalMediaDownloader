@@ -29,6 +29,13 @@ def _ensure_ffmpeg():
 
 _ensure_ffmpeg()
 
+def clean_error_text(err: str) -> str:
+    """Elimina códigos de escape ANSI y prefijos redundantes de error."""
+    clean = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', err)
+    clean = re.sub(r'(\[0;[0-9]+m)+', '', clean)
+    clean = re.sub(r'ERROR:\s*', '', clean)
+    return clean.strip()
+
 def format_duration(seconds: Optional[int]) -> str:
     """Convierte segundos en formato MM:SS o HH:MM:SS."""
     if not seconds:
@@ -66,7 +73,7 @@ class DownloaderEngine:
         return opts
 
     def search_youtube(self, query: str, max_results: int = 6, browser: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Busca videos en YouTube directamente mediante palabras clave."""
+        """Busca videos en YouTube directamente mediante palabras clave, con respaldo automático sin cookies si falla."""
         search_query = f"ytsearch{max_results}:{query}"
         ydl_opts = self._base_opts(browser=browser)
         ydl_opts.update({
@@ -74,37 +81,45 @@ class DownloaderEngine:
             'skip_download': True,
         })
         results = []
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            data = ydl.extract_info(search_query, download=False)
-            entries = data.get('entries', []) if data else []
-            for e in entries:
-                if not e:
-                    continue
-                v_id = e.get('id', '')
-                url = e.get('url') or f"https://www.youtube.com/watch?v={v_id}"
-                
-                thumb = None
-                thumbs = e.get('thumbnails', [])
-                if thumbs:
-                    thumb = thumbs[-1].get('url')
-                elif v_id:
-                    thumb = f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                data = ydl.extract_info(search_query, download=False)
+        except Exception as e:
+            # Si el navegador tiene bloqueadas las cookies, reintentar automáticamente en modo anónimo
+            if browser and ('cookie' in str(e).lower() or '7271' in str(e)):
+                return self.search_youtube(query, max_results=max_results, browser=None)
+            raise Exception(clean_error_text(str(e)))
 
-                results.append({
-                    'id': v_id,
-                    'title': e.get('title', 'Sin título'),
-                    'uploader': e.get('uploader') or e.get('channel') or 'Desconocido',
-                    'duration': format_duration(e.get('duration')),
-                    'raw_duration': e.get('duration', 0),
-                    'url': url,
-                    'thumbnail': thumb,
-                })
+        entries = data.get('entries', []) if data else []
+        for e in entries:
+            if not e:
+                continue
+            v_id = e.get('id', '')
+            url = e.get('url') or f"https://www.youtube.com/watch?v={v_id}"
+            
+            thumb = None
+            thumbs = e.get('thumbnails', [])
+            if thumbs:
+                thumb = thumbs[-1].get('url')
+            elif v_id:
+                thumb = f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
+
+            results.append({
+                'id': v_id,
+                'title': e.get('title', 'Sin título'),
+                'uploader': e.get('uploader') or e.get('channel') or 'Desconocido',
+                'duration': format_duration(e.get('duration')),
+                'raw_duration': e.get('duration', 0),
+                'url': url,
+                'thumbnail': thumb,
+            })
         return results
 
     def inspect_url(self, url: str, browser: Optional[str] = None, cookiefile: Optional[str] = None) -> Dict[str, Any]:
         """
         Inspecciona una URL universalmente.
         Detecta si es una playlist/álbum con múltiples videos o un video individual.
+        Si la sesión del navegador está bloqueada, reintenta automáticamente sin cookies.
         """
         ydl_opts = self._base_opts(browser=browser, cookiefile=cookiefile)
         ydl_opts.update({
@@ -112,8 +127,13 @@ class DownloaderEngine:
             'skip_download': True,
         })
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            res = ydl.extract_info(url, download=False)
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                res = ydl.extract_info(url, download=False)
+        except Exception as e:
+            if browser and ('cookie' in str(e).lower() or '7271' in str(e)):
+                return self.inspect_url(url, browser=None, cookiefile=cookiefile)
+            raise Exception(clean_error_text(str(e)))
 
             is_playlist = (
                 res.get('_type') == 'playlist' or 
@@ -330,8 +350,18 @@ class DownloaderEngine:
         else:
             raise ValueError(f"Formato desconocido: {format_type}")
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+        except Exception as e:
+            # Si el navegador tiene bloqueada la base de datos de cookies, reintentar la descarga sin cookies
+            if browser and ('cookie' in str(e).lower() or '7271' in str(e)):
+                ydl_opts_retry = dict(ydl_opts)
+                ydl_opts_retry.pop('cookiesfrombrowser', None)
+                with yt_dlp.YoutubeDL(ydl_opts_retry) as ydl:
+                    info = ydl.extract_info(url, download=True)
+            else:
+                raise Exception(clean_error_text(str(e)))
             
             raw_filename = ydl.prepare_filename(info)
             if format_type.startswith('mp3'):

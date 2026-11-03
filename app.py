@@ -11,7 +11,7 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
 import theme
-from downloader import DownloaderEngine, is_url
+from downloader import DownloaderEngine, is_url, clean_error_text
 from queue_manager import QueueManager, DownloadTask
 from history_manager import HistoryManager
 from image_cache import ThumbnailCache
@@ -325,8 +325,9 @@ class SnaptubeDesktopApp(ctk.CTk):
 
     def _on_analyze_error(self, err_msg: str):
         self.search_btn.configure(state="normal", text="Buscar / Analizar")
-        self.analyze_status.configure(text=f"✖ Error: {err_msg[:60]}", text_color=theme.STATUS_ERROR)
-        messagebox.showerror("Error", f"No se pudo analizar el contenido:\n\n{err_msg}")
+        cleaned = clean_error_text(err_msg)
+        self.analyze_status.configure(text=f"✖ Error: {cleaned[:60]}", text_color=theme.STATUS_ERROR)
+        messagebox.showerror("Error", f"No se pudo analizar el contenido:\n\n{cleaned}")
 
     # --- RESULTADOS DE BÚSQUEDA CON MULTI-SELECCIÓN ---
     def _display_search_results(self, results: list, query: str):
