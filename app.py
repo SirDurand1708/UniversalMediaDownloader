@@ -13,7 +13,7 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
 import theme
-from downloader import DownloaderEngine, is_url, normalize_url, clean_error_text, is_ffmpeg_available, FFMPEG_DIR
+from downloader import DownloaderEngine, is_url, normalize_url, clean_error_text, is_ffmpeg_available, FFMPEG_DIR, is_browser_running
 from queue_manager import QueueManager, DownloadTask
 from history_manager import HistoryManager
 from image_cache import ThumbnailCache
@@ -450,8 +450,21 @@ class OmniVaultApp(ctk.CTk):
     def _on_analyze_error(self, err_msg: str):
         self.search_btn.configure(state="normal", text="Buscar / Analizar")
         cleaned = clean_error_text(err_msg)
-        self.analyze_status.configure(text=f"✖ Error: {cleaned[:70]}", text_color=theme.STATUS_ERROR)
-        messagebox.showerror("Error de Contenido", f"No se pudo procesar el enlace:\n\n{cleaned}")
+        first_line = cleaned.splitlines()[0] if cleaned else "Error desconocido"
+        self.analyze_status.configure(text=f"✖ Error: {first_line[:65]}", text_color=theme.STATUS_ERROR)
+
+        lower = err_msg.lower()
+        if any(k in lower for k in ["bot", "sign in to confirm", "accede para confirmar"]):
+            go_to_settings = messagebox.askyesno(
+                "Verificación de YouTube Requerida",
+                "YouTube ha solicitado verificación anti-bot para este video.\n\n"
+                "Para poder descargarlo, necesitas sincronizar o cargar tus cookies de YouTube en Ajustes.\n\n"
+                "¿Deseas abrir la pestaña de Ajustes ahora para sincronizar tus cookies?"
+            )
+            if go_to_settings:
+                self._show_settings()
+        else:
+            messagebox.showerror("Error de Contenido", f"No se pudo procesar el enlace:\n\n{cleaned}")
 
     # --- RESULTADOS DE BÚSQUEDA ---
     def _display_search_results(self, results: list, query: str):
@@ -1144,57 +1157,126 @@ class OmniVaultApp(ctk.CTk):
         box3 = ctk.CTkFrame(settings_scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
         box3.pack(fill="x", pady=6)
 
-        ctk.CTkLabel(box3, text="🔒 Conexión Segura con YouTube (Playlists Privadas y +18)", font=ctk.CTkFont(size=13, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=14, pady=(12, 4))
+        ctk.CTkLabel(box3, text="🔒 Conexión Segura con YouTube (Playlists Privadas y Anti-Bot)", font=ctk.CTkFont(size=13, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=14, pady=(12, 4))
 
         desc = (
-            "Para descargar videos con restricción de edad o tus playlists privadas, se requiere sesión activa.\n"
-            "✦ Cómo sincronizar con Vivaldi sin bloqueos de Windows:\n"
-            "  1. Cierra Vivaldi durante 5 segundos y haz clic en '📸 Sincronizar Sesión'.\n"
-            "  2. O bien, carga un archivo cookies.txt exportado desde tu navegador."
+            "El 95% de las descargas operan sin cookies en modo anónimo.\n"
+            "Solo se requiere sesión para videos con restricción de edad (+18), playlists privadas o comprobación anti-bot."
         )
-        ctk.CTkLabel(box3, text=desc, font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY, justify="left").pack(anchor="w", padx=14, pady=(0, 8))
+        ctk.CTkLabel(box3, text=desc, font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY, justify="left").pack(anchor="w", padx=14, pady=(0, 6))
 
         saved_cookie_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
         self.cookie_status_lbl = ctk.CTkLabel(
             box3,
-            text="✔ Sesión guardada en archivo local (Sin bloqueos de navegador)" if os.path.exists(saved_cookie_file) else "ℹ No hay sesión guardada en archivo local (Usando modo anónimo)",
+            text="✔ Sesión guardada en archivo local (Sin bloqueos de navegador)" if os.path.exists(saved_cookie_file) else "ℹ Modo anónimo activo (Sin credenciales guardadas)",
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color=theme.STATUS_SUCCESS if os.path.exists(saved_cookie_file) else theme.TEXT_MUTED
         )
-        self.cookie_status_lbl.pack(anchor="w", padx=14, pady=(0, 8))
+        self.cookie_status_lbl.pack(anchor="w", padx=14, pady=(0, 10))
 
-        btn_row_cookies = ctk.CTkFrame(box3, fg_color="transparent")
-        btn_row_cookies.pack(fill="x", padx=14, pady=(0, 12))
+        # --- OPCIÓN 1: MÉTODO UNIVERSAL RECOMENDADO ---
+        method1_box = ctk.CTkFrame(box3, fg_color=theme.BG_MAIN, corner_radius=theme.CORNER_RADIUS_SM)
+        method1_box.pack(fill="x", padx=14, pady=(0, 8))
 
-        self.sync_vivaldi_btn = ctk.CTkButton(
-            btn_row_cookies,
-            text="📸 Sincronizar Vivaldi",
+        ctk.CTkLabel(
+            method1_box,
+            text="⭐ Método Recomendado (Universal para Chrome, Edge, Firefox, Vivaldi, Brave, Opera):",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color=theme.TEXT_PRIMARY
+        ).pack(anchor="w", padx=10, pady=(8, 2))
+
+        ctk.CTkLabel(
+            method1_box,
+            text="Exporta tus cookies de YouTube con la extensión gratuita 'Get cookies.txt LOCALLY' y cárgalas aquí.\n"
+                 "Cero bloqueos de Windows y 100% inmune al nuevo cifrado App-Bound de Google Chrome y Microsoft Edge.",
+            font=ctk.CTkFont(size=10),
+            text_color=theme.TEXT_SECONDARY,
+            justify="left"
+        ).pack(anchor="w", padx=10, pady=(0, 6))
+
+        m1_btn_row = ctk.CTkFrame(method1_box, fg_color="transparent")
+        m1_btn_row.pack(fill="x", padx=10, pady=(0, 8))
+
+        load_cookie_btn = ctk.CTkButton(
+            m1_btn_row,
+            text="📄 Cargar archivo cookies.txt",
             height=32,
             fg_color=theme.BTN_PRIMARY_BG,
             hover_color=theme.BTN_PRIMARY_HOVER,
             text_color=theme.BTN_PRIMARY_TEXT,
             font=ctk.CTkFont(size=11, weight="bold"),
-            command=self._sync_vivaldi_snapshot
-        )
-        self.sync_vivaldi_btn.pack(side="left", padx=(0, 6))
-
-        load_cookie_btn = ctk.CTkButton(
-            btn_row_cookies,
-            text="📄 Cargar cookies.txt",
-            height=32,
-            fg_color=theme.BTN_SECONDARY_BG,
-            hover_color=theme.BTN_SECONDARY_HOVER,
-            text_color=theme.BTN_SECONDARY_TEXT,
-            font=ctk.CTkFont(size=11, weight="bold"),
             command=self._load_cookie_file
         )
         load_cookie_btn.pack(side="left", padx=(0, 6))
 
+        # --- OPCIÓN 2: EXTRACCIÓN DIRECTA PREVENTIVA (EXPERIMENTAL) ---
+        method2_box = ctk.CTkFrame(box3, fg_color=theme.BG_MAIN, corner_radius=theme.CORNER_RADIUS_SM)
+        method2_box.pack(fill="x", padx=14, pady=(0, 10))
+
+        ctk.CTkLabel(
+            method2_box,
+            text="⚡ Método Directo (Experimental - Requiere cerrar el navegador):",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color=theme.TEXT_PRIMARY
+        ).pack(anchor="w", padx=10, pady=(8, 2))
+
+        ctk.CTkLabel(
+            method2_box,
+            text="Extrae las cookies directamente del navegador (Vivaldi, Firefox, Brave, Opera).\n"
+                 "Importante: Debes cerrar tu navegador 3 segundos antes de hacer clic para evitar el bloqueo de archivos de Windows.",
+            font=ctk.CTkFont(size=10),
+            text_color=theme.TEXT_SECONDARY,
+            justify="left"
+        ).pack(anchor="w", padx=10, pady=(0, 6))
+
+        m2_btn_row = ctk.CTkFrame(method2_box, fg_color="transparent")
+        m2_btn_row.pack(fill="x", padx=10, pady=(0, 8))
+
+        ctk.CTkLabel(m2_btn_row, text="Navegador:", font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY).pack(side="left", padx=(0, 6))
+
+        self.browser_var = ctk.StringVar(value="Vivaldi")
+        self.browser_menu = ctk.CTkOptionMenu(
+            m2_btn_row,
+            values=["Vivaldi", "Firefox", "Brave", "Opera", "Chrome", "Edge"],
+            variable=self.browser_var,
+            width=100,
+            height=30,
+            command=self._on_browser_selection_changed
+        )
+        self.browser_menu.pack(side="left", padx=(0, 8))
+
+        self.sync_browser_btn = ctk.CTkButton(
+            m2_btn_row,
+            text="📸 Sincronizar Vivaldi",
+            height=30,
+            fg_color=theme.BTN_SECONDARY_BG,
+            hover_color=theme.BTN_SECONDARY_HOVER,
+            text_color=theme.BTN_SECONDARY_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=self._sync_selected_browser
+        )
+        self.sync_browser_btn.pack(side="left", padx=(0, 8))
+
+        # --- BARRA DE ACCIONES DE SESIÓN ---
+        actions_row = ctk.CTkFrame(box3, fg_color="transparent")
+        actions_row.pack(fill="x", padx=14, pady=(0, 12))
+
+        test_cookie_btn = ctk.CTkButton(
+            actions_row,
+            text="🧪 Probar Estado de Sesión",
+            height=30,
+            fg_color=theme.BTN_SECONDARY_BG,
+            hover_color=theme.BTN_SECONDARY_HOVER,
+            text_color=theme.BTN_SECONDARY_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=self._test_saved_session
+        )
+        test_cookie_btn.pack(side="left", padx=(0, 6))
+
         del_cookie_btn = ctk.CTkButton(
-            btn_row_cookies,
-            text="🗑 Limpiar",
-            width=90,
-            height=32,
+            actions_row,
+            text="🗑 Limpiar Sesión Guardada",
+            height=30,
             fg_color=theme.BTN_DANGER_BG,
             hover_color=theme.BTN_DANGER_HOVER,
             text_color=theme.BTN_DANGER_TEXT,
@@ -1253,42 +1335,82 @@ class OmniVaultApp(ctk.CTk):
             self.video_dir_entry.insert(0, chosen)
             self.video_dir_entry.configure(state="readonly")
 
-    def _sync_vivaldi_snapshot(self):
-        self.sync_vivaldi_btn.configure(state="disabled", text="Extrayendo...")
+    def _on_browser_selection_changed(self, choice: str):
+        self.sync_browser_btn.configure(text=f"📸 Sincronizar {choice}")
+
+    def _sync_selected_browser(self):
+        browser = self.browser_var.get().lower()
+
+        # 1. Comprobación de cifrado App-Bound en Windows (Chrome / Edge 127+)
+        if browser in ["chrome", "edge"]:
+            messagebox.showwarning(
+                "Cifrado Protegido (App-Bound Encryption)",
+                f"Google Chrome y Microsoft Edge cuentan con cifrado exclusivo de Windows (App-Bound Encryption).\n\n"
+                f"Por seguridad de Windows, no permiten la extracción directa de contraseñas ni cookies desde programas externos.\n\n"
+                f"✦ Solución recomendada y universal:\n"
+                f"1. Instala la extensión gratuita 'Get cookies.txt LOCALLY' en tu navegador.\n"
+                f"2. Exporta el archivo cookies.txt de YouTube.\n"
+                f"3. Haz clic en '📄 Cargar archivo cookies.txt' en esta ventana."
+            )
+            return
+
+        # 2. Comprobación preventiva de proceso en ejecución (evita error de bloqueo de archivo)
+        if is_browser_running(browser):
+            messagebox.showwarning(
+                f"{browser.capitalize()} en ejecución",
+                f"El navegador {browser.capitalize()} está actualmente abierto.\n\n"
+                f"Windows no permite leer los archivos de sesión mientras el navegador está en ejecución debido al bloqueo de archivos compartidos.\n\n"
+                f"✦ Pasos para sincronizar:\n"
+                f"1. Cierra todas las ventanas de {browser.capitalize()}.\n"
+                f"2. Espera 3 segundos.\n"
+                f"3. Vuelve a hacer clic en '📸 Sincronizar {browser.capitalize()}'.\n"
+                f"4. Una vez guardado, podrás abrir {browser.capitalize()} y usarlo normalmente."
+            )
+            return
+
+        self.sync_browser_btn.configure(state="disabled", text="Extrayendo...")
 
         def _worker():
             try:
-                self.downloader.export_browser_cookies_snapshot("vivaldi")
-                self.after(0, lambda: self._on_cookie_sync_success())
+                self.downloader.export_browser_cookies_snapshot(browser)
+                self.after(0, lambda: self._on_cookie_sync_success(browser))
             except Exception as e:
                 err = str(e)
-                self.after(0, lambda: self._on_cookie_sync_error(err))
+                self.after(0, lambda: self._on_cookie_sync_error(err, browser))
 
         threading.Thread(target=_worker, daemon=True).start()
 
-    def _on_cookie_sync_success(self):
-        self.sync_vivaldi_btn.configure(state="normal", text="📸 Sincronizar Vivaldi")
+    def _on_cookie_sync_success(self, browser: str):
+        self.sync_browser_btn.configure(state="normal", text=f"📸 Sincronizar {browser.capitalize()}")
         self.cookie_status_lbl.configure(
-            text="✔ Sesión guardada con éxito (Sin bloqueos de navegador)",
+            text=f"✔ Sesión de {browser.capitalize()} guardada con éxito (Sin bloqueos)",
             text_color=theme.STATUS_SUCCESS
         )
-        self.session_lbl.configure(text="● Sesión: Vivaldi", text_color=theme.STATUS_SUCCESS)
+        self.session_lbl.configure(text=f"● Sesión: {browser.capitalize()}", text_color=theme.STATUS_SUCCESS)
         messagebox.showinfo(
             "Sesión Sincronizada",
-            "¡Listo! Se ha guardado una copia segura de tu sesión de Vivaldi.\n\n"
-            "Ya puedes volver a abrir Vivaldi normalmente; OmniVault usará esta copia sin bloqueos."
+            f"¡Listo! Se ha guardado una copia segura de tu sesión de {browser.capitalize()}.\n\n"
+            f"Ya puedes volver a abrir {browser.capitalize()} normalmente; OmniVault utilizará esta sesión sin bloqueos."
         )
 
-    def _on_cookie_sync_error(self, err_msg: str):
-        self.sync_vivaldi_btn.configure(state="normal", text="📸 Sincronizar Vivaldi")
-        messagebox.showwarning(
-            "Navegador en uso",
-            "No se pudieron leer las cookies porque Vivaldi aún está abierto en tu equipo.\n\n"
-            "Pasos:\n"
-            "1. Cierra todas las ventanas de Vivaldi.\n"
-            "2. Espera 3 segundos y presiona este botón nuevamente.\n"
-            "3. Una vez guardado, podrás abrir Vivaldi y usarlo como siempre."
-        )
+    def _on_cookie_sync_error(self, err_msg: str, browser: str):
+        self.sync_browser_btn.configure(state="normal", text=f"📸 Sincronizar {browser.capitalize()}")
+        messagebox.showwarning("Aviso de Sincronización", err_msg)
+
+    def _test_saved_session(self):
+        def _worker():
+            result = self.downloader.test_youtube_auth()
+            self.after(0, lambda: self._display_test_result(result))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _display_test_result(self, res: dict):
+        if res.get("ok"):
+            self.cookie_status_lbl.configure(text="✔ Sesión de YouTube activa y verificada", text_color=theme.STATUS_SUCCESS)
+            messagebox.showinfo("Estado de Sesión", f"¡Conexión Exitosa!\n\n{res.get('message')}")
+        else:
+            self.cookie_status_lbl.configure(text="⚠ Sesión no verificada o expirada", text_color=theme.STATUS_WARNING)
+            messagebox.showwarning("Estado de Sesión", f"Resultado del Diagnóstico:\n\n{res.get('message')}")
 
     def _load_cookie_file(self):
         path = filedialog.askopenfilename(

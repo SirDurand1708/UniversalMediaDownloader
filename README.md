@@ -38,9 +38,49 @@
 
 ### 5. 🔒 Sesión Segura de Navegador (Opcional & 100% Privada)
 - Configurable en la pestaña **Ajustes**.
-- Permite descargar **videos con restricción de edad (+18)** o tus **playlists privadas** (como "Videos que me gustan") sincronizando la sesión de tu navegador local (Chrome, Edge, Vivaldi, Firefox, Brave, Opera).
+- Permite descargar **videos con restricción de edad (+18)**, **playlists privadas** (como "Videos que me gustan") o **evadir retos anti-bot de YouTube**.
+- **95% de descargas libres:** Por defecto, el programa opera en modo anónimo sin requerir cookies ni cuentas.
 - **Cero contraseñas:** La aplicación jamás solicita correos ni contraseñas.
-- **Archivos protegidos:** Las cookies y configuraciones locales están excluidas automáticamente de Git mediante `.gitignore`.
+- **Archivos protegidos:** Las cookies y configuraciones locales (`saved_cookies.txt`, `config.json`, `library.json`) están excluidas automáticamente de Git mediante `.gitignore`.
+
+---
+
+## 🍪 Guía de Sesión y Autenticación (Para cualquier navegador)
+
+Por defecto, **no necesitas iniciar sesión para descargar el 95% del contenido** de YouTube, TikTok, SoundCloud, Instagram, etc. Sin embargo, para descargar tus **playlists privadas**, **videos con restricción de edad (+18)** o pistas musicales protegidas por el filtro anti-bot de YouTube, se requiere una sesión activa.
+
+En Windows tienes **dos formas de conectarlo**:
+
+### ⭐ Método 1: Archivo `cookies.txt` (Recomendado y 100% Universal)
+Es el método más robusto y compatible con **cualquier navegador**: **Google Chrome, Microsoft Edge, Mozilla Firefox, Vivaldi, Brave, Opera**, etc. No sufre bloqueos de archivos en Windows y evade el nuevo cifrado *App-Bound Encryption* de Chrome y Edge.
+
+1. **Instala la extensión:**
+   - Para Chrome, Edge, Brave, Vivaldi u Opera: Instala [Get cookies.txt LOCALLY (Chrome Web Store)](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc).
+   - Para Firefox: Instala [cookies.txt (Firefox Add-ons)](https://addons.mozilla.org/es/firefox/addon/cookie-txt/).
+2. **Exporta tus cookies de YouTube:**
+   - Abre [YouTube.com](https://www.youtube.com) en tu navegador con tu sesión iniciada.
+   - Haz clic en el icono de la extensión en la barra del navegador y presiona **Export** o **Descargar**. Se guardará un archivo llamado `youtube.com_cookies.txt` (o similar).
+3. **Cárgalo en OmniVault:**
+   - En OmniVault, ve a la pestaña **⚙ Ajustes**.
+   - Haz clic en **📄 Cargar archivo cookies.txt** y selecciona el archivo que acabas de descargar.
+   - Presiona **🧪 Probar Estado de Sesión** para verificar que la sesión esté activa y lista.
+
+---
+
+### ⚡ Método 2: Extracción Directa desde Navegador (Experimental)
+Compatible con **Vivaldi, Mozilla Firefox, Brave y Opera**:
+
+> [!WARNING]
+> **Windows bloquea los archivos de cookies mientras el navegador está abierto:**  
+> Para evitar errores de *«Permiso denegado»*, es fundamental **cerrar tu navegador** antes de hacer clic en sincronizar.
+
+1. Abre tu navegador y asegúrate de haber iniciado sesión en [YouTube.com](https://www.youtube.com).
+2. **Cierra completamente todas las ventanas de tu navegador** y espera 3 segundos para que Windows libere el bloqueo de archivo.
+3. En OmniVault, ve a **⚙ Ajustes**, selecciona tu navegador en el menú desplegable y presiona **📸 Sincronizar [Navegador]**.
+4. ¡Listo! OmniVault guardará una copia local segura. Ya puedes volver a abrir tu navegador y usarlo con total normalidad.
+5. Presiona **🧪 Probar Estado de Sesión** para confirmar la conexión.
+
+*(Nota: En Google Chrome y Microsoft Edge v127+, Windows bloquea la extracción directa mediante App-Bound Encryption; para ellos utiliza siempre el Método 1).*
 
 ### 6. 📥 Gestor de Descargas Concurrentes
 - Descargas en segundo plano con barra de progreso, velocidad en tiempo real y tiempo restante.

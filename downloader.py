@@ -56,19 +56,75 @@ def is_ffmpeg_available() -> bool:
     """Comprueba si FFmpeg está disponible y funcional."""
     return bool(FFMPEG_DIR or shutil.which("ffmpeg"))
 
+def is_browser_running(browser_name: str) -> bool:
+    """Comprueba de forma rápida si el proceso del navegador está en ejecución en Windows."""
+    browser_procs = {
+        'vivaldi': ['vivaldi.exe'],
+        'chrome': ['chrome.exe'],
+        'edge': ['msedge.exe'],
+        'brave': ['brave.exe'],
+        'firefox': ['firefox.exe'],
+        'opera': ['opera.exe'],
+    }
+    targets = browser_procs.get(browser_name.lower(), [f"{browser_name.lower()}.exe"])
+    if sys.platform == "win32":
+        try:
+            flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+            for exe in targets:
+                res = subprocess.run(
+                    ["tasklist", "/FI", f"IMAGENAME eq {exe}", "/NH"],
+                    capture_output=True,
+                    text=True,
+                    creationflags=flags
+                )
+                if exe.lower() in res.stdout.lower():
+                    return True
+        except Exception:
+            pass
+    return False
+
 def sanitize_filename(name: str) -> str:
     """Sanea un nombre de archivo eliminando caracteres ilegales en Windows/Linux/macOS."""
     clean = re.sub(r'[\x5c/:\x2a\x3f\x22\x3c\x3e\x7c]', '_', name).strip()
     return clean[:120] if clean else "Media_File"
 
 def clean_error_text(err: str) -> str:
-    """Elimina códigos de escape ANSI y prefijos redundantes de error."""
+    """Sanea y traduce mensajes técnicos de error a explicaciones claras y amigables."""
     if not err:
         return "Error desconocido"
     clean = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', err)
     clean = re.sub(r'(\[0;[0-9]+m)+', '', clean)
     clean = re.sub(r'ERROR:\s*', '', clean)
-    return clean.strip()
+    lower = clean.lower()
+
+    if any(k in lower for k in ["sign in to confirm you’re not a bot", "sign in to confirm you're not a bot", "not a bot", "confirm you're not a bot"]):
+        return (
+            "YouTube requiere verificación anti-bot para este video.\n"
+            "Sincroniza tus cookies desde Ajustes (cerrando el navegador unos segundos) o importa un archivo cookies.txt."
+        )
+    if "could not copy chrome cookie database" in lower or ("permission denied" in lower and "cookies" in lower):
+        return (
+            "El archivo de sesión del navegador está bloqueado porque el navegador está abierto.\n"
+            "Cierra tu navegador durante 3 segundos y presiona 'Sincronizar' nuevamente."
+        )
+    if "failed to decrypt with dpapi" in lower:
+        return (
+            "Este navegador tiene sus cookies protegidas por el sistema (App-Bound Encryption).\n"
+            "Para sincronizarlo, exporta tus cookies con la extensión 'Get cookies.txt LOCALLY' y cárgalas en Ajustes."
+        )
+    if "private video" in lower or "este video es privado" in lower:
+        return "Este video es privado o no está disponible públicamente."
+    if "members-only" in lower or "solo para miembros" in lower:
+        return "Este contenido es exclusivo para miembros con suscripción al canal."
+    if "confirm your age" in lower or "age restricted" in lower or "requiere confirmación de edad" in lower:
+        return "Este video tiene restricción de edad (+18). Requiere una sesión de YouTube iniciada."
+    if "ffmpeg no está" in lower or "ffmpeg is not" in lower:
+        return "FFmpeg no está disponible en el sistema para la conversión de formatos."
+    if "no space left on device" in lower or "espacio insuficiente" in lower:
+        return "No hay suficiente espacio disponible en el disco para completar la descarga."
+
+    first_line = clean.split("\n")[0].strip()
+    return first_line if first_line else clean.strip()
 
 def format_duration(seconds: Optional[int]) -> str:
     """Convierte segundos en formato MM:SS o HH:MM:SS."""
@@ -214,7 +270,7 @@ class DownloaderEngine:
 
     def export_browser_cookies_snapshot(self, browser: str = "vivaldi") -> str:
         """
-        Extrae las cookies del navegador y las guarda en un archivo local 'saved_cookies.txt'.
+        Extrae las cookies del navegador especificado y las guarda en un archivo local 'saved_cookies.txt'.
         """
         dest_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
         ydl_opts = {
@@ -222,9 +278,26 @@ class DownloaderEngine:
             'no_warnings': True,
             'cookiesfrombrowser': (browser.lower(),),
         }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            jar = ydl.cookiejar
-            jar.save(dest_path, ignore_discard=True, ignore_expires=True)
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                jar = ydl.cookiejar
+                jar.save(dest_path, ignore_discard=True, ignore_expires=True)
+        except Exception as e:
+            err = str(e).lower()
+            if "could not copy chrome cookie database" in err or "permission denied" in err:
+                raise RuntimeError(
+                    f"El navegador {browser.capitalize()} está actualmente abierto.\n\n"
+                    f"Windows no permite leer las cookies mientras el navegador está en ejecución.\n"
+                    f"Por favor cierra {browser.capitalize()} durante 3 segundos y vuelve a presionar 'Sincronizar'."
+                )
+            elif "failed to decrypt with dpapi" in err:
+                raise RuntimeError(
+                    f"{browser.capitalize()} utiliza el cifrado protegido de Windows (App-Bound Encryption).\n\n"
+                    f"Para sincronizarlo, exporta tus cookies con la extensión 'Get cookies.txt LOCALLY' "
+                    f"en tu navegador y cárgalas con el botón '📄 Cargar cookies.txt'."
+                )
+            else:
+                raise RuntimeError(f"Error al sincronizar cookies de {browser}: {clean_error_text(str(e))}")
 
         try:
             os.chmod(dest_path, 0o600)
@@ -233,13 +306,72 @@ class DownloaderEngine:
 
         return dest_path
 
+    def test_youtube_auth(self) -> Dict[str, Any]:
+        """Comprueba si las cookies guardadas permiten acceso autenticado a YouTube."""
+        saved_cookie = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
+        if not os.path.exists(saved_cookie) or os.path.getsize(saved_cookie) == 0:
+            return {
+                'ok': False,
+                'status': 'anonymous',
+                'message': 'No hay archivo de cookies guardado (modo anónimo activo).'
+            }
+
+        try:
+            import http.cookiejar
+            jar = http.cookiejar.MozillaCookieJar(saved_cookie)
+            jar.load(ignore_discard=True, ignore_expires=True)
+            yt_cookies = [c for c in jar if 'youtube.com' in c.domain]
+            if not yt_cookies:
+                return {
+                    'ok': False,
+                    'status': 'empty',
+                    'message': 'El archivo saved_cookies.txt no contiene cookies de youtube.com.'
+                }
+
+            auth_names = ['LOGIN_INFO', 'SAPISID', '__Secure-3PAPISID', 'SID', '__Secure-3PSID']
+            found_auth = [c.name for c in yt_cookies if c.name in auth_names]
+
+            node_path = shutil.which("node") or r"C:\Program Files\nodejs\node.exe"
+            js_run = {'node': {'path': node_path}} if (node_path and os.path.isfile(node_path)) else {'node': {}}
+            opts = {
+                'cookiefile': saved_cookie,
+                'quiet': True,
+                'no_warnings': True,
+                'skip_download': True,
+                'js_runtimes': js_run,
+            }
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                ydl.extract_info("https://www.youtube.com/feed/history", download=False)
+
+            return {
+                'ok': True,
+                'status': 'authenticated',
+                'message': f'Sesión de YouTube válida y activa ({len(yt_cookies)} cookies, tokens: {", ".join(set(found_auth))}).'
+            }
+        except Exception as e:
+            err = str(e).lower()
+            if "sign in" in err or "login" in err:
+                return {
+                    'ok': False,
+                    'status': 'expired',
+                    'message': 'Las cookies guardadas han expirado. Es necesario volver a sincronizarlas desde el navegador.'
+                }
+            return {
+                'ok': False,
+                'status': 'error',
+                'message': f'No se pudo verificar la sesión: {clean_error_text(str(e))}'
+            }
+
     def _base_opts(self, browser: Optional[str] = None, cookiefile: Optional[str] = None, use_cookies: bool = False) -> Dict[str, Any]:
+        node_path = shutil.which("node") or r"C:\Program Files\nodejs\node.exe"
+        js_conf = {'node': {'path': node_path}} if (node_path and os.path.isfile(node_path)) else {'node': {}}
+
         opts: Dict[str, Any] = {
             'quiet': True,
             'no_warnings': True,
             'nocheckcertificate': False,  # Verificación SSL activa por defecto
             'windowsfilenames': True,
-            'js_runtimes': {'node': {}},
+            'js_runtimes': js_conf,
         }
 
         # Soporte de impersonate si curl_cffi está presente
@@ -365,7 +497,7 @@ class DownloaderEngine:
                         '_tiktok_data': tt_data,
                     }
 
-            if any(k in err for k in ['sign in', 'age', 'confirm your age', 'private', 'login']):
+            if any(k in err for k in ['sign in', 'age', 'confirm your age', 'private', 'login', 'bot', 'confirm you']):
                 ydl_opts_cookies = self._base_opts(browser=browser, cookiefile=cookiefile, use_cookies=True)
                 ydl_opts_cookies.update({'extract_flat': True, 'skip_download': True})
                 try:
@@ -759,7 +891,7 @@ class DownloaderEngine:
                 if "cancelada por el usuario" in err or self.is_cancelled(task_id):
                     raise Exception("Descarga cancelada por el usuario.")
 
-                if any(k in err for k in ['sign in', 'age', 'confirm your age', 'private', 'login']):
+                if any(k in err for k in ['sign in', 'age', 'confirm your age', 'private', 'login', 'bot', 'confirm you']):
                     ydl_opts_cookies = self._base_opts(browser=browser, cookiefile=cookiefile, use_cookies=True)
                     ydl_opts_cookies.update(format_opts)
                     try:

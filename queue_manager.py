@@ -8,7 +8,7 @@ import queue
 import time
 import uuid
 from typing import Dict, Any, List, Callable, Optional
-from downloader import DownloaderEngine
+from downloader import DownloaderEngine, clean_error_text
 from history_manager import HistoryManager
 
 class DownloadTask:
@@ -242,8 +242,10 @@ class QueueManager:
             except Exception as e:
                 if task.status != "cancelled":
                     task.status = "error"
-                    task.error_msg = str(e)
-                    task.status_text = f"Error: {str(e)[:70]}"
+                    clean_msg = clean_error_text(str(e))
+                    task.error_msg = clean_msg
+                    first_l = clean_msg.splitlines()[0]
+                    task.status_text = f"Error: {first_l[:70]}"
                     self._notify_update(task)
 
             finally:
