@@ -1,6 +1,6 @@
 """
-Módulo de descarga y extracción multimedia usando yt-dlp y FFmpeg.
-Soporta YouTube, Instagram, TikTok, Twitter/X, Twitch, Facebook, SoundCloud y más de 1000 sitios.
+Motor de extracción y descarga multimedia usando yt-dlp y FFmpeg.
+Compatible con YouTube, TikTok, Instagram, Twitter/X, Twitch, SoundCloud y más de 1000 sitios.
 """
 
 import os
@@ -8,7 +8,7 @@ import re
 import sys
 import shutil
 import yt_dlp
-from typing import Callable, Optional, Dict, Any
+from typing import Callable, Optional, Dict, Any, List
 
 def _ensure_ffmpeg():
     """Garantiza que FFmpeg esté en el PATH del proceso, leyéndolo del registro si es necesario."""
@@ -28,15 +28,67 @@ def _ensure_ffmpeg():
 
 _ensure_ffmpeg()
 
-class Downloader:
+def format_duration(seconds: Optional[int]) -> str:
+    """Convierte segundos en formato MM:SS o HH:MM:SS."""
+    if not seconds:
+        return "--:--"
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    if h > 0:
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
+
+def is_url(text: str) -> bool:
+    """Determina si el texto ingresado es una URL o una búsqueda."""
+    text = text.strip()
+    return bool(re.match(r'^(https?://|www\.)', text, re.IGNORECASE))
+
+class DownloaderEngine:
     def __init__(self):
-        self._cancel_requested = False
+        self._cancel_flags: Dict[str, bool] = {}
 
-    def cancel(self):
-        self._cancel_requested = True
+    def cancel_task(self, task_id: str):
+        self._cancel_flags[task_id] = True
 
-    def get_info(self, url: str) -> Dict[str, Any]:
-        """Extrae metadatos básicos de la URL (título, duración, autor, miniatura)."""
+    def search_youtube(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
+        """Busca videos en YouTube directamente mediante palabras clave."""
+        search_query = f"ytsearch{max_results}:{query}"
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': True,
+            'skip_download': True,
+        }
+        results = []
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            data = ydl.extract_info(search_query, download=False)
+            entries = data.get('entries', []) if data else []
+            for e in entries:
+                if not e:
+                    continue
+                v_id = e.get('id', '')
+                url = e.get('url') or f"https://www.youtube.com/watch?v={v_id}"
+                
+                # Miniatura
+                thumb = None
+                thumbs = e.get('thumbnails', [])
+                if thumbs:
+                    thumb = thumbs[-1].get('url')
+                elif v_id:
+                    thumb = f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
+
+                results.append({
+                    'id': v_id,
+                    'title': e.get('title', 'Sin título'),
+                    'uploader': e.get('uploader') or e.get('channel') or 'Desconocido',
+                    'duration': format_duration(e.get('duration')),
+                    'url': url,
+                    'thumbnail': thumb,
+                })
+        return results
+
+    def inspect_url(self, url: str) -> Dict[str, Any]:
+        """Extrae metadatos detallados de cualquier URL compatible."""
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
@@ -44,43 +96,54 @@ class Downloader:
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
+            
+            # Detectar resoluciones disponibles
+            formats = info.get('formats', [])
+            heights = set()
+            for f in formats:
+                h = f.get('height')
+                if h and isinstance(h, int) and h > 0:
+                    heights.add(h)
+            
+            v_id = info.get('id', '')
+            thumb = info.get('thumbnail')
+            if not thumb and v_id:
+                thumb = f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
+
             return {
-                'title': info.get('title', 'Desconocido'),
-                'uploader': info.get('uploader', info.get('channel', 'Desconocido')),
-                'duration': info.get('duration', 0),
-                'thumbnail': info.get('thumbnail', None),
-                'description': info.get('description', '')[:200] if info.get('description') else '',
+                'id': v_id,
+                'title': info.get('title', 'Sin título'),
+                'uploader': info.get('uploader') or info.get('channel') or 'Desconocido',
+                'duration': format_duration(info.get('duration')),
+                'raw_duration': info.get('duration', 0),
+                'thumbnail': thumb,
+                'url': url,
+                'available_heights': sorted(list(heights), reverse=True),
+                'extractor': info.get('extractor_key', 'Universal'),
             }
 
     def download(
         self,
+        task_id: str,
         url: str,
         format_type: str,
         output_dir: str,
         progress_callback: Optional[Callable[[float, str, str, str], None]] = None,
         status_callback: Optional[Callable[[str], None]] = None,
-    ) -> str:
+    ) -> Dict[str, Any]:
         """
-        Descarga el contenido multimedia en la ruta especificada.
-
-        format_type puede ser:
-          - 'mp3_320': Audio MP3 320kbps + metadatos + carátula
-          - 'm4a_best': Audio M4A original sin recompresión
-          - 'mp4_max': Video MP4 en la máxima resolución (4K, 1080p, etc.)
-          - 'mp4_720': Video MP4 en 720p (ligero)
+        Descarga y convierte el archivo multimedia según el formato solicitado.
+        Retorna un diccionario con información del archivo final guardado.
         """
-        self._cancel_requested = False
+        self._cancel_flags[task_id] = False
         os.makedirs(output_dir, exist_ok=True)
 
-        downloaded_file = ""
-
         def hook(d):
-            if self._cancel_requested:
+            if self._cancel_flags.get(task_id, False):
                 raise Exception("Descarga cancelada por el usuario.")
 
             status = d.get('status')
             if status == 'downloading':
-                # Calcular porcentaje
                 total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate') or 0
                 downloaded_bytes = d.get('downloaded_bytes', 0)
                 
@@ -88,28 +151,26 @@ class Downloader:
                 if total_bytes > 0:
                     percent = downloaded_bytes / total_bytes
                 else:
-                    # Parsear string de porcentaje
                     raw_percent = d.get('_percent_str', '0%')
-                    clean_percent = re.sub(r'\x1b\[[0-9;]*m', '', raw_percent).replace('%', '').strip()
+                    clean = re.sub(r'\x1b\[[0-9;]*m', '', raw_percent).replace('%', '').strip()
                     try:
-                        percent = float(clean_percent) / 100.0
+                        percent = float(clean) / 100.0
                     except ValueError:
                         percent = 0.0
 
                 speed = re.sub(r'\x1b\[[0-9;]*m', '', d.get('_speed_str', 'N/A')).strip()
                 eta = re.sub(r'\x1b\[[0-9;]*m', '', d.get('_eta_str', 'N/A')).strip()
                 
-                msg = f"Descargando: {percent * 100:.1f}% | Vel: {speed} | Restante: {eta}"
+                msg = f"{int(percent * 100)}%"
                 if progress_callback:
                     progress_callback(percent, speed, eta, msg)
 
             elif status == 'finished':
                 if progress_callback:
-                    progress_callback(1.0, "", "", "Procesando y convirtiendo con FFmpeg...")
+                    progress_callback(1.0, "", "", "100%")
                 if status_callback:
-                    status_callback("Finalizando conversión multimedia...")
+                    status_callback("Procesando con FFmpeg...")
 
-        # Opciones base
         out_template = os.path.join(output_dir, '%(title)s.%(ext)s')
         ydl_opts: Dict[str, Any] = {
             'outtmpl': out_template,
@@ -117,67 +178,121 @@ class Downloader:
             'quiet': True,
             'no_warnings': True,
             'nocheckcertificate': True,
-            # Asegurar que no sobrescriba archivos con el mismo nombre
             'windowsfilenames': True,
         }
 
-        # Configuración según el formato seleccionado
+        format_label = "Desconocido"
+        media_type = "video"
+
+        # --- OPCIONES DE AUDIO ---
         if format_type == 'mp3_320':
+            format_label = "MP3 (320 kbps HD)"
+            media_type = "audio"
             ydl_opts.update({
                 'format': 'bestaudio/best',
                 'writethumbnail': True,
                 'postprocessors': [
-                    {
-                        'key': 'FFmpegExtractAudio',
-                        'preferredcodec': 'mp3',
-                        'preferredquality': '320',
-                    },
-                    {
-                        'key': 'FFmpegMetadata',
-                        'add_metadata': True,
-                    },
-                    {
-                        'key': 'EmbedThumbnail',
-                        'already_have_thumbnail': False,
-                    }
+                    {'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '320'},
+                    {'key': 'FFmpegMetadata', 'add_metadata': True},
+                    {'key': 'EmbedThumbnail', 'already_have_thumbnail': False},
+                ],
+            })
+        elif format_type == 'mp3_192':
+            format_label = "MP3 (192 kbps)"
+            media_type = "audio"
+            ydl_opts.update({
+                'format': 'bestaudio/best',
+                'writethumbnail': True,
+                'postprocessors': [
+                    {'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'},
+                    {'key': 'FFmpegMetadata', 'add_metadata': True},
+                    {'key': 'EmbedThumbnail', 'already_have_thumbnail': False},
                 ],
             })
         elif format_type == 'm4a_best':
+            format_label = "M4A Original"
+            media_type = "audio"
             ydl_opts.update({
                 'format': 'bestaudio[ext=m4a]/bestaudio/best',
+                'postprocessors': [{'key': 'FFmpegMetadata', 'add_metadata': True}],
+            })
+        elif format_type == 'wav':
+            format_label = "WAV Sin Compresión"
+            media_type = "audio"
+            ydl_opts.update({
+                'format': 'bestaudio/best',
                 'postprocessors': [
-                    {
-                        'key': 'FFmpegMetadata',
-                        'add_metadata': True,
-                    }
+                    {'key': 'FFmpegExtractAudio', 'preferredcodec': 'wav'},
+                    {'key': 'FFmpegMetadata', 'add_metadata': True},
                 ],
             })
-        elif format_type == 'mp4_max':
+
+        # --- OPCIONES DE VIDEO ---
+        elif format_type == 'mp4_4k':
+            format_label = "MP4 4K / 2K Ultra HD"
+            media_type = "video"
             ydl_opts.update({
                 'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best',
                 'merge_output_format': 'mp4',
-                'postprocessors': [
-                    {
-                        'key': 'FFmpegMetadata',
-                        'add_metadata': True,
-                    }
-                ],
+                'postprocessors': [{'key': 'FFmpegMetadata', 'add_metadata': True}],
+            })
+        elif format_type == 'mp4_1080':
+            format_label = "MP4 1080p Full HD"
+            media_type = "video"
+            ydl_opts.update({
+                'format': 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best[height<=1080]/best',
+                'merge_output_format': 'mp4',
+                'postprocessors': [{'key': 'FFmpegMetadata', 'add_metadata': True}],
             })
         elif format_type == 'mp4_720':
+            format_label = "MP4 720p HD"
+            media_type = "video"
             ydl_opts.update({
                 'format': 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best[height<=720]/best',
                 'merge_output_format': 'mp4',
-                'postprocessors': [
-                    {
-                        'key': 'FFmpegMetadata',
-                        'add_metadata': True,
-                    }
-                ],
+                'postprocessors': [{'key': 'FFmpegMetadata', 'add_metadata': True}],
+            })
+        elif format_type == 'mp4_480':
+            format_label = "MP4 480p Ligero"
+            media_type = "video"
+            ydl_opts.update({
+                'format': 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=480]+bestaudio/best[height<=480]/best',
+                'merge_output_format': 'mp4',
+                'postprocessors': [{'key': 'FFmpegMetadata', 'add_metadata': True}],
             })
         else:
-            raise ValueError(f"Formato no reconocido: {format_type}")
+            raise ValueError(f"Formato desconocido: {format_type}")
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+            info = ydl.extract_info(url, download=True)
+            
+            # Obtener nombre final del archivo
+            raw_filename = ydl.prepare_filename(info)
+            if format_type.startswith('mp3'):
+                final_path = os.path.splitext(raw_filename)[0] + '.mp3'
+            elif format_type == 'wav':
+                final_path = os.path.splitext(raw_filename)[0] + '.wav'
+            elif format_type == 'm4a_best':
+                final_path = os.path.splitext(raw_filename)[0] + '.m4a'
+            else:
+                final_path = os.path.splitext(raw_filename)[0] + '.mp4'
 
-        return "Descarga completada con éxito."
+            # Si el archivo exacto no existe, buscar coincidencia por nombre base
+            if not os.path.exists(final_path):
+                base = os.path.splitext(raw_filename)[0]
+                for ext in ['.mp3', '.mp4', '.m4a', '.wav', '.webm', '.mkv']:
+                    candidate = base + ext
+                    if os.path.exists(candidate):
+                        final_path = candidate
+                        break
+
+            title = info.get('title', os.path.basename(final_path))
+            thumbnail = info.get('thumbnail', '')
+
+            return {
+                'title': title,
+                'file_path': final_path,
+                'format_label': format_label,
+                'media_type': media_type,
+                'thumbnail_url': thumbnail,
+            }

@@ -1,66 +1,60 @@
-# Universal Media Downloader & Converter 🎬🎵
+# Snaptube Pro Desktop ✦ Edición Privada y Segura
 
-Aplicación de escritorio moderna y ligera para descargar y convertir videos y audios de prácticamente cualquier sitio web (YouTube, TikTok, Instagram, Twitter/X, Twitch, SoundCloud, Facebook, etc.) en máxima calidad.
-
----
-
-## 🚀 Características
-
-- 🎵 **Audio MP3 en Máxima Calidad (320 kbps):** Extrae el audio, aplica metadatos (artista, título) e incrusta la portada original automáticamente.
-- 🎵 **Audio M4A:** Descarga la pista de audio directa sin pérdidas por recompresión.
-- 🎬 **Video MP4 Máxima Calidad:** Detecta y fusiona la máxima resolución disponible (1080p, 2K, 4K a 60fps con el mejor audio).
-- 🎬 **Video MP4 720p:** Versión ligera y rápida para videos cotidianos.
-- 🎨 **Interfaz Moderna en Modo Oscuro:** Construida con `CustomTkinter`, intuitiva, botón para pegar enlace con 1 clic y barra de progreso en tiempo real con velocidad y tiempo estimado.
-- 📂 **Selector de destino y acceso rápido:** Guarda en tu carpeta de Descargas por defecto o en la que tú elijas, con botón para abrirla directamente al finalizar.
+> **Clon para computadoras de escritorio y laptops de Snaptube con diseño prémium *Obsidian & Titanium*.**  
+> Sin anuncios, sin rastreadores, sin inicio de sesión en páginas dudosas, sin riesgo de robo de datos y sin límites de velocidad.
 
 ---
 
-## 🛠️ Instalación en otra máquina (Laptop / PC)
+## 🎨 Paleta de Diseño: *Obsidian & Titanium*
 
-Para usar este proyecto en tu laptop o en cualquier otra computadora con Windows:
+La interfaz fue diseñada con una estética minimalista y sofisticada:
+- **Negro Obsidiana (`#0F1012`):** Base oscura profunda que no cansa la vista.
+- **Grafito Oscuro (`#1A1D22`):** Tarjetas y paneles tridimensionales.
+- **Plata Titanio (`#E2E8F0` / `#FFFFFF`):** Botones de acción principales de alto contraste y tipografía nítida.
+- **Plata Hielo / Cian (`#38BDF8`):** Indicadores luminosos de progreso.
 
-### 1. Clonar el repositorio
-```bash
-git clone https://github.com/SirDurand1708/UniversalMediaDownloader.git
-cd UniversalMediaDownloader
-```
+---
 
-### 2. Instalar FFmpeg
-FFmpeg es necesario para unir los canales de video y audio en alta definición y para generar los archivos MP3. En Windows, puedes instalarlo rápidamente desde una terminal de PowerShell:
+## 🚀 Funcionalidades Principales
 
-```powershell
-winget install Gyan.FFmpeg.Essentials
-```
+### 1. 🔍 Explorador & Buscador Integrado
+- **Búsqueda directa:** Escribe cualquier palabra clave (ej. *"Daft Punk One More Time"*) y la app buscará directamente en YouTube sin tener que abrir el navegador.
+- **Compatibilidad universal con enlaces:** Pega enlaces directos de **YouTube**, **TikTok** (sin marca de agua), **Instagram Reels**, **Twitter/X**, **Twitch Clips**, **SoundCloud** y más de 1000 sitios.
+- **Modal de Resolución de 2 Columnas (Estilo Snaptube):**
+  - **🎵 Música & Audio:** MP3 320 kbps (HD Máximo con carátula y etiquetas), MP3 192 kbps, M4A Original sin compresión, WAV Audio de estudio.
+  - **🎬 Video MP4:** 4K / 2K Ultra HD (60fps), 1080p Full HD, 720p HD, 480p Ligero.
 
-### 3. Instalar las dependencias de Python
-Asegúrate de tener Python 3.10 o superior instalado:
+### 2. 📥 Gestor de Descargas Activas
+- Cola de descargas asíncrona (descarga varias canciones o videos sin congelar la app).
+- Visualización de porcentaje, velocidad en MB/s, tiempo restante y botón para cancelar.
 
-```bash
-pip install -r requirements.txt
-```
+### 3. 🎵 Mi Biblioteca Local
+- Historial permanente de tus archivos descargados.
+- Botón **▶ Reproducir** directo con el reproductor de tu PC.
+- Botón **📁 Ubicación** para resaltar el archivo en el Explorador de Windows.
+- Botón para eliminar del historial.
+
+### 4. ⚙ Ajustes & Diagnóstico
+- Configuración de la carpeta de destino.
+- Diagnóstico del motor FFmpeg y verificación del estado del sistema.
+
+---
+
+## 🔒 Privacidad y Seguridad Total
+
+A diferencia de las versiones sospechosas de internet:
+- **100% Código Abierto y Transparente:** Conexión directa y cifrada entre tu equipo y los servidores del video.
+- **Sin cuentas ni telemetría:** No necesitas registrarte ni vincular cuentas personales.
 
 ---
 
 ## ▶️ Cómo ejecutar la aplicación
 
-Tienes dos formas de iniciar la aplicación:
-
-1. **Doble clic:** Haz doble clic en el archivo `iniciar.bat`.
-2. **Desde la terminal:**
-   ```bash
-   python app.py
-   ```
-
----
-
-## 📁 Estructura del Proyecto
-
+Haz doble clic en:
 ```
-UniversalMediaDownloader/
-├── app.py              # Interfaz gráfica moderna (CustomTkinter)
-├── downloader.py       # Lógica de descarga y conversión (yt-dlp + FFmpeg)
-├── iniciar.bat         # Lanzador directo para Windows
-├── requirements.txt    # Dependencias del proyecto
-├── .gitignore          # Archivos excluidos de Git
-└── README.md           # Documentación del proyecto
+iniciar.bat
+```
+O desde la consola:
+```bash
+python app.py
 ```
