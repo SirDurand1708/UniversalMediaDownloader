@@ -1,7 +1,7 @@
 """
 Motor de extracción y descarga multimedia usando yt-dlp y FFmpeg.
 Compatible con YouTube, TikTok, Instagram, Twitter/X, Twitch, SoundCloud y más de 1000 sitios.
-Soporte para videos individuales, playlists completas, selección múltiple y sesiones de navegador.
+Soporte inteligente: Conexión limpia nativa por defecto + fallback de sesión para +18/privados.
 """
 
 import os
@@ -11,10 +11,12 @@ import shutil
 import yt_dlp
 from typing import Callable, Optional, Dict, Any, List
 
-def _ensure_ffmpeg():
+def _ensure_ffmpeg() -> Optional[str]:
     """Garantiza que FFmpeg esté en el PATH del proceso, leyéndolo del registro si es necesario."""
-    if shutil.which("ffmpeg"):
-        return
+    found = shutil.which("ffmpeg")
+    if found:
+        return os.path.dirname(found)
+
     if sys.platform == "win32":
         try:
             import winreg
@@ -23,11 +25,12 @@ def _ensure_ffmpeg():
                 for p in user_path.split(";"):
                     if "ffmpeg" in p.lower() and os.path.isdir(p):
                         os.environ["PATH"] += os.pathsep + p
-                        return
+                        return p
         except Exception:
             pass
+    return None
 
-_ensure_ffmpeg()
+FFMPEG_DIR = _ensure_ffmpeg()
 
 def clean_error_text(err: str) -> str:
     """Elimina códigos de escape ANSI y prefijos redundantes de error."""
@@ -74,7 +77,7 @@ class DownloaderEngine:
             jar.save(dest_path, ignore_discard=True, ignore_expires=True)
         return dest_path
 
-    def _base_opts(self, browser: Optional[str] = None, cookiefile: Optional[str] = None) -> Dict[str, Any]:
+    def _base_opts(self, browser: Optional[str] = None, cookiefile: Optional[str] = None, use_cookies: bool = False) -> Dict[str, Any]:
         opts: Dict[str, Any] = {
             'quiet': True,
             'no_warnings': True,
@@ -82,19 +85,28 @@ class DownloaderEngine:
             'windowsfilenames': True,
             'js_runtimes': {'node': {}},
         }
-        saved_cookie = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
-        if cookiefile and os.path.exists(cookiefile):
-            opts['cookiefile'] = cookiefile
-        elif os.path.exists(saved_cookie) and os.path.getsize(saved_cookie) > 0:
-            opts['cookiefile'] = saved_cookie
-        elif browser and browser.lower() != 'none':
-            opts['cookiesfrombrowser'] = (browser.lower(),)
+        
+        # Localización de FFmpeg
+        ff = FFMPEG_DIR or shutil.which("ffmpeg")
+        if ff:
+            opts['ffmpeg_location'] = ff if os.path.isdir(ff) else os.path.dirname(ff)
+
+        # Solo adjuntar cookies cuando se solicite explícitamente (para contenido +18 o privado)
+        if use_cookies:
+            saved_cookie = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
+            if cookiefile and os.path.exists(cookiefile):
+                opts['cookiefile'] = cookiefile
+            elif os.path.exists(saved_cookie) and os.path.getsize(saved_cookie) > 0:
+                opts['cookiefile'] = saved_cookie
+            elif browser and browser.lower() != 'none':
+                opts['cookiesfrombrowser'] = (browser.lower(),)
+
         return opts
 
     def search_youtube(self, query: str, max_results: int = 6, browser: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Busca videos en YouTube directamente mediante palabras clave, con respaldo automático sin cookies si falla."""
+        """Busca videos en YouTube directamente mediante conexión limpia nativa."""
         search_query = f"ytsearch{max_results}:{query}"
-        ydl_opts = self._base_opts(browser=browser)
+        ydl_opts = self._base_opts(use_cookies=False)
         ydl_opts.update({
             'extract_flat': True,
             'skip_download': True,
@@ -104,12 +116,7 @@ class DownloaderEngine:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 data = ydl.extract_info(search_query, download=False)
         except Exception as e:
-            if browser and ('cookie' in str(e).lower() or '7271' in str(e)):
-                return self.search_youtube(query, max_results=max_results, browser=None)
             raise Exception(clean_error_text(str(e)))
-
-        if not data and browser:
-            return self.search_youtube(query, max_results=max_results, browser=None)
 
         entries = data.get('entries', []) if data else []
         for e in entries:
@@ -139,26 +146,45 @@ class DownloaderEngine:
     def inspect_url(self, url: str, browser: Optional[str] = None, cookiefile: Optional[str] = None) -> Dict[str, Any]:
         """
         Inspecciona una URL universalmente.
-        Detecta si es una playlist/álbum con múltiples videos o un video individual.
-        Si la sesión del navegador está bloqueada, reintenta automáticamente sin cookies.
+        Estrategia inteligente:
+        1. Utiliza conexión nativa limpia (evita bloqueos de PO-Token y LatinAutor-UMPG de discográficas).
+        2. Si el video es privado o con restricción de edad (+18), utiliza la sesión de cookies.
         """
-        ydl_opts = self._base_opts(browser=browser, cookiefile=cookiefile)
+        ydl_opts = self._base_opts(use_cookies=False)
         ydl_opts.update({
             'extract_flat': True,
             'skip_download': True,
         })
 
+        res = None
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 res = ydl.extract_info(url, download=False)
         except Exception as e:
-            if browser and ('cookie' in str(e).lower() or '7271' in str(e)):
-                return self.inspect_url(url, browser=None, cookiefile=cookiefile)
-            raise Exception(clean_error_text(str(e)))
+            err = str(e).lower()
+            # Si requiere inicio de sesión para verificar edad o es video privado, activar cookies
+            if 'sign in' in err or 'age' in err or 'confirm your age' in err or 'private' in err:
+                ydl_opts_cookies = self._base_opts(browser=browser, cookiefile=cookiefile, use_cookies=True)
+                ydl_opts_cookies.update({'extract_flat': True, 'skip_download': True})
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts_cookies) as ydl:
+                        res = ydl.extract_info(url, download=False)
+                except Exception as e2:
+                    raise Exception(clean_error_text(str(e2)))
+            else:
+                raise Exception(clean_error_text(str(e)))
 
         if not res:
-            if browser:
-                return self.inspect_url(url, browser=None, cookiefile=cookiefile)
+            # Reintento con cookies por si acaso
+            ydl_opts_cookies = self._base_opts(browser=browser, cookiefile=cookiefile, use_cookies=True)
+            ydl_opts_cookies.update({'extract_flat': True, 'skip_download': True})
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts_cookies) as ydl:
+                    res = ydl.extract_info(url, download=False)
+            except Exception:
+                pass
+
+        if not res:
             raise Exception("No se pudo obtener la información del contenido multimedia.")
 
         is_playlist = (
@@ -287,11 +313,12 @@ class DownloaderEngine:
                     status_callback("Procesando con FFmpeg...")
 
         out_template = os.path.join(output_dir, '%(title)s.%(ext)s')
-        ydl_opts = self._base_opts(browser=browser, cookiefile=cookiefile)
-        ydl_opts.update({
+        
+        # Opciones comunes de formato
+        format_opts: Dict[str, Any] = {
             'outtmpl': out_template,
             'progress_hooks': [hook],
-        })
+        }
 
         format_label = "Desconocido"
         media_type = "video"
@@ -300,7 +327,7 @@ class DownloaderEngine:
         if format_type == 'mp3_320':
             format_label = "MP3 (320 kbps HD)"
             media_type = "audio"
-            ydl_opts.update({
+            format_opts.update({
                 'format': 'bestaudio/best',
                 'writethumbnail': True,
                 'postprocessors': [
@@ -312,7 +339,7 @@ class DownloaderEngine:
         elif format_type == 'mp3_192':
             format_label = "MP3 (192 kbps)"
             media_type = "audio"
-            ydl_opts.update({
+            format_opts.update({
                 'format': 'bestaudio/best',
                 'writethumbnail': True,
                 'postprocessors': [
@@ -324,14 +351,14 @@ class DownloaderEngine:
         elif format_type == 'm4a_best':
             format_label = "M4A Original"
             media_type = "audio"
-            ydl_opts.update({
+            format_opts.update({
                 'format': 'bestaudio[ext=m4a]/bestaudio/best',
                 'postprocessors': [{'key': 'FFmpegMetadata', 'add_metadata': True}],
             })
         elif format_type == 'wav':
             format_label = "WAV Sin Compresión"
             media_type = "audio"
-            ydl_opts.update({
+            format_opts.update({
                 'format': 'bestaudio/best',
                 'postprocessors': [
                     {'key': 'FFmpegExtractAudio', 'preferredcodec': 'wav'},
@@ -343,7 +370,7 @@ class DownloaderEngine:
         elif format_type == 'mp4_4k':
             format_label = "MP4 4K / 2K Ultra HD"
             media_type = "video"
-            ydl_opts.update({
+            format_opts.update({
                 'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best',
                 'merge_output_format': 'mp4',
                 'postprocessors': [{'key': 'FFmpegMetadata', 'add_metadata': True}],
@@ -351,7 +378,7 @@ class DownloaderEngine:
         elif format_type == 'mp4_1080':
             format_label = "MP4 1080p Full HD"
             media_type = "video"
-            ydl_opts.update({
+            format_opts.update({
                 'format': 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best[height<=1080]/best',
                 'merge_output_format': 'mp4',
                 'postprocessors': [{'key': 'FFmpegMetadata', 'add_metadata': True}],
@@ -359,7 +386,7 @@ class DownloaderEngine:
         elif format_type == 'mp4_720':
             format_label = "MP4 720p HD"
             media_type = "video"
-            ydl_opts.update({
+            format_opts.update({
                 'format': 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best[height<=720]/best',
                 'merge_output_format': 'mp4',
                 'postprocessors': [{'key': 'FFmpegMetadata', 'add_metadata': True}],
@@ -367,7 +394,7 @@ class DownloaderEngine:
         elif format_type == 'mp4_480':
             format_label = "MP4 480p Ligero"
             media_type = "video"
-            ydl_opts.update({
+            format_opts.update({
                 'format': 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=480]+bestaudio/best[height<=480]/best',
                 'merge_output_format': 'mp4',
                 'postprocessors': [{'key': 'FFmpegMetadata', 'add_metadata': True}],
@@ -375,53 +402,58 @@ class DownloaderEngine:
         else:
             raise ValueError(f"Formato desconocido: {format_type}")
 
+        # Intentar primero con conexión limpia nativa
+        ydl_opts_clean = self._base_opts(use_cookies=False)
+        ydl_opts_clean.update(format_opts)
+
         info = None
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            with yt_dlp.YoutubeDL(ydl_opts_clean) as ydl:
                 info = ydl.extract_info(url, download=True)
         except Exception as e:
-            if browser and ('cookie' in str(e).lower() or '7271' in str(e)):
-                ydl_opts_retry = dict(ydl_opts)
-                ydl_opts_retry.pop('cookiesfrombrowser', None)
-                with yt_dlp.YoutubeDL(ydl_opts_retry) as ydl:
-                    info = ydl.extract_info(url, download=True)
+            err = str(e).lower()
+            # Si requiere inicio de sesión, intentar con cookies
+            if 'sign in' in err or 'age' in err or 'confirm your age' in err or 'private' in err:
+                ydl_opts_cookies = self._base_opts(browser=browser, cookiefile=cookiefile, use_cookies=True)
+                ydl_opts_cookies.update(format_opts)
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts_cookies) as ydl:
+                        info = ydl.extract_info(url, download=True)
+                except Exception as e2:
+                    raise Exception(clean_error_text(str(e2)))
             else:
                 raise Exception(clean_error_text(str(e)))
 
-        if not info and browser:
-            ydl_opts_retry = dict(ydl_opts)
-            ydl_opts_retry.pop('cookiesfrombrowser', None)
-            with yt_dlp.YoutubeDL(ydl_opts_retry) as ydl:
-                info = ydl.extract_info(url, download=True)
-
         if not info:
             raise Exception("No se pudo completar la descarga del archivo.")
-            
+
+        with yt_dlp.YoutubeDL(ydl_opts_clean) as ydl:
             raw_filename = ydl.prepare_filename(info)
-            if format_type.startswith('mp3'):
-                final_path = os.path.splitext(raw_filename)[0] + '.mp3'
-            elif format_type == 'wav':
-                final_path = os.path.splitext(raw_filename)[0] + '.wav'
-            elif format_type == 'm4a_best':
-                final_path = os.path.splitext(raw_filename)[0] + '.m4a'
-            else:
-                final_path = os.path.splitext(raw_filename)[0] + '.mp4'
+        
+        if format_type.startswith('mp3'):
+            final_path = os.path.splitext(raw_filename)[0] + '.mp3'
+        elif format_type == 'wav':
+            final_path = os.path.splitext(raw_filename)[0] + '.wav'
+        elif format_type == 'm4a_best':
+            final_path = os.path.splitext(raw_filename)[0] + '.m4a'
+        else:
+            final_path = os.path.splitext(raw_filename)[0] + '.mp4'
 
-            if not os.path.exists(final_path):
-                base = os.path.splitext(raw_filename)[0]
-                for ext in ['.mp3', '.mp4', '.m4a', '.wav', '.webm', '.mkv']:
-                    candidate = base + ext
-                    if os.path.exists(candidate):
-                        final_path = candidate
-                        break
+        if not os.path.exists(final_path):
+            base = os.path.splitext(raw_filename)[0]
+            for ext in ['.mp3', '.mp4', '.m4a', '.wav', '.webm', '.mkv']:
+                candidate = base + ext
+                if os.path.exists(candidate):
+                    final_path = candidate
+                    break
 
-            title = info.get('title', os.path.basename(final_path))
-            thumbnail = info.get('thumbnail', '')
+        title = info.get('title', os.path.basename(final_path))
+        thumbnail = info.get('thumbnail', '')
 
-            return {
-                'title': title,
-                'file_path': final_path,
-                'format_label': format_label,
-                'media_type': media_type,
-                'thumbnail_url': thumbnail,
-            }
+        return {
+            'title': title,
+            'file_path': final_path,
+            'format_label': format_label,
+            'media_type': media_type,
+            'thumbnail_url': thumbnail,
+        }
