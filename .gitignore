@@ -21,6 +21,10 @@ downloads/
 *.ytdl
 *.tmp
 
+# Binaries
+bin/
+*.exe
+
 # User credentials, local settings & personal library
 saved_cookies.txt
 cookies*.txt

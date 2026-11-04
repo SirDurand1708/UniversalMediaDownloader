@@ -57,17 +57,31 @@ def is_ffmpeg_available() -> bool:
     return bool(FFMPEG_DIR or shutil.which("ffmpeg"))
 
 def _get_aria2c_path() -> Optional[str]:
-    """Busca aria2c en el PATH, carpeta del proyecto o subcarpeta bin."""
+    """Busca aria2c en el PATH, carpeta del proyecto, subcarpeta bin o rutas comunes del usuario."""
     found = shutil.which("aria2c")
     if found:
         return found
     base_dir = os.path.dirname(os.path.abspath(__file__))
     candidates = [
-        os.path.join(base_dir, "aria2c.exe"),
         os.path.join(base_dir, "bin", "aria2c.exe"),
+        os.path.join(base_dir, "aria2c.exe"),
+        r"C:\Users\georg\Documents\Software\aria2-1.37.0-win-64bit-build1\aria2-1.37.0-win-64bit-build1\aria2c.exe",
     ]
+    docs_software = os.path.expanduser(r"~\Documents\Software")
+    if os.path.isdir(docs_software):
+        try:
+            for root, _, files in os.walk(docs_software):
+                if "aria2c.exe" in files:
+                    candidates.append(os.path.join(root, "aria2c.exe"))
+                    break
+        except Exception:
+            pass
+
     for c in candidates:
         if os.path.isfile(c):
+            aria_dir = os.path.dirname(os.path.abspath(c))
+            if aria_dir not in os.environ.get("PATH", ""):
+                os.environ["PATH"] = aria_dir + os.pathsep + os.environ.get("PATH", "")
             return c
     return None
 
