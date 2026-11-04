@@ -1,140 +1,178 @@
-# ✦ OmniVault Desktop - Universal Media Hub & Playlist Archiver
+# ✦ OmniVault Desktop v2.0 - Universal Media Hub & Creative Suite
 
-> **Aplicación de escritorio prémium con diseño *Obsidian & Titanium*.**  
-> Sin anuncios, sin rastreadores, sin riesgo de fuga de credenciales, con interfaz completamente responsiva y soporte nativo de **Playlists, Selección Múltiple y TikTok HD sin marcas de agua**.
+> **Aplicación de escritorio de alto rendimiento para descarga, conversión, recorte y gestión multimedia.**  
+> Diseñada en arquitectura modular con estética prémium *Obsidian & Titanium*, soporte multiresolución responsivo, aceleración por hardware GPU, aceleración multihilo con `aria2c` y suite de herramientas offline sin conexión a internet.
 
 ---
 
 ## 🎨 Paleta de Diseño: *Obsidian & Titanium*
 
-- **Negro Obsidiana (`#0F1012`):** Base oscura profunda para menor fatiga visual.
-- **Grafito Oscuro (`#1A1D22`):** Tarjetas y paneles tridimensionales estructurados.
-- **Plata Titanio (`#E2E8F0` / `#FFFFFF`):** Botones de acción principales de alto contraste.
-- **Plata Hielo / Cian (`#38BDF8`):** Barras de progreso e indicadores luminosos.
+- **Negro Obsidiana (`#0F1012`):** Base oscura profunda diseñada para eliminar la fatiga visual.
+- **Grafito Oscuro (`#1A1D22`):** Paneles y tarjetas estructuradas de alto contraste.
+- **Plata Titanio (`#E2E8F0` / `#FFFFFF`):** Botones principales de acción táctil.
+- **Color de Acento Personalizable:** Elige entre 5 temas de acento:
+  - 🟣 **Cyberpunk Violet** (Predeterminado)
+  - 🔵 **Electric Blue**
+  - 🟢 **Emerald Matrix**
+  - 🟠 **Sunset Orange**
+  - 🌸 **Rose Quartz**
 
 ---
 
-## 🚀 Funcionalidades Principales
+## 🚀 Guía Completa de Funcionalidades
 
-### 1. 🎵 Motor Especializado para TikTok (HD Sin Marcas de Agua)
-- Descarga directa de videos en resolución nativa sin marcas de agua.
+### 1. 📥 Descargas Individuales y Detección Automática
+- Pega cualquier enlace de más de 1000 plataformas compatibles (**YouTube, TikTok, SoundCloud, Instagram, Facebook, Twitter/X, Twitch**, etc.).
+- **Smart Auto-Paste:** Al copiar un enlace en tu navegador o cualquier programa, OmniVault lo detecta en el portapapeles y te muestra un banner flotante para analizarlo con 1 clic sin tener que pegarlo manualmente.
+- **Separación Inteligente de Carpetas:**
+  - Los audios (`MP3`, `WAV`, `M4A`, `FLAC`) se guardan automáticamente en tu carpeta del sistema: `Música\OmniVault Audios`.
+  - Los videos (`MP4`, `MKV`) se guardan automáticamente en: `Videos\OmniVault Videos`.
+  - Puedes cambiar ambas rutas en cualquier momento desde **⚙ Ajustes**.
+
+---
+
+### 2. ✂️ Recorte de Fragmentos de Audio y Video (*Trim & Clip*)
+¿Solo necesitas el estribillo de una canción, el solo de guitarra o una escena específica de un podcast de 3 horas?
+1. Pega y analiza el enlace en la pestaña **Explorar / Buscar**.
+2. En la tarjeta de vista previa, marca la casilla: **✂️ Recortar fragmento específico**.
+3. Ingresa los tiempos:
+   - **Desde (Inicio):** Ejemplos: `01:15` o `00:01:15` o `75`.
+   - **Hasta (Fin):** Ejemplos: `02:30` o `00:02:30` (o déjalo vacío para descargar desde el inicio indicado hasta el final del video).
+4. Elige tu formato preferido y haz clic en **⬇ DESCARGAR AHORA**.
+5. OmniVault recortará el fragmento exacto con precisión de milisegundos mediante FFmpeg.
+
+---
+
+### 3. 📊 Estimación de Peso y Tamaño de Archivo
+Antes de iniciar cualquier descarga, OmniVault analiza los flujos disponibles y te muestra el **peso aproximado** que ocupará cada calidad en tu disco duro:
+- `MP3 320 kbps HD (~8.4 MB)`
+- `MP3 192 kbps (~5.0 MB)`
+- `MP4 1080p Full HD (~72.5 MB)`
+- `MP4 720p HD (~36.0 MB)`
+- etc.
+
+---
+
+### 4. 🔄 Conversor Multimedia Local Offline (*Herramienta Offline*)
+OmniVault incluye un conversor multimedia completo que opera **100% de manera local en tu PC**, sin conexión a internet y sin subir tus archivos privados a servidores externos:
+1. En la barra lateral, haz clic en **🔄 Conversor Local**.
+2. Haz clic en **📁 Examinar...** y selecciona cualquier archivo de tu ordenador (`.mp4`, `.mkv`, `.avi`, `.mov`, `.flv`, `.webm`, `.mp3`, `.wav`, `.m4a`, `.aac`, `.flac`, `.ogg`).
+3. El programa detectará automáticamente la duración, tamaño y tipo de flujo (audio/video).
+4. Elige el formato de salida:
+   - **🎵 Formatos de Audio:** `MP3 (320 kbps HD)`, `MP3 (192 kbps)`, `WAV (Estudio)`, `M4A (AAC 256k)` o `FLAC (Lossless)`.  
+     *(¡Ideal para extraer el audio de cualquier video en 1 clic!)*
+   - **🎬 Formatos de Video:** `MP4 H.264` o **Comprimir Video (Reduce hasta un 50% el tamaño manteniendo gran nitidez)**.
+5. Selecciona la carpeta de destino y presiona **⚡ INICIAR CONVERSIÓN**.
+6. Observa la barra de progreso en vivo con porcentaje, velocidad de procesamiento (`4.5x`) y tiempo restante.
+7. Al terminar, presiona **📂 Abrir Archivo** para reproducirlo o compartirlo de inmediato.
+
+---
+
+### 5. ⚡ Aceleración de Red (Aria2c) y Hardware GPU
+- **Acelerador Multihilo Aria2c:**
+  - OmniVault detecta automáticamente `aria2c.exe` (en `bin/`, en `Documents/Software` o en tu `PATH`).
+  - Cada descarga pesada se divide en **8 conexiones simultáneas en paralelo** (`-s 8 -x 8 -k 1M -j 4`), multiplicando la velocidad de descarga hasta por 5x.
+- **Aceleración por Tarjeta Gráfica (GPU):**
+  - Detección automática de hardware:
+    - 🔴 **AMD Radeon:** Codificación por hardware **AMD AMF** (`h264_amf`).
+    - 🟢 **NVIDIA GeForce:** Codificación por hardware **NVIDIA NVENC** (`h264_nvenc`).
+    - 🔵 **Intel Graphics:** Codificación por hardware **Intel QuickSync** (`h264_qsv`).
+  - Convierte y comprime videos a velocidades ultra rápidas sin sobrecargar tu procesador (CPU).
+
+---
+
+### 6. 🔕 Minimizar a la Bandeja del Sistema (*System Tray / Reloj de Windows*)
+- Al cerrar la ventana o minimizarla, OmniVault puede quedarse discretamente en segundo plano al lado del reloj de Windows.
+- Permite que las descargas largas continúen sin interrumpirse y que el detector inteligente de portapapeles siga vigilando mientras juegas o trabajas.
+- Haz clic derecho sobre el icono en la bandeja para:
+  - **✦ Abrir OmniVault**
+  - **⏸ / ▶ Pausar o Reanudar Descargas**
+  - **❌ Salir de OmniVault**
+- Puedes activar o desactivar este comportamiento en cualquier momento desde **⚙ Ajustes**.
+
+---
+
+### 7. 💤 Acciones Automáticas al Terminar (*Apagado / Suspender Nocturno*)
+Ideal para dejar descargando listas de reproducción pesadas o cursos antes de irte a dormir:
+1. Ve a **⚙ Ajustes** > **Acción al completar todas las descargas**.
+2. Selecciona entre:
+   - **Ninguna**
+   - **Sonido de campana** (Timbre discreto de aviso)
+   - **Suspender equipo**
+   - **Apagar equipo (aviso 30s)**
+3. Cuando finalice la última descarga de la cola, OmniVault activará la acción elegida.
+4. Si elegiste **Apagar equipo**, aparecerá una ventana en pantalla con una cuenta regresiva de 30 segundos y un botón rojo **✖ CANCELAR APAGADO** por si sigues frente al ordenador.
+
+---
+
+### 8. 🎵 Motor Especializado para TikTok (HD Sin Marcas de Agua)
+- Descarga directa de videos en resolución nativa HD sin marcas de agua de TikTok.
 - Extracción de pistas de audio originales (MP3/M4A).
-- Evasión de bloqueos de IP y desafíos anti-bot sin requerir configuración compleja.
-
-### 2. 📋 Soporte Completo de Playlists & Álbumes
-- **Detección inteligente:** Pega cualquier enlace de playlist o álbum completo de YouTube o SoundCloud.
-- **Panel con casillas de verificación:** Selecciona canciones o videos específicos de la lista.
-- **Controles rápidos:** Botones `[✓ Seleccionar Toda]` y `[✖ Desmarcar]`.
-- **Descarga masiva en 1 clic:** Elige el formato y descarga todo el lote directamente a la cola activa.
-
-### 3. 🔍 Búsqueda Directa con Selección Múltiple
-- Escribe el nombre de un artista o canción para buscar directamente en YouTube.
-- Marca varios resultados a la vez con casillas para descargarlos juntos.
-- Botón para inspeccionar individualmente y elegir resoluciones avanzadas (1080p, 4K, 60fps).
-
-### 4. 📱 Interfaz 100% Responsiva y Adaptable
-- Diseñada para ajustarse a cualquier resolución de pantalla (desde monitores 4K hasta laptops de 720p o pantallas con escalado DPI).
-- Controles elásticos, rejillas dinámicas para opciones de audio/video y sin desbordamientos de botones.
-
-### 5. 🔒 Sesión Segura de Navegador (Opcional & 100% Privada)
-- Configurable en la pestaña **Ajustes**.
-- Permite descargar **videos con restricción de edad (+18)**, **playlists privadas** (como "Videos que me gustan") o **evadir retos anti-bot de YouTube**.
-- **95% de descargas libres:** Por defecto, el programa opera en modo anónimo sin requerir cookies ni cuentas.
-- **Cero contraseñas:** La aplicación jamás solicita correos ni contraseñas.
-- **Archivos protegidos:** Las cookies y configuraciones locales (`saved_cookies.txt`, `config.json`, `library.json`) están excluidas automáticamente de Git mediante `.gitignore`.
+- Evasión automática de bloqueos de IP y retos anti-bot sin configuración técnica.
 
 ---
 
-## 🍪 Guía de Sesión y Autenticación (Para cualquier navegador)
-
-Por defecto, **no necesitas iniciar sesión para descargar el 95% del contenido** de YouTube, TikTok, SoundCloud, Instagram, etc. Sin embargo, para descargar tus **playlists privadas**, **videos con restricción de edad (+18)** o pistas musicales protegidas por el filtro anti-bot de YouTube, se requiere una sesión activa.
-
-En Windows tienes **dos formas de conectarlo**:
-
-### ⭐ Método 1: Archivo `cookies.txt` (Recomendado y 100% Universal)
-Es el método más robusto y compatible con **cualquier navegador**: **Google Chrome, Microsoft Edge, Mozilla Firefox, Vivaldi, Brave, Opera**, etc. No sufre bloqueos de archivos en Windows y evade el nuevo cifrado *App-Bound Encryption* de Chrome y Edge.
-
-1. **Instala la extensión:**
-   - Para Chrome, Edge, Brave, Vivaldi u Opera: Instala [Get cookies.txt LOCALLY (Chrome Web Store)](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc).
-   - Para Firefox: Instala [cookies.txt (Firefox Add-ons)](https://addons.mozilla.org/es/firefox/addon/cookie-txt/).
-2. **Exporta tus cookies de YouTube:**
-   - Abre [YouTube.com](https://www.youtube.com) en tu navegador con tu sesión iniciada.
-   - Haz clic en el icono de la extensión en la barra del navegador y presiona **Export** o **Descargar**. Se guardará un archivo llamado `youtube.com_cookies.txt` (o similar).
-3. **Cárgalo en OmniVault:**
-   - En OmniVault, ve a la pestaña **⚙ Ajustes**.
-   - Haz clic en **📄 Cargar archivo cookies.txt** y selecciona el archivo que acabas de descargar.
-   - Presiona **🧪 Probar Estado de Sesión** para verificar que la sesión esté activa y lista.
+### 9. 📋 Playlists, Álbumes y Descarga Masiva
+- Pega cualquier enlace de playlist o álbum completo de YouTube o SoundCloud.
+- Elige qué canciones descargar marcando o desmarcando casillas.
+- Botones de acción rápida: `[✓ Todos]`, `[✖ Ninguno]` y descarga en lote con un solo clic.
 
 ---
 
-### ⚡ Método 2: Extracción Directa desde Navegador (Experimental)
-Compatible con **Vivaldi, Mozilla Firefox, Brave y Opera**:
-
-> [!WARNING]
-> **Windows bloquea los archivos de cookies mientras el navegador está abierto:**  
-> Para evitar errores de *«Permiso denegado»*, es fundamental **cerrar tu navegador** antes de hacer clic en sincronizar.
-
-1. Abre tu navegador y asegúrate de haber iniciado sesión en [YouTube.com](https://www.youtube.com).
-2. **Cierra completamente todas las ventanas de tu navegador** y espera 3 segundos para que Windows libere el bloqueo de archivo.
-3. En OmniVault, ve a **⚙ Ajustes**, selecciona tu navegador en el menú desplegable y presiona **📸 Sincronizar [Navegador]**.
-4. ¡Listo! OmniVault guardará una copia local segura. Ya puedes volver a abrir tu navegador y usarlo con total normalidad.
-5. Presiona **🧪 Probar Estado de Sesión** para confirmar la conexión.
-
-*(Nota: En Google Chrome y Microsoft Edge v127+, Windows bloquea la extracción directa mediante App-Bound Encryption; para ellos utiliza siempre el Método 1).*
-
-### 6. 🎧 Mini-Reproductor de Audio Integrado
-- Reproductor de audio acoplado en la barra inferior para escuchar tus canciones descargadas **sin salir de OmniVault**.
-- Construido con la API nativa **Windows MCI (`winmm.dll`)**: consumo de memoria ultra bajo (0% CPU adicional).
-- Barra de desplazamiento interactiva (*Seekbar*), control de volumen, contador de tiempo transcurrido/total y controles de Pausa/Reanudar.
-
-### 7. ⚡ Aceleración de Red (Aria2c) y GPU (FFmpeg)
-- **Acelerador de red multihilo:** Compatible con `aria2c` para descargar archivos en hasta 8 segmentos simultáneos (descargas 3x a 5x más veloces).
-- **Aceleración por GPU:** Detección automática de aceleración gráfica para codificación de video en **NVIDIA (NVENC)**, **AMD (AMF)** e **Intel (QuickSync)**.
-
-### 8. 🔔 Notificaciones Nativas de Windows y Sonido Sutil
-- Al completarse una descarga o lote, OmniVault emite una **notificación Toast nativa** en Windows 10/11 y un timbre suave de sistema.
-- Puedes minimizar la aplicación y continuar trabajando o jugando; el sistema te avisará al terminar.
-
-### 9. 💬 Subtítulos Automáticos (.SRT) y Letras
-- Opción en Ajustes para descargar automáticamente subtítulos en español e inglés, ya sea incrustados en archivos MP4 o como archivos `.srt` acompañantes.
-
-### 10. ⌨ Atajos de Teclado Rápidos
-- **`Ctrl + V`:** Pega y analiza automáticamente cualquier enlace del portapapeles desde cualquier sección de la app.
-- **`Ctrl + F`:** Abre *Mi Biblioteca* y enfoca el buscador de canciones.
-- **`Barra Espaciadora`:** Pausa o reanuda la música del mini-reproductor (si no estás escribiendo en una caja de texto).
-- **`Escape`:** Oculta el mini-reproductor o cierra los selectores emergentes.
-
-### 11. 📥 Gestor de Descargas Concurrentes
-- Descargas en segundo plano con barra de progreso, velocidad en tiempo real y tiempo restante.
-- Cola multihilo que procesa varias descargas sin congelar la interfaz.
-- Cierre limpio y cancelación segura de archivos parciales (`.part`).
-
-### 12. 🎵 Mi Biblioteca Local
-- Historial completo de tus archivos descargados guardado de manera atómica.
-- Botón **▶ Reproducir** directo con el mini-reproductor integrado para audios o reproductor del sistema para videos.
-- Botón **📁 Ubicación** para abrir y resaltar el archivo en el Explorador de archivos (compatible con Windows, macOS y Linux).
+### 10. 🎧 Mini-Reproductor de Audio Integrado (Nativo MCI)
+- Reproductor de audio integrado en la barra inferior para escuchar tus canciones **sin abrir programas externos**.
+- Basado en la API nativa **Windows MCI (`winmm.dll`)**: 0% consumo de CPU adicional y cero dependencias pesadas.
+- Barra de desplazamiento interactiva (*Seekbar*), control de volumen suave y contador de tiempo.
 
 ---
 
-## ⚙️ Requisitos e Instalación
+### 11. 🔒 Sesión Segura y Cookies (Para cualquier navegador)
+Por defecto, **no necesitas iniciar sesión para descargar el 95% del contenido**. Solo se requiere sesión para:
+- Videos con restricción de edad (+18).
+- Playlists privadas personales (como "Videos que me gustan").
+- Pistas protegidas por el filtro anti-bot de YouTube.
 
-### 1. Instalar Dependencias de Python
+#### ⭐ Método 1: Archivo `cookies.txt` (Recomendado y 100% Universal)
+Funciona en **Chrome, Edge, Firefox, Vivaldi, Brave, Opera**:
+1. Instala la extensión gratuita:
+   - Para navegadores Chromium: [Get cookies.txt LOCALLY (Chrome Web Store)](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc).
+   - Para Firefox: [cookies.txt (Firefox Add-ons)](https://addons.mozilla.org/es/firefox/addon/cookie-txt/).
+2. Abre [YouTube.com](https://www.youtube.com) con tu cuenta abierta.
+3. Haz clic en la extensión y presiona **Export** (descargará un archivo `.txt`).
+4. En OmniVault, ve a **⚙ Ajustes** > **📄 Cargar archivo cookies.txt**.
+5. Presiona **🧪 Probar Estado de Sesión** para comprobar la autenticación.
+
+#### ⚡ Método 2: Extracción Directa desde Navegador (Experimental)
+Compatible con **Vivaldi, Firefox, Brave y Opera**:
+1. Cierra completamente todas las ventanas de tu navegador y espera 3 segundos (para liberar el bloqueo de archivo en Windows).
+2. En OmniVault, ve a **⚙ Ajustes**, selecciona tu navegador y presiona **📸 Sincronizar**.
+3. ¡Listo! Vuelve a abrir tu navegador normalmente.
+
+---
+
+### 12. ⌨ Atajos de Teclado Rápidos
+- **`Ctrl + V`:** Pega y analiza automáticamente cualquier enlace del portapapeles.
+- **`Ctrl + F`:** Abre la biblioteca y enfoca el buscador.
+- **`Barra Espaciadora`:** Pausa o reanuda la música del mini-reproductor.
+- **`Escape`:** Oculta el mini-reproductor.
+
+---
+
+## ⚙️ Instalación y Requisitos
+
+### 1. Requisitos Previos
+- **Windows 10 u 11** (64 bits).
+- **Python 3.10 o superior** (o utiliza el ejecutable compilado).
+
+### 2. Instalación de dependencias
 Abre la consola en la carpeta del proyecto y ejecuta:
 ```bash
 py -m pip install -r requirements.txt
 ```
-*(O `python -m pip install -r requirements.txt` si tu comando predeterminado es `python`)*.
 
-### 2. Instalar FFmpeg (Recomendado)
-FFmpeg es necesario para convertir audios a MP3/WAV y combinar video 1080p/4K con audio:
-- **Opción A (Recomendada en Windows):** Abre PowerShell y ejecuta:
-  ```powershell
-  winget install Gyan.FFmpeg
-  ```
-- **Opción B (Portátil):** Descarga `ffmpeg.exe` y colócalo directamente en la carpeta de este programa.
-
-### 3. Instalar Aria2c (Opcional para aceleración 5x)
-- En PowerShell: `winget install aria2.aria2` o coloca `aria2c.exe` en la carpeta del proyecto.
+### 3. FFmpeg y Aria2c
+- **FFmpeg:** Ya está detectado automáticamente si lo instalaste con winget (`winget install Gyan.FFmpeg`) o colocándolo en la carpeta `bin/`.
+- **Aria2c:** Ya está integrado en la subcarpeta `bin/aria2c.exe`.
 
 ---
 
@@ -142,13 +180,48 @@ FFmpeg es necesario para convertir audios a MP3/WAV y combinar video 1080p/4K co
 
 ### Modo Ventana Limpia (Sin Terminal / Ventana Negra)
 Haz doble clic en:
-```
+```text
 iniciar.bat
 ```
-*(Utiliza el lanzador `pyw` de Windows para abrir la interfaz gráfica directamente sin dejar ninguna ventana negra de consola abierta).*
+*(Utiliza el lanzador `pyw` nativo de Windows: la ventana se abre directamente y la consola se cierra en milisegundos).*
 
 ### Modo Depuración (Con Consola)
-Si deseas ver los registros técnicos de descarga en la terminal:
-```
+Si quieres ver registros técnicos detallados en la terminal:
+```text
 iniciar_consola.bat
 ```
+
+---
+
+## 📦 Creación del Instalador Oficial de Windows (.exe / Setup)
+
+### Paso 1: Compilar a Ejecutable Autónomo (.exe)
+Haz doble clic en:
+```text
+compilar.bat
+```
+O ejecuta en consola:
+```bash
+py build_exe.py
+```
+Este proceso empaqueta automáticamente todo el código, librerías, CustomTkinter, FFmpeg y Aria2c dentro de la carpeta:
+```text
+dist\OmniVault\OmniVault.exe
+```
+
+### Paso 2: Generar el Instalador Setup (Inno Setup)
+Si deseas un instalador clásico de Windows con asistente de instalación, accesos directos en el Escritorio y Menú Inicio:
+1. Descarga e instala [Inno Setup (Gratuito)](https://jrsoftware.org/isdl.php).
+2. Haz clic derecho en [`installer.iss`](file:///c:/Users/georg/OneDrive/Documentos/GitHub/UniversalMediaDownloader/installer.iss) y selecciona **Compile** (o presiona `F9` dentro de Inno Setup).
+3. Obtendrás el instalador final en:
+   ```text
+   dist\Installer\OmniVault_Setup_v2.0.exe
+   ```
+
+---
+
+## 🛡️ Seguridad y Privacidad
+- **Cero telemetría y sin publicidad.**
+- **Código abierto y transparente.**
+- **Tus contraseñas nunca se solicitan ni se almacenan.**
+- **Los archivos locales de configuración y cookies están estrictamente aislados y excluidos de Git.**

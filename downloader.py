@@ -283,6 +283,121 @@ def embed_id3_metadata(mp3_path: str, title: str, artist: str = "", album: str =
     except Exception:
         pass
 
+def parse_timestamp_str(s: Optional[str]) -> Optional[float]:
+    """Convierte cadenas como '01:23:45', '02:30', '75', '1m30s' a segundos flotantes."""
+    if not s:
+        return None
+    s = s.strip()
+    if not s:
+        return None
+    if ":" in s:
+        parts = s.split(":")
+        try:
+            if len(parts) == 2:
+                return int(parts[0]) * 60 + float(parts[1])
+            elif len(parts) == 3:
+                return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+        except ValueError:
+            return None
+    m = re.match(r'(?:(\d+)m)?\s*(?:(\d+)s)?', s)
+    if m and (m.group(1) or m.group(2)):
+        mins = int(m.group(1) or 0)
+        secs = int(m.group(2) or 0)
+        return float(mins * 60 + secs)
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+def _trim_file_with_ffmpeg(input_file: str, start_sec: Optional[float], end_sec: Optional[float]) -> Optional[str]:
+    """Recorta un archivo multimedia con precisión usando FFmpeg."""
+    ff = shutil.which("ffmpeg") or (os.path.join(FFMPEG_DIR, "ffmpeg.exe") if FFMPEG_DIR else None)
+    if not ff or not os.path.isfile(input_file):
+        return None
+
+    base, ext = os.path.splitext(input_file)
+    output_file = f"{base}_clip{ext}"
+
+    cmd = [ff, "-y"]
+    if start_sec is not None and start_sec > 0:
+        cmd.extend(["-ss", str(start_sec)])
+    if end_sec is not None and end_sec > 0:
+        if start_sec is not None and start_sec > 0:
+            cmd.extend(["-to", str(end_sec)])
+        else:
+            cmd.extend(["-t", str(end_sec)])
+    cmd.extend(["-i", input_file])
+
+    flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0) if sys.platform == "win32" else 0
+
+    # Para videos, intentar -c copy (ultrarrápido e instantáneo sin pérdida)
+    if ext.lower() in [".mp4", ".mkv", ".webm"]:
+        cmd_copy = cmd + ["-c", "copy", output_file]
+        try:
+            res = subprocess.run(cmd_copy, capture_output=True, creationflags=flags)
+            if res.returncode == 0 and os.path.isfile(output_file) and os.path.getsize(output_file) > 1024:
+                return output_file
+        except Exception:
+            pass
+
+    # Si -c copy falla o es audio, recodificar de forma óptima
+    if ext.lower() == ".mp3":
+        cmd_rec = cmd + ["-vn", "-c:a", "libmp3lame", "-b:a", "320k", output_file]
+    elif ext.lower() == ".wav":
+        cmd_rec = cmd + ["-vn", "-c:a", "pcm_s16le", output_file]
+    elif ext.lower() == ".m4a":
+        cmd_rec = cmd + ["-vn", "-c:a", "aac", "-b:a", "256k", output_file]
+    else:
+        cmd_rec = cmd + ["-c:v", "libx264", "-preset", "fast", "-c:a", "aac", output_file]
+
+    try:
+        res = subprocess.run(cmd_rec, capture_output=True, creationflags=flags)
+        if res.returncode == 0 and os.path.isfile(output_file):
+            return output_file
+    except Exception:
+        pass
+    return None
+
+def format_bytes_estimate(b: float) -> str:
+    """Convierte bytes a representación legible de tamaño estimado."""
+    if b <= 0:
+        return "--"
+    mb = b / (1024 * 1024)
+    if mb < 1024:
+        return f"~{mb:.1f} MB"
+    return f"~{mb / 1024:.2f} GB"
+
+def estimate_sizes_for_video(duration: float, formats: list) -> Dict[str, str]:
+    """Calcula estimaciones del tamaño aproximado del archivo para cada formato disponible."""
+    if not duration or duration <= 0:
+        return {}
+    res = {
+        'mp3_320': format_bytes_estimate(duration * 320 * 1000 / 8),
+        'mp3_192': format_bytes_estimate(duration * 192 * 1000 / 8),
+        'm4a_best': format_bytes_estimate(duration * 256 * 1000 / 8),
+        'wav': format_bytes_estimate(duration * 1411 * 1000 / 8),
+    }
+    targets = {
+        'mp4_4k': (2160, 22_000_000),
+        'mp4_1080': (1080, 4_800_000),
+        'mp4_720': (720, 2_400_000),
+        'mp4_480': (480, 1_100_000),
+    }
+    audio_extra = duration * 192 * 1000 / 8
+    for key, (h_target, default_bps) in targets.items():
+        found_size = 0
+        if formats:
+            for f in formats:
+                if f.get('height') == h_target:
+                    sz = f.get('filesize') or f.get('filesize_approx')
+                    if sz:
+                        found_size = sz + audio_extra
+                        break
+        if not found_size:
+            found_size = (duration * default_bps / 8) + audio_extra
+        res[key] = format_bytes_estimate(found_size)
+    return res
+
 def _fetch_tiktok_api(url: str) -> Optional[Dict[str, Any]]:
     """Extrae metadatos y enlaces directos HD sin marca de agua de TikTok vía API directa."""
     api_url = 'https://www.tikwm.com/api/'
@@ -522,18 +637,20 @@ class DownloaderEngine:
         if is_tiktok_url(url):
             tt_data = _fetch_tiktok_api(url)
             if tt_data:
+                tt_dur = tt_data.get('duration', 0)
                 return {
                     'is_playlist': False,
                     'id': tt_data['id'],
                     'title': tt_data['title'],
                     'uploader': tt_data['uploader'],
-                    'duration': format_duration(tt_data['duration']),
-                    'raw_duration': tt_data['duration'],
+                    'duration': format_duration(tt_dur),
+                    'raw_duration': tt_dur,
                     'thumbnail': tt_data['thumbnail'],
                     'url': url,
                     'available_heights': [1080, 720],
                     'extractor': 'TikTok (HD Directo)',
                     '_tiktok_data': tt_data,
+                    'estimated_sizes': estimate_sizes_for_video(tt_dur, []),
                 }
 
         ydl_opts = self._base_opts(use_cookies=False)
@@ -580,18 +697,20 @@ class DownloaderEngine:
         if not res and is_tiktok_url(url):
             tt_data = _fetch_tiktok_api(url)
             if tt_data:
+                tt_dur = tt_data.get('duration', 0)
                 return {
                     'is_playlist': False,
                     'id': tt_data['id'],
                     'title': tt_data['title'],
                     'uploader': tt_data['uploader'],
-                    'duration': format_duration(tt_data['duration']),
-                    'raw_duration': tt_data['duration'],
+                    'duration': format_duration(tt_dur),
+                    'raw_duration': tt_dur,
                     'thumbnail': tt_data['thumbnail'],
                     'url': url,
                     'available_heights': [1080, 720],
                     'extractor': 'TikTok (HD Directo)',
                     '_tiktok_data': tt_data,
+                    'estimated_sizes': estimate_sizes_for_video(tt_dur, []),
                 }
 
         if not res:
@@ -661,17 +780,21 @@ class DownloaderEngine:
         if not thumb and v_id:
             thumb = f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
 
+        raw_dur = res.get('duration', 0)
+        sizes = estimate_sizes_for_video(raw_dur, formats)
+
         return {
             'is_playlist': False,
             'id': v_id,
             'title': res.get('title', 'Sin título'),
             'uploader': res.get('uploader') or res.get('channel') or 'Desconocido',
-            'duration': format_duration(res.get('duration')),
-            'raw_duration': res.get('duration', 0),
+            'duration': format_duration(raw_dur),
+            'raw_duration': raw_dur,
             'thumbnail': thumb,
             'url': url,
             'available_heights': sorted(list(heights), reverse=True),
             'extractor': res.get('extractor_key', 'Universal'),
+            'estimated_sizes': sizes,
         }
 
     def _download_tiktok_stream(
@@ -682,6 +805,8 @@ class DownloaderEngine:
         output_dir: str,
         progress_callback: Optional[Callable[[float, str, str, str], None]] = None,
         status_callback: Optional[Callable[[str], None]] = None,
+        clip_start: Optional[str] = None,
+        clip_end: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Descarga directa de video o audio de TikTok sin marca de agua y en alta definición."""
         is_audio = format_type in ['mp3_320', 'mp3_192', 'wav', 'm4a_best']
@@ -772,6 +897,17 @@ class DownloaderEngine:
                 try: os.remove(temp_file)
                 except Exception: pass
 
+            # Recorte de tiempo si fue solicitado
+            start_sec = parse_timestamp_str(clip_start)
+            end_sec = parse_timestamp_str(clip_end)
+            if (start_sec is not None and start_sec > 0) or (end_sec is not None and end_sec > 0):
+                if status_callback: status_callback("Recortando fragmento con FFmpeg...")
+                trimmed = _trim_file_with_ffmpeg(final_path, start_sec, end_sec)
+                if trimmed and os.path.isfile(trimmed):
+                    try: os.remove(final_path)
+                    except Exception: pass
+                    final_path = trimmed
+
             return {
                 'title': tt_data.get('title', safe_title),
                 'file_path': final_path,
@@ -797,6 +933,8 @@ class DownloaderEngine:
         cookiefile: Optional[str] = None,
         download_subtitles: bool = False,
         use_aria2c: bool = True,
+        clip_start: Optional[str] = None,
+        clip_end: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Descarga y convierte el archivo multimedia según el formato solicitado."""
         url = normalize_url(url)
@@ -815,7 +953,9 @@ class DownloaderEngine:
                     format_type=format_type,
                     output_dir=output_dir,
                     progress_callback=progress_callback,
-                    status_callback=status_callback
+                    status_callback=status_callback,
+                    clip_start=clip_start,
+                    clip_end=clip_end,
                 )
 
         # Validación preventiva de FFmpeg
@@ -1023,6 +1163,18 @@ class DownloaderEngine:
                     album="OmniVault",
                     thumbnail_url=thumbnail
                 )
+
+            # Recorte de tiempo si fue solicitado
+            start_sec = parse_timestamp_str(clip_start)
+            end_sec = parse_timestamp_str(clip_end)
+            if (start_sec is not None and start_sec > 0) or (end_sec is not None and end_sec > 0):
+                if status_callback:
+                    status_callback("Recortando fragmento con FFmpeg...")
+                trimmed = _trim_file_with_ffmpeg(final_path, start_sec, end_sec)
+                if trimmed and os.path.isfile(trimmed):
+                    try: os.remove(final_path)
+                    except Exception: pass
+                    final_path = trimmed
 
             return {
                 'title': title,

@@ -39,6 +39,9 @@ class ConfigManager:
             "notifications_enabled": True,
             "subtitles_enabled": False,
             "aria2c_enabled": True,
+            "accent_theme": "violet",
+            "tray_enabled": True,
+            "on_finish_action": "none",
         }
 
     def _load(self) -> Dict[str, Any]:

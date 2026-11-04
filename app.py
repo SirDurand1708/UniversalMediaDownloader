@@ -13,10 +13,14 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
 import theme
+import themes
+from tray import OmniVaultTray
+from converter import LocalConverter, get_media_info
 from downloader import (
     DownloaderEngine, is_url, normalize_url, clean_error_text,
     is_ffmpeg_available, FFMPEG_DIR, is_browser_running,
-    is_aria2c_available, detect_hardware_acceleration, format_duration
+    is_aria2c_available, detect_hardware_acceleration, format_duration,
+    parse_timestamp_str, estimate_sizes_for_video
 )
 from queue_manager import QueueManager, DownloadTask
 from history_manager import HistoryManager
@@ -38,8 +42,9 @@ class OmniVaultApp(ctk.CTk):
         self.minsize(760, 500)
         self.configure(fg_color=theme.BG_MAIN)
 
-        # Configuración persistente
+        # Configuración persistente y tema de color de acento
         self.config = ConfigManager()
+        self.theme_accent = themes.get_theme(self.config.get("accent_theme", "violet"))
 
         # Servicios y Motores
         self.downloader = DownloaderEngine()
@@ -51,9 +56,25 @@ class OmniVaultApp(ctk.CTk):
         )
         self.img_cache = ThumbnailCache(max_workers=4)
 
+        # Conversor multimedia offline
+        self.converter = LocalConverter()
+        self._converter_running = False
+        self._converted_file_path = ""
+
         # Callbacks del gestor de descargas
         self.queue_manager.on_task_updated = self._on_task_updated
         self.queue_manager.on_task_finished = self._on_task_finished
+        self.queue_manager.on_queue_completed = self._on_queue_all_completed
+
+        # Bandeja del sistema (System Tray)
+        self.tray = OmniVaultTray(
+            on_open=self._tray_restore,
+            on_toggle_queue=self._tray_toggle_queue,
+            on_quit=lambda: self._on_close(force=True),
+            theme_color=self.theme_accent["primary"]
+        )
+        if self.config.get("tray_enabled", True) and self.tray.is_available():
+            self.tray.start()
 
         # Protocolo de cierre limpio de ventana
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -87,8 +108,12 @@ class OmniVaultApp(ctk.CTk):
         # Iniciar monitoreo del portapapeles si está activado
         self.after(1500, self._check_clipboard_loop)
 
-    def _on_close(self):
-        """Maneja el cierre ordenado de la aplicación y detiene procesos activos."""
+    def _on_close(self, force: bool = False):
+        """Maneja el cierre ordenado de la aplicación o la minimiza a la bandeja del sistema."""
+        if not force and self.config.get("tray_enabled", True) and self.tray.is_available():
+            self.withdraw()
+            return
+
         active_tasks = self.queue_manager.get_active_tasks()
         if active_tasks:
             confirm = messagebox.askyesno(
@@ -98,10 +123,23 @@ class OmniVaultApp(ctk.CTk):
             if not confirm:
                 return
 
+        self.tray.stop()
         self.player.close()
         self.queue_manager.stop()
         self.img_cache.shutdown(wait=False)
         self.destroy()
+
+    def _tray_restore(self):
+        self.after(0, self._restore_from_tray)
+
+    def _restore_from_tray(self):
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+
+    def _tray_toggle_queue(self):
+        # Pausar o reanudar cola
+        pass
 
     def _get_active_browser(self):
         saved = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
@@ -159,6 +197,7 @@ class OmniVaultApp(ctk.CTk):
             ("explore", "🔍  Explorar / Buscar", self._show_explore),
             ("downloads", "📥  Descargas", self._show_downloads),
             ("library", "🎵  Mi Biblioteca", self._show_library),
+            ("converter", "🔄  Conversor Local", self._show_converter),
             ("settings", "⚙  Ajustes", self._show_settings),
         ]
 
@@ -226,6 +265,7 @@ class OmniVaultApp(ctk.CTk):
             "explore": self._create_explore_view(),
             "downloads": self._create_downloads_view(),
             "library": self._create_library_view(),
+            "converter": self._create_converter_view(),
             "settings": self._create_settings_view(),
         }
 
@@ -249,6 +289,7 @@ class OmniVaultApp(ctk.CTk):
     def _show_explore(self): self._select_tab("explore")
     def _show_downloads(self): self._select_tab("downloads")
     def _show_library(self): self._select_tab("library")
+    def _show_converter(self): self._select_tab("converter")
     def _show_settings(self): self._select_tab("settings")
 
     # =========================================================================
@@ -803,11 +844,17 @@ class OmniVaultApp(ctk.CTk):
 
         ctk.CTkLabel(audio_col, text="🎵 OPCIONES DE AUDIO", font=ctk.CTkFont(size=12, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", pady=(0, 8))
 
+        sizes = data.get("estimated_sizes", {})
+        s_320 = f"  ({sizes.get('mp3_320')})" if sizes.get('mp3_320') else ""
+        s_192 = f"  ({sizes.get('mp3_192')})" if sizes.get('mp3_192') else ""
+        s_m4a = f"  ({sizes.get('m4a_best')})" if sizes.get('m4a_best') else ""
+        s_wav = f"  ({sizes.get('wav')})" if sizes.get('wav') else ""
+
         audio_options = [
-            ("mp3_320", "MP3 320 kbps (HD Máximo + Portada)"),
-            ("mp3_192", "MP3 192 kbps (Ligero)"),
-            ("m4a_best", "M4A Original"),
-            ("wav", "WAV Estudio (Sin pérdida)"),
+            ("mp3_320", f"MP3 320 kbps (HD Máximo + Portada){s_320}"),
+            ("mp3_192", f"MP3 192 kbps (Ligero){s_192}"),
+            ("m4a_best", f"M4A Original{s_m4a}"),
+            ("wav", f"WAV Estudio (Sin pérdida){s_wav}"),
         ]
         for val, label in audio_options:
             ctk.CTkRadioButton(
@@ -822,11 +869,16 @@ class OmniVaultApp(ctk.CTk):
 
         ctk.CTkLabel(video_col, text="🎬 OPCIONES DE VIDEO (MP4)", font=ctk.CTkFont(size=12, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", pady=(0, 8))
 
+        s_4k = f"  ({sizes.get('mp4_4k')})" if sizes.get('mp4_4k') else ""
+        s_1080 = f"  ({sizes.get('mp4_1080')})" if sizes.get('mp4_1080') else ""
+        s_720 = f"  ({sizes.get('mp4_720')})" if sizes.get('mp4_720') else ""
+        s_480 = f"  ({sizes.get('mp4_480')})" if sizes.get('mp4_480') else ""
+
         video_options = [
-            ("mp4_4k", "4K / 2K Ultra HD (Máxima nitidez)"),
-            ("mp4_1080", "1080p Full HD"),
-            ("mp4_720", "720p HD (Ligero y Rápido)"),
-            ("mp4_480", "480p Ahorro de espacio"),
+            ("mp4_4k", f"4K / 2K Ultra HD (Máxima nitidez){s_4k}"),
+            ("mp4_1080", f"1080p Full HD{s_1080}"),
+            ("mp4_720", f"720p HD (Ligero y Rápido){s_720}"),
+            ("mp4_480", f"480p Ahorro de espacio{s_480}"),
         ]
         for val, label in video_options:
             ctk.CTkRadioButton(
@@ -834,6 +886,39 @@ class OmniVaultApp(ctk.CTk):
                 font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY,
                 fg_color=theme.BTN_PRIMARY_BG, hover_color=theme.BTN_PRIMARY_HOVER
             ).pack(anchor="w", pady=4)
+
+        # --- SECCIÓN DE RECORTE DE TIEMPO (TRIM / CLIP) ---
+        clip_box = ctk.CTkFrame(card, fg_color=theme.BG_INPUT, corner_radius=theme.CORNER_RADIUS)
+        clip_box.pack(fill="x", padx=14, pady=(0, 12))
+
+        self.clip_enabled_var = ctk.BooleanVar(value=False)
+        clip_cb = ctk.CTkCheckBox(
+            clip_box,
+            text="✂️ Recortar fragmento específico (Descargar solo una parte)",
+            variable=self.clip_enabled_var,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color=self.theme_accent["primary"],
+            hover_color=self.theme_accent["hover"],
+            command=self._on_clip_toggle
+        )
+        clip_cb.pack(anchor="w", padx=12, pady=(10, 4))
+
+        self.clip_inputs_frame = ctk.CTkFrame(clip_box, fg_color="transparent")
+
+        ctk.CTkLabel(self.clip_inputs_frame, text="Desde (Inicio):", font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY).pack(side="left", padx=(0, 6))
+        self.clip_start_entry = ctk.CTkEntry(self.clip_inputs_frame, width=90, height=28, placeholder_text="00:00:00", font=ctk.CTkFont(size=11))
+        self.clip_start_entry.pack(side="left", padx=(0, 14))
+
+        ctk.CTkLabel(self.clip_inputs_frame, text="Hasta (Fin):", font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY).pack(side="left", padx=(0, 6))
+        self.clip_end_entry = ctk.CTkEntry(self.clip_inputs_frame, width=90, height=28, placeholder_text="00:00:00", font=ctk.CTkFont(size=11))
+        self.clip_end_entry.pack(side="left", padx=(0, 10))
+
+        ctk.CTkLabel(
+            self.clip_inputs_frame,
+            text="(Formato: MM:SS o HH:MM:SS. Deja 'Hasta' vacío para ir hasta el final)",
+            font=ctk.CTkFont(size=10),
+            text_color=theme.TEXT_MUTED
+        ).pack(side="left")
 
         btn_row = ctk.CTkFrame(card, fg_color="transparent")
         btn_row.pack(fill="x", padx=14, pady=(0, 14))
@@ -845,6 +930,12 @@ class OmniVaultApp(ctk.CTk):
             command=self._enqueue_single_media
         )
         dl_btn.pack(fill="x")
+
+    def _on_clip_toggle(self):
+        if self.clip_enabled_var.get():
+            self.clip_inputs_frame.pack(fill="x", padx=12, pady=(4, 10))
+        else:
+            self.clip_inputs_frame.pack_forget()
 
     def _enqueue_single_media(self):
         if not self.current_media:
@@ -860,10 +951,17 @@ class OmniVaultApp(ctk.CTk):
         subtitles = bool(self.config.get("subtitles_enabled", False))
         aria2c = bool(self.config.get("aria2c_enabled", True))
 
+        clip_start = None
+        clip_end = None
+        if hasattr(self, "clip_enabled_var") and self.clip_enabled_var.get():
+            clip_start = self.clip_start_entry.get().strip() or None
+            clip_end = self.clip_end_entry.get().strip() or None
+
         self.queue_manager.add_download(
             url=url, format_type=fmt, output_dir=target_dir,
             title=title, thumbnail_url=thumb, browser=browser,
-            download_subtitles=subtitles, use_aria2c=aria2c
+            download_subtitles=subtitles, use_aria2c=aria2c,
+            clip_start=clip_start, clip_end=clip_end
         )
 
         messagebox.showinfo("Descarga Encolada", f"'{title[:35]}...' añadido a la cola.")
@@ -1105,7 +1203,263 @@ class OmniVaultApp(ctk.CTk):
         self._open_folder_safe(self.config.get_video_dir())
 
     # =========================================================================
-    # VISTA 4: AJUSTES (DIRECTORIOS, RENDIMIENTO Y SESIÓN)
+    # VISTA 4: CONVERSOR MULTIMEDIA LOCAL OFFLINE (FFmpeg + GPU)
+    # =========================================================================
+    def _create_converter_view(self) -> ctk.CTkFrame:
+        view = ctk.CTkFrame(self.main_container, fg_color="transparent")
+        view.grid_rowconfigure(1, weight=1)
+        view.grid_columnconfigure(0, weight=1)
+
+        header = ctk.CTkFrame(view, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+
+        ctk.CTkLabel(
+            header, text="Conversor Multimedia Local Offline",
+            font=ctk.CTkFont(size=19, weight="bold"), text_color=theme.TEXT_PRIMARY
+        ).pack(side="left")
+
+        gpu = detect_hardware_acceleration()
+        gpu_badge = f"⚡ GPU: {gpu}" if gpu else "⚡ CPU x264"
+        ctk.CTkLabel(
+            header, text=gpu_badge,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color=theme.BG_CARD, text_color=theme.STATUS_SUCCESS if gpu else theme.TEXT_MUTED,
+            corner_radius=theme.CORNER_RADIUS_SM, padx=10, pady=4
+        ).pack(side="right")
+
+        scroll = ctk.CTkScrollableFrame(view, fg_color="transparent")
+        scroll.grid(row=1, column=0, sticky="nsew")
+        scroll.grid_columnconfigure(0, weight=1)
+
+        # Tarjeta 1: Archivo Fuente
+        box1 = ctk.CTkFrame(scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
+        box1.pack(fill="x", pady=6)
+
+        ctk.CTkLabel(box1, text="1. Archivo Fuente (Video o Audio en tu PC)", font=ctk.CTkFont(size=13, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=14, pady=(12, 4))
+        ctk.CTkLabel(box1, text="Selecciona cualquier archivo local para convertirlo, extraerle audio o comprimirlo.", font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY).pack(anchor="w", padx=14, pady=(0, 8))
+
+        row_file = ctk.CTkFrame(box1, fg_color="transparent")
+        row_file.pack(fill="x", padx=14, pady=(0, 8))
+
+        self.conv_file_entry = ctk.CTkEntry(row_file, height=34, font=ctk.CTkFont(size=11), fg_color=theme.BG_INPUT, placeholder_text="Ningún archivo seleccionado...")
+        self.conv_file_entry.configure(state="readonly")
+        self.conv_file_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        ctk.CTkButton(
+            row_file, text="📁 Examinar...", width=110, height=34,
+            fg_color=theme.BTN_PRIMARY_BG, hover_color=theme.BTN_PRIMARY_HOVER, text_color=theme.BTN_PRIMARY_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"), command=self._select_converter_input_file
+        ).pack(side="left")
+
+        self.conv_info_lbl = ctk.CTkLabel(box1, text="Información: --", font=ctk.CTkFont(size=11), text_color=theme.TEXT_MUTED)
+        self.conv_info_lbl.pack(anchor="w", padx=14, pady=(0, 12))
+
+        # Tarjeta 2: Formato de Salida
+        box2 = ctk.CTkFrame(scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
+        box2.pack(fill="x", pady=6)
+
+        ctk.CTkLabel(box2, text="2. Formato de Salida Objetivo", font=ctk.CTkFont(size=13, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=14, pady=(12, 6))
+
+        self.conv_format_var = ctk.StringVar(value="mp3_320")
+
+        f_grid = ctk.CTkFrame(box2, fg_color="transparent")
+        f_grid.pack(fill="x", padx=14, pady=(0, 12))
+        f_grid.grid_columnconfigure(0, weight=1)
+        f_grid.grid_columnconfigure(1, weight=1)
+
+        # Audio
+        col_a = ctk.CTkFrame(f_grid, fg_color=theme.BG_INPUT, corner_radius=theme.CORNER_RADIUS_SM)
+        col_a.grid(row=0, column=0, sticky="nsew", padx=(0, 6), pady=4)
+        ctk.CTkLabel(col_a, text="🎵 Formatos de Audio", font=ctk.CTkFont(size=11, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=10, pady=(8, 4))
+        for val, lbl in [
+            ("mp3_320", "MP3 320 kbps (HD Máximo)"),
+            ("mp3_192", "MP3 192 kbps (Estándar)"),
+            ("wav", "WAV (Sin pérdida / Estudio)"),
+            ("m4a", "M4A (AAC 256k)"),
+            ("flac", "FLAC (Lossless)"),
+        ]:
+            ctk.CTkRadioButton(col_a, text=lbl, variable=self.conv_format_var, value=val, font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY).pack(anchor="w", padx=10, pady=3)
+
+        # Video
+        col_v = ctk.CTkFrame(f_grid, fg_color=theme.BG_INPUT, corner_radius=theme.CORNER_RADIUS_SM)
+        col_v.grid(row=0, column=1, sticky="nsew", padx=(6, 0), pady=4)
+        ctk.CTkLabel(col_v, text="🎬 Formatos de Video", font=ctk.CTkFont(size=11, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=10, pady=(8, 4))
+        for val, lbl in [
+            ("mp4", f"MP4 H.264 ({gpu or 'CPU'})"),
+            ("compress_mp4", "Comprimir Video (Reduce ~50% peso)"),
+        ]:
+            ctk.CTkRadioButton(col_v, text=lbl, variable=self.conv_format_var, value=val, font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY).pack(anchor="w", padx=10, pady=4)
+
+        # Tarjeta 3: Carpeta de Destino
+        box3 = ctk.CTkFrame(scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
+        box3.pack(fill="x", pady=6)
+
+        ctk.CTkLabel(box3, text="3. Carpeta de Destino", font=ctk.CTkFont(size=13, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=14, pady=(12, 4))
+
+        row_dst = ctk.CTkFrame(box3, fg_color="transparent")
+        row_dst.pack(fill="x", padx=14, pady=(0, 12))
+
+        self.conv_dst_entry = ctk.CTkEntry(row_dst, height=32, font=ctk.CTkFont(size=11), fg_color=theme.BG_INPUT)
+        self.conv_dst_entry.insert(0, self.config.get_audio_dir())
+        self.conv_dst_entry.configure(state="readonly")
+        self.conv_dst_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        ctk.CTkButton(
+            row_dst, text="📁 Cambiar", width=80, height=32,
+            fg_color=theme.BTN_SECONDARY_BG, hover_color=theme.BTN_SECONDARY_HOVER, text_color=theme.BTN_SECONDARY_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"), command=self._change_converter_dst_dir
+        ).pack(side="left")
+
+        # Acciones de Conversión y Progreso
+        action_box = ctk.CTkFrame(scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
+        action_box.pack(fill="x", pady=6)
+
+        self.conv_progress = ctk.CTkProgressBar(action_box, height=10, corner_radius=theme.CORNER_RADIUS_SM)
+        self.conv_progress.set(0.0)
+        self.conv_progress.pack(fill="x", padx=14, pady=(14, 6))
+
+        self.conv_status_lbl = ctk.CTkLabel(action_box, text="Listo para convertir", font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY)
+        self.conv_status_lbl.pack(anchor="w", padx=14, pady=(0, 10))
+
+        btn_bar = ctk.CTkFrame(action_box, fg_color="transparent")
+        btn_bar.pack(fill="x", padx=14, pady=(0, 14))
+
+        self.conv_start_btn = ctk.CTkButton(
+            btn_bar, text="⚡ INICIAR CONVERSIÓN", height=38,
+            fg_color=self.theme_accent["primary"], hover_color=self.theme_accent["hover"],
+            font=ctk.CTkFont(size=12, weight="bold"), command=self._start_conversion
+        )
+        self.conv_start_btn.pack(side="left", fill="x", expand=True, padx=(0, 6))
+
+        self.conv_cancel_btn = ctk.CTkButton(
+            btn_bar, text="✖ Cancelar", width=90, height=38,
+            fg_color=theme.BTN_DANGER_BG, hover_color=theme.BTN_DANGER_HOVER, text_color=theme.BTN_DANGER_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"), command=self._cancel_conversion, state="disabled"
+        )
+        self.conv_cancel_btn.pack(side="left", padx=(0, 6))
+
+        self.conv_open_btn = ctk.CTkButton(
+            btn_bar, text="📂 Abrir Archivo", width=120, height=38,
+            fg_color=theme.BTN_SECONDARY_BG, hover_color=theme.BTN_SECONDARY_HOVER, text_color=theme.BTN_SECONDARY_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"), command=self._open_converted_file, state="disabled"
+        )
+        self.conv_open_btn.pack(side="left")
+
+        return view
+
+    def _select_converter_input_file(self):
+        filetypes = [
+            ("Archivos Multimedia", "*.mp4 *.mkv *.avi *.mov *.flv *.webm *.mp3 *.wav *.m4a *.aac *.flac *.ogg"),
+            ("Todos los archivos", "*.*")
+        ]
+        path = filedialog.askopenfilename(title="Seleccionar archivo multimedia para convertir", filetypes=filetypes)
+        if path:
+            self.conv_file_entry.configure(state="normal")
+            self.conv_file_entry.delete(0, tk.END)
+            self.conv_file_entry.insert(0, path)
+            self.conv_file_entry.configure(state="readonly")
+
+            info = get_media_info(path)
+            dur = info.get("duration_str", "--")
+            sz = info.get("size_str", "--")
+            types = []
+            if info.get("has_video"): types.append("Video")
+            if info.get("has_audio"): types.append("Audio")
+            t_str = " + ".join(types) if types else "Archivo multimedia"
+            self.conv_info_lbl.configure(text=f"Información: {t_str}  •  Duración: {dur}  •  Tamaño: {sz}")
+
+            fmt = self.conv_format_var.get()
+            default_dst = self.config.get_audio_dir() if fmt in ["mp3_320", "mp3_192", "wav", "m4a", "flac"] else self.config.get_video_dir()
+            self.conv_dst_entry.configure(state="normal")
+            self.conv_dst_entry.delete(0, tk.END)
+            self.conv_dst_entry.insert(0, default_dst)
+            self.conv_dst_entry.configure(state="readonly")
+
+    def _change_converter_dst_dir(self):
+        chosen = filedialog.askdirectory(initialdir=self.conv_dst_entry.get())
+        if chosen:
+            self.conv_dst_entry.configure(state="normal")
+            self.conv_dst_entry.delete(0, tk.END)
+            self.conv_dst_entry.insert(0, chosen)
+            self.conv_dst_entry.configure(state="readonly")
+
+    def _start_conversion(self):
+        in_file = self.conv_file_entry.get().strip()
+        if not in_file or not os.path.isfile(in_file):
+            messagebox.showwarning("Atención", "Por favor selecciona un archivo multimedia válido antes de iniciar.")
+            return
+
+        out_fmt = self.conv_format_var.get()
+        out_dir = self.conv_dst_entry.get().strip() or os.path.dirname(in_file)
+
+        self._converter_running = True
+        self.conv_start_btn.configure(state="disabled", text="Convirtiendo...")
+        self.conv_cancel_btn.configure(state="normal")
+        self.conv_open_btn.configure(state="disabled")
+        self.conv_progress.set(0.0)
+        self.conv_status_lbl.configure(text="Iniciando FFmpeg...", text_color=theme.ACCENT_CYAN)
+
+        def run():
+            def prog(pct, spd, eta):
+                self.after(0, lambda: self._update_converter_progress(pct, spd, eta))
+
+            def stat(txt):
+                self.after(0, lambda: self.conv_status_lbl.configure(text=txt))
+
+            try:
+                res = self.converter.convert(
+                    input_path=in_file,
+                    output_format=out_fmt,
+                    output_dir=out_dir,
+                    progress_callback=prog,
+                    status_callback=stat
+                )
+                self.after(0, lambda: self._on_converter_success(res))
+            except Exception as e:
+                err = str(e)
+                self.after(0, lambda: self._on_converter_error(err))
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _update_converter_progress(self, pct: float, spd: str, eta: str):
+        if self._converter_running:
+            self.conv_progress.set(pct)
+            self.conv_status_lbl.configure(text=f"Convirtiendo: {int(pct * 100)}%  •  Velocidad: {spd}  •  Restante: {eta}")
+
+    def _on_converter_success(self, res: dict):
+        self._converter_running = False
+        self.conv_start_btn.configure(state="normal", text="⚡ INICIAR CONVERSIÓN")
+        self.conv_cancel_btn.configure(state="disabled")
+        self.conv_open_btn.configure(state="normal")
+        self.conv_progress.set(1.0)
+        self._converted_file_path = res.get("file_path", "")
+        msg = f"✔ ¡Completado! Guardado en: {res.get('file_name')} ({res.get('size_str')}) usando {res.get('gpu_used')}"
+        self.conv_status_lbl.configure(text=msg, text_color=theme.STATUS_SUCCESS)
+        send_notification("✦ OmniVault Conversor", f"¡Conversión completada!\n{res.get('file_name')}")
+
+    def _on_converter_error(self, err_msg: str):
+        self._converter_running = False
+        self.conv_start_btn.configure(state="normal", text="⚡ INICIAR CONVERSIÓN")
+        self.conv_cancel_btn.configure(state="disabled")
+        first_l = err_msg.splitlines()[0]
+        self.conv_status_lbl.configure(text=f"✖ {first_l[:75]}", text_color=theme.STATUS_ERROR)
+        if "cancelada" not in err_msg.lower():
+            messagebox.showerror("Error de Conversión", f"No se pudo completar la conversión:\n\n{err_msg}")
+
+    def _cancel_conversion(self):
+        if self._converter_running:
+            self.converter.cancel()
+            self.conv_status_lbl.configure(text="Cancelando...", text_color=theme.STATUS_WARNING)
+
+    def _open_converted_file(self):
+        if self._converted_file_path and os.path.isfile(self._converted_file_path):
+            try:
+                os.startfile(self._converted_file_path)
+            except Exception:
+                self._open_folder_safe(os.path.dirname(self._converted_file_path))
+
+    # =========================================================================
+    # VISTA 5: AJUSTES (DIRECTORIOS, RENDIMIENTO Y SESIÓN)
     # =========================================================================
     def _create_settings_view(self) -> ctk.CTkFrame:
         view = ctk.CTkFrame(self.main_container, fg_color="transparent")
@@ -1216,7 +1570,51 @@ class OmniVaultApp(ctk.CTk):
             variable=self.subtitles_switch_var, font=ctk.CTkFont(size=11),
             command=self._on_subtitles_toggle
         )
-        subs_sw.pack(anchor="w", padx=14, pady=(2, 12))
+        subs_sw.pack(anchor="w", padx=14, pady=(2, 6))
+
+        # Switch System Tray
+        self.tray_switch_var = ctk.BooleanVar(value=bool(self.config.get("tray_enabled", True)))
+        tray_sw = ctk.CTkSwitch(
+            box2, text="Minimizar a la bandeja del sistema (System Tray) al cerrar la ventana",
+            variable=self.tray_switch_var, font=ctk.CTkFont(size=11),
+            command=self._on_tray_toggle
+        )
+        tray_sw.pack(anchor="w", padx=14, pady=(2, 8))
+
+        # Acción al terminar descargas
+        row_action = ctk.CTkFrame(box2, fg_color="transparent")
+        row_action.pack(fill="x", padx=14, pady=(4, 12))
+
+        ctk.CTkLabel(row_action, text="Acción al completar todas las descargas:", font=ctk.CTkFont(size=11, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(side="left")
+
+        self.finish_action_var = ctk.StringVar(value=self._get_finish_action_label(self.config.get("on_finish_action", "none")))
+        self.finish_menu = ctk.CTkOptionMenu(
+            row_action,
+            values=["Ninguna", "Sonido de campana", "Suspender equipo", "Apagar equipo (aviso 30s)"],
+            variable=self.finish_action_var,
+            height=28,
+            command=self._on_finish_action_changed
+        )
+        self.finish_menu.pack(side="right")
+
+        # Bloque: Personalización de Tema y Acento
+        box_theme = ctk.CTkFrame(settings_scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
+        box_theme.pack(fill="x", pady=6)
+
+        ctk.CTkLabel(box_theme, text="🎨 Personalización & Color de Acento", font=ctk.CTkFont(size=13, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=14, pady=(12, 4))
+        ctk.CTkLabel(box_theme, text="Elige el estilo visual y color de acento principal de la aplicación:", font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY).pack(anchor="w", padx=14, pady=(0, 8))
+
+        theme_row = ctk.CTkFrame(box_theme, fg_color="transparent")
+        theme_row.pack(fill="x", padx=14, pady=(0, 14))
+
+        self.theme_seg = ctk.CTkSegmentedButton(
+            theme_row,
+            values=["🟣 Violet", "🔵 Blue", "🟢 Emerald", "🟠 Orange", "🌸 Rose"],
+            command=self._on_theme_changed,
+            height=32
+        )
+        self.theme_seg.set(self._get_current_theme_label())
+        self.theme_seg.pack(fill="x")
 
         # Bloque 3: Sesión de Navegador & Cookies
         box3 = ctk.CTkFrame(settings_scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
@@ -1532,6 +1930,119 @@ class OmniVaultApp(ctk.CTk):
         )
         self.session_lbl.configure(text="● Sesión: Anónima", text_color=theme.TEXT_MUTED)
         messagebox.showinfo("Sesión Limpiada", "Se ha eliminado el archivo de cookies y se ha restablecido el modo anónimo.")
+
+    def _get_current_theme_label(self) -> str:
+        cur = self.config.get("accent_theme", "violet")
+        mapping = {
+            "violet": "🟣 Violet",
+            "blue": "🔵 Blue",
+            "emerald": "🟢 Emerald",
+            "orange": "🟠 Orange",
+            "rose": "🌸 Rose",
+        }
+        return mapping.get(cur, "🟣 Violet")
+
+    def _on_theme_changed(self, choice: str):
+        theme_id = "violet"
+        for k in themes.get_available_themes():
+            t = themes.get_theme(k)
+            if t["name"].lower() in choice.lower() or t["id"].lower() in choice.lower() or t["emoji"] in choice:
+                theme_id = k
+                break
+        self.config.set("accent_theme", theme_id)
+        self.theme_accent = themes.get_theme(theme_id)
+        if hasattr(self, "tray") and self.tray.is_available():
+            self.tray.update_icon(self.theme_accent["primary"])
+        messagebox.showinfo(
+            "Tema de Acento Seleccionado",
+            f"Se ha activado el estilo: {self.theme_accent['name']}.\nLos acentos y botones se han actualizado con éxito."
+        )
+
+    def _on_tray_toggle(self):
+        val = self.tray_switch_var.get()
+        self.config.set("tray_enabled", val)
+        if val and not self.tray._is_running:
+            self.tray.start()
+        elif not val and self.tray._is_running:
+            self.tray.stop()
+
+    def _get_finish_action_label(self, val: str) -> str:
+        mapping = {
+            "none": "Ninguna",
+            "sound": "Sonido de campana",
+            "sleep": "Suspender equipo",
+            "shutdown": "Apagar equipo (aviso 30s)",
+        }
+        return mapping.get(val, "Ninguna")
+
+    def _on_finish_action_changed(self, choice: str):
+        mapping = {
+            "Ninguna": "none",
+            "Sonido de campana": "sound",
+            "Suspender equipo": "sleep",
+            "Apagar equipo (aviso 30s)": "shutdown",
+        }
+        self.config.set("on_finish_action", mapping.get(choice, "none"))
+
+    def _on_queue_all_completed(self):
+        action = self.config.get("on_finish_action", "none")
+        if action == "sound":
+            try:
+                import winsound
+                winsound.MessageBeep(winsound.MB_ICONASTERISK)
+            except Exception:
+                pass
+        elif action == "sleep":
+            try:
+                flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0) if sys.platform == "win32" else 0
+                subprocess.run(["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"], creationflags=flags)
+            except Exception:
+                pass
+        elif action == "shutdown":
+            self.after(0, self._show_shutdown_countdown_dialog)
+
+    def _show_shutdown_countdown_dialog(self):
+        try:
+            flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0) if sys.platform == "win32" else 0
+            subprocess.run(["shutdown", "/s", "/t", "30", "/c", "OmniVault: Descargas finalizadas. Apagando equipo..."], creationflags=flags)
+        except Exception:
+            pass
+
+        win = ctk.CTkToplevel(self)
+        win.title("Apagado Automático")
+        win.geometry("420x210")
+        win.attributes("-topmost", True)
+        win.configure(fg_color=theme.BG_CARD)
+
+        ctk.CTkLabel(win, text="💤 Descargas Completadas", font=ctk.CTkFont(size=16, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(pady=(16, 4))
+        cd_lbl = ctk.CTkLabel(win, text="El equipo se apagará en 30 segundos...", font=ctk.CTkFont(size=13), text_color=theme.STATUS_WARNING)
+        cd_lbl.pack(pady=6)
+
+        seconds_left = [30]
+        def count():
+            seconds_left[0] -= 1
+            if seconds_left[0] > 0 and win.winfo_exists():
+                cd_lbl.configure(text=f"El equipo se apagará en {seconds_left[0]} segundos...")
+                win.after(1000, count)
+
+        win.after(1000, count)
+
+        def cancel_shutdown():
+            try:
+                flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0) if sys.platform == "win32" else 0
+                subprocess.run(["shutdown", "/a"], creationflags=flags)
+            except Exception:
+                pass
+            win.destroy()
+            messagebox.showinfo("Cancelado", "El apagado automático del sistema ha sido cancelado.")
+
+        ctk.CTkButton(
+            win, text="✖ CANCELAR APAGADO", height=38,
+            fg_color=theme.BTN_DANGER_BG, hover_color=theme.BTN_DANGER_HOVER, text_color=theme.BTN_DANGER_TEXT,
+            font=ctk.CTkFont(size=12, weight="bold"), command=cancel_shutdown
+        ).pack(pady=14, padx=20, fill="x")
+
+        win.protocol("WM_DELETE_WINDOW", cancel_shutdown)
 
     # =========================================================================
     # REPRODUCTOR DE AUDIO INTEGRADO (MINI-PLAYER NATIVO MCI)

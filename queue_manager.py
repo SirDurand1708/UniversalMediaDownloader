@@ -24,6 +24,8 @@ class DownloadTask:
         browser: Optional[str] = None,
         download_subtitles: bool = False,
         use_aria2c: bool = True,
+        clip_start: Optional[str] = None,
+        clip_end: Optional[str] = None,
     ):
         self.id = task_id
         self.url = url
@@ -34,6 +36,8 @@ class DownloadTask:
         self.browser = browser
         self.download_subtitles = download_subtitles
         self.use_aria2c = use_aria2c
+        self.clip_start = clip_start
+        self.clip_end = clip_end
         self.format_label = format_type
         self.media_type = "audio" if format_type in ["mp3_320", "mp3_192", "m4a_best", "wav"] else "video"
 
@@ -60,6 +64,7 @@ class QueueManager:
 
         self.on_task_updated: Optional[Callable[[DownloadTask], None]] = None
         self.on_task_finished: Optional[Callable[[DownloadTask], None]] = None
+        self.on_queue_completed: Optional[Callable[[], None]] = None
 
         for idx in range(self.max_workers):
             t = threading.Thread(target=self._worker_loop, daemon=True, name=f"DLWorker-{idx+1}")
@@ -89,6 +94,8 @@ class QueueManager:
         browser: Optional[str] = None,
         download_subtitles: bool = False,
         use_aria2c: bool = True,
+        clip_start: Optional[str] = None,
+        clip_end: Optional[str] = None,
     ) -> DownloadTask:
         task_id = f"task_{int(time.time())}_{uuid.uuid4().hex[:6]}"
         task = DownloadTask(
@@ -101,6 +108,8 @@ class QueueManager:
             browser=browser,
             download_subtitles=download_subtitles,
             use_aria2c=use_aria2c,
+            clip_start=clip_start,
+            clip_end=clip_end,
         )
 
         with self._lock:
@@ -118,6 +127,8 @@ class QueueManager:
         browser: Optional[str] = None,
         download_subtitles: bool = False,
         use_aria2c: bool = True,
+        clip_start: Optional[str] = None,
+        clip_end: Optional[str] = None,
     ) -> int:
         """Encola una lista de elementos (playlist o selección múltiple)."""
         count = 0
@@ -136,6 +147,8 @@ class QueueManager:
                 browser=browser,
                 download_subtitles=download_subtitles,
                 use_aria2c=use_aria2c,
+                clip_start=clip_start,
+                clip_end=clip_end,
             )
             count += 1
         return count
@@ -194,6 +207,13 @@ class QueueManager:
             except Exception:
                 pass
 
+    def _notify_queue_completed(self):
+        if self.on_queue_completed:
+            try:
+                self.on_queue_completed()
+            except Exception:
+                pass
+
     def _worker_loop(self):
         while self._running:
             try:
@@ -238,6 +258,8 @@ class QueueManager:
                     browser=task.browser,
                     download_subtitles=task.download_subtitles,
                     use_aria2c=task.use_aria2c,
+                    clip_start=task.clip_start,
+                    clip_end=task.clip_end,
                 )
 
                 if task.status != "cancelled":
@@ -280,3 +302,6 @@ class QueueManager:
 
             finally:
                 self.task_queue.task_done()
+                # Si ya no quedan tareas pendientes ni activas, notificar finalización de cola
+                if self.task_queue.empty() and not self.get_active_tasks():
+                    self._notify_queue_completed()
