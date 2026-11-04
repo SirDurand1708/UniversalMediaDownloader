@@ -36,6 +36,9 @@ class ConfigManager:
             "default_format": "mp3_320",
             "max_workers": 2,
             "clipboard_watch": True,
+            "notifications_enabled": True,
+            "subtitles_enabled": False,
+            "aria2c_enabled": True,
         }
 
     def _load(self) -> Dict[str, Any]:

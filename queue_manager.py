@@ -10,6 +10,7 @@ import uuid
 from typing import Dict, Any, List, Callable, Optional
 from downloader import DownloaderEngine, clean_error_text
 from history_manager import HistoryManager
+from notifications import send_notification
 
 class DownloadTask:
     def __init__(
@@ -20,7 +21,9 @@ class DownloadTask:
         output_dir: str,
         title: str = "",
         thumbnail_url: str = "",
-        browser: Optional[str] = None
+        browser: Optional[str] = None,
+        download_subtitles: bool = False,
+        use_aria2c: bool = True,
     ):
         self.id = task_id
         self.url = url
@@ -29,6 +32,8 @@ class DownloadTask:
         self.title = title or "Analizando..."
         self.thumbnail_url = thumbnail_url
         self.browser = browser
+        self.download_subtitles = download_subtitles
+        self.use_aria2c = use_aria2c
         self.format_label = format_type
         self.media_type = "audio" if format_type in ["mp3_320", "mp3_192", "m4a_best", "wav"] else "video"
 
@@ -81,10 +86,22 @@ class QueueManager:
         output_dir: str,
         title: str = "",
         thumbnail_url: str = "",
-        browser: Optional[str] = None
+        browser: Optional[str] = None,
+        download_subtitles: bool = False,
+        use_aria2c: bool = True,
     ) -> DownloadTask:
         task_id = f"task_{int(time.time())}_{uuid.uuid4().hex[:6]}"
-        task = DownloadTask(task_id, url, format_type, output_dir, title, thumbnail_url, browser=browser)
+        task = DownloadTask(
+            task_id,
+            url,
+            format_type,
+            output_dir,
+            title,
+            thumbnail_url,
+            browser=browser,
+            download_subtitles=download_subtitles,
+            use_aria2c=use_aria2c,
+        )
 
         with self._lock:
             self.tasks[task_id] = task
@@ -98,7 +115,9 @@ class QueueManager:
         items: List[Dict[str, Any]],
         format_type: str,
         output_dir: str,
-        browser: Optional[str] = None
+        browser: Optional[str] = None,
+        download_subtitles: bool = False,
+        use_aria2c: bool = True,
     ) -> int:
         """Encola una lista de elementos (playlist o selección múltiple)."""
         count = 0
@@ -114,7 +133,9 @@ class QueueManager:
                 output_dir=output_dir,
                 title=title,
                 thumbnail_url=thumb,
-                browser=browser
+                browser=browser,
+                download_subtitles=download_subtitles,
+                use_aria2c=use_aria2c,
             )
             count += 1
         return count
@@ -214,7 +235,9 @@ class QueueManager:
                     output_dir=task.output_dir,
                     progress_callback=progress_cb,
                     status_callback=status_cb,
-                    browser=task.browser
+                    browser=task.browser,
+                    download_subtitles=task.download_subtitles,
+                    use_aria2c=task.use_aria2c,
                 )
 
                 if task.status != "cancelled":
@@ -235,6 +258,13 @@ class QueueManager:
                         url=task.url,
                         thumbnail_url=task.thumbnail_url
                     )
+
+                    # Notificación nativa y sonido al usuario
+                    try:
+                        clean_title = task.title[:45] + ("..." if len(task.title) > 45 else "")
+                        send_notification("✦ OmniVault Desktop", f"¡Descarga completada!\n{clean_title}")
+                    except Exception:
+                        pass
 
                     self._notify_update(task)
                     self._notify_finished(task)

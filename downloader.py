@@ -56,6 +56,53 @@ def is_ffmpeg_available() -> bool:
     """Comprueba si FFmpeg está disponible y funcional."""
     return bool(FFMPEG_DIR or shutil.which("ffmpeg"))
 
+def _get_aria2c_path() -> Optional[str]:
+    """Busca aria2c en el PATH, carpeta del proyecto o subcarpeta bin."""
+    found = shutil.which("aria2c")
+    if found:
+        return found
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(base_dir, "aria2c.exe"),
+        os.path.join(base_dir, "bin", "aria2c.exe"),
+    ]
+    for c in candidates:
+        if os.path.isfile(c):
+            return c
+    return None
+
+def is_aria2c_available() -> bool:
+    """Comprueba si el acelerador de red multihilo aria2c está disponible."""
+    return bool(_get_aria2c_path())
+
+_DETECTED_GPU_ACCEL: Optional[str] = None
+_GPU_ACCEL_CHECKED: bool = False
+
+def detect_hardware_acceleration() -> Optional[str]:
+    """Detecta si el sistema cuenta con GPU para codificación rápida en FFmpeg (NVIDIA, Intel o AMD)."""
+    global _DETECTED_GPU_ACCEL, _GPU_ACCEL_CHECKED
+    if _GPU_ACCEL_CHECKED:
+        return _DETECTED_GPU_ACCEL
+
+    _GPU_ACCEL_CHECKED = True
+    ff = shutil.which("ffmpeg") or (os.path.join(FFMPEG_DIR, "ffmpeg.exe") if FFMPEG_DIR else None)
+    if not ff:
+        return None
+
+    try:
+        flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0) if sys.platform == "win32" else 0
+        res = subprocess.run([ff, "-hide_banner", "-encoders"], capture_output=True, text=True, creationflags=flags, timeout=3)
+        out = res.stdout.lower()
+        if "h264_nvenc" in out:
+            _DETECTED_GPU_ACCEL = "NVIDIA NVENC"
+        elif "h264_amf" in out:
+            _DETECTED_GPU_ACCEL = "AMD AMF"
+        elif "h264_qsv" in out:
+            _DETECTED_GPU_ACCEL = "Intel QuickSync"
+    except Exception:
+        pass
+    return _DETECTED_GPU_ACCEL
+
 def is_browser_running(browser_name: str) -> bool:
     """Comprueba de forma rápida si el proceso del navegador está en ejecución en Windows."""
     browser_procs = {
@@ -362,7 +409,7 @@ class DownloaderEngine:
                 'message': f'No se pudo verificar la sesión: {clean_error_text(str(e))}'
             }
 
-    def _base_opts(self, browser: Optional[str] = None, cookiefile: Optional[str] = None, use_cookies: bool = False) -> Dict[str, Any]:
+    def _base_opts(self, browser: Optional[str] = None, cookiefile: Optional[str] = None, use_cookies: bool = False, use_aria2c: bool = False) -> Dict[str, Any]:
         node_path = shutil.which("node") or r"C:\Program Files\nodejs\node.exe"
         js_conf = {'node': {'path': node_path}} if (node_path and os.path.isfile(node_path)) else {'node': {}}
 
@@ -373,6 +420,14 @@ class DownloaderEngine:
             'windowsfilenames': True,
             'js_runtimes': js_conf,
         }
+
+        # Aceleración de red con aria2c si está disponible
+        if use_aria2c and is_aria2c_available():
+            aria_path = _get_aria2c_path()
+            opts['external_downloader'] = aria_path or 'aria2c'
+            opts['external_downloader_args'] = {
+                'aria2c': ['-s', '8', '-x', '8', '-k', '1M', '-j', '4', '--file-allocation=none']
+            }
 
         # Soporte de impersonate si curl_cffi está presente
         try:
@@ -726,6 +781,8 @@ class DownloaderEngine:
         status_callback: Optional[Callable[[str], None]] = None,
         browser: Optional[str] = None,
         cookiefile: Optional[str] = None,
+        download_subtitles: bool = False,
+        use_aria2c: bool = True,
     ) -> Dict[str, Any]:
         """Descarga y convierte el archivo multimedia según el formato solicitado."""
         url = normalize_url(url)
@@ -878,7 +935,20 @@ class DownloaderEngine:
         else:
             raise ValueError(f"Formato desconocido: {format_type}")
 
-        ydl_opts_clean = self._base_opts(use_cookies=False)
+        if download_subtitles:
+            format_opts.update({
+                'writesubtitles': True,
+                'writeautomaticsub': True,
+                'subtitleslangs': ['es', 'en'],
+                'subtitlesformat': 'srt',
+            })
+            if media_type == 'video':
+                format_opts.setdefault('postprocessors', []).append({
+                    'key': 'FFmpegEmbedSubtitle',
+                    'already_have_subtitle': False
+                })
+
+        ydl_opts_clean = self._base_opts(use_cookies=False, use_aria2c=use_aria2c)
         ydl_opts_clean.update(format_opts)
 
         info = None
@@ -892,7 +962,7 @@ class DownloaderEngine:
                     raise Exception("Descarga cancelada por el usuario.")
 
                 if any(k in err for k in ['sign in', 'age', 'confirm your age', 'private', 'login', 'bot', 'confirm you']):
-                    ydl_opts_cookies = self._base_opts(browser=browser, cookiefile=cookiefile, use_cookies=True)
+                    ydl_opts_cookies = self._base_opts(browser=browser, cookiefile=cookiefile, use_cookies=True, use_aria2c=use_aria2c)
                     ydl_opts_cookies.update(format_opts)
                     try:
                         with yt_dlp.YoutubeDL(ydl_opts_cookies) as ydl:

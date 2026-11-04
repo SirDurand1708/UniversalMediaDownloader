@@ -82,14 +82,36 @@ Compatible con **Vivaldi, Mozilla Firefox, Brave y Opera**:
 
 *(Nota: En Google Chrome y Microsoft Edge v127+, Windows bloquea la extracción directa mediante App-Bound Encryption; para ellos utiliza siempre el Método 1).*
 
-### 6. 📥 Gestor de Descargas Concurrentes
+### 6. 🎧 Mini-Reproductor de Audio Integrado
+- Reproductor de audio acoplado en la barra inferior para escuchar tus canciones descargadas **sin salir de OmniVault**.
+- Construido con la API nativa **Windows MCI (`winmm.dll`)**: consumo de memoria ultra bajo (0% CPU adicional).
+- Barra de desplazamiento interactiva (*Seekbar*), control de volumen, contador de tiempo transcurrido/total y controles de Pausa/Reanudar.
+
+### 7. ⚡ Aceleración de Red (Aria2c) y GPU (FFmpeg)
+- **Acelerador de red multihilo:** Compatible con `aria2c` para descargar archivos en hasta 8 segmentos simultáneos (descargas 3x a 5x más veloces).
+- **Aceleración por GPU:** Detección automática de aceleración gráfica para codificación de video en **NVIDIA (NVENC)**, **AMD (AMF)** e **Intel (QuickSync)**.
+
+### 8. 🔔 Notificaciones Nativas de Windows y Sonido Sutil
+- Al completarse una descarga o lote, OmniVault emite una **notificación Toast nativa** en Windows 10/11 y un timbre suave de sistema.
+- Puedes minimizar la aplicación y continuar trabajando o jugando; el sistema te avisará al terminar.
+
+### 9. 💬 Subtítulos Automáticos (.SRT) y Letras
+- Opción en Ajustes para descargar automáticamente subtítulos en español e inglés, ya sea incrustados en archivos MP4 o como archivos `.srt` acompañantes.
+
+### 10. ⌨ Atajos de Teclado Rápidos
+- **`Ctrl + V`:** Pega y analiza automáticamente cualquier enlace del portapapeles desde cualquier sección de la app.
+- **`Ctrl + F`:** Abre *Mi Biblioteca* y enfoca el buscador de canciones.
+- **`Barra Espaciadora`:** Pausa o reanuda la música del mini-reproductor (si no estás escribiendo en una caja de texto).
+- **`Escape`:** Oculta el mini-reproductor o cierra los selectores emergentes.
+
+### 11. 📥 Gestor de Descargas Concurrentes
 - Descargas en segundo plano con barra de progreso, velocidad en tiempo real y tiempo restante.
 - Cola multihilo que procesa varias descargas sin congelar la interfaz.
 - Cierre limpio y cancelación segura de archivos parciales (`.part`).
 
-### 7. 🎵 Mi Biblioteca Local
+### 12. 🎵 Mi Biblioteca Local
 - Historial completo de tus archivos descargados guardado de manera atómica.
-- Botón **▶ Reproducir** directo con el reproductor multimedia predeterminado (protegido contra ejecución de ejecutables no deseados).
+- Botón **▶ Reproducir** directo con el mini-reproductor integrado para audios o reproductor del sistema para videos.
 - Botón **📁 Ubicación** para abrir y resaltar el archivo en el Explorador de archivos (compatible con Windows, macOS y Linux).
 
 ---
@@ -111,16 +133,22 @@ FFmpeg es necesario para convertir audios a MP3/WAV y combinar video 1080p/4K co
   ```
 - **Opción B (Portátil):** Descarga `ffmpeg.exe` y colócalo directamente en la carpeta de este programa.
 
+### 3. Instalar Aria2c (Opcional para aceleración 5x)
+- En PowerShell: `winget install aria2.aria2` o coloca `aria2c.exe` en la carpeta del proyecto.
+
 ---
 
 ## ▶️ Cómo ejecutar la aplicación
 
+### Modo Ventana Limpia (Sin Terminal / Ventana Negra)
 Haz doble clic en:
 ```
 iniciar.bat
 ```
-O desde la consola:
-```bash
-py app.py
+*(Utiliza el lanzador `pyw` de Windows para abrir la interfaz gráfica directamente sin dejar ninguna ventana negra de consola abierta).*
+
+### Modo Depuración (Con Consola)
+Si deseas ver los registros técnicos de descarga en la terminal:
 ```
-*(o `python app.py`)*
+iniciar_consola.bat
+```

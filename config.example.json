@@ -5,5 +5,8 @@
   "browser_cookies": "none",
   "default_format": "mp3_320",
   "max_workers": 2,
-  "clipboard_watch": true
+  "clipboard_watch": true,
+  "notifications_enabled": true,
+  "subtitles_enabled": false,
+  "aria2c_enabled": true
 }

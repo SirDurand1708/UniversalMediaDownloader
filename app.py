@@ -13,11 +13,17 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
 import theme
-from downloader import DownloaderEngine, is_url, normalize_url, clean_error_text, is_ffmpeg_available, FFMPEG_DIR, is_browser_running
+from downloader import (
+    DownloaderEngine, is_url, normalize_url, clean_error_text,
+    is_ffmpeg_available, FFMPEG_DIR, is_browser_running,
+    is_aria2c_available, detect_hardware_acceleration, format_duration
+)
 from queue_manager import QueueManager, DownloadTask
 from history_manager import HistoryManager
 from image_cache import ThumbnailCache
 from config_manager import ConfigManager
+from audio_player import AudioPlayer
+from notifications import send_notification
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -64,8 +70,19 @@ class OmniVaultApp(ctk.CTk):
         self._last_detected_clipboard = ""
         self._clipboard_banner_visible = False
 
+        # Reproductor de audio integrado nativo
+        self.player = AudioPlayer()
+        self._is_player_visible = False
+        self._is_seeking = False
+
         self._build_layout()
         self._select_tab("explore")
+
+        # Configuración de atajos de teclado rápidos
+        self._setup_keyboard_shortcuts()
+
+        # Ciclo de actualización de timeline del reproductor
+        self.after(500, self._update_player_loop)
 
         # Iniciar monitoreo del portapapeles si está activado
         self.after(1500, self._check_clipboard_loop)
@@ -81,6 +98,7 @@ class OmniVaultApp(ctk.CTk):
             if not confirm:
                 return
 
+        self.player.close()
         self.queue_manager.stop()
         self.img_cache.shutdown(wait=False)
         self.destroy()
@@ -100,6 +118,7 @@ class OmniVaultApp(ctk.CTk):
 
     def _build_layout(self):
         self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=0)                  # Fila para el reproductor inferior
         self.grid_columnconfigure(0, weight=0, minsize=210)  # Barra lateral
         self.grid_columnconfigure(1, weight=1)               # Contenedor dinámico principal
 
@@ -209,6 +228,9 @@ class OmniVaultApp(ctk.CTk):
             "library": self._create_library_view(),
             "settings": self._create_settings_view(),
         }
+
+        # Mini-Reproductor integrado en el pie de página
+        self.player_frame = self._create_player_bar()
 
     def _select_tab(self, tab_id: str):
         for t_id, view in self.views.items():
@@ -579,7 +601,12 @@ class OmniVaultApp(ctk.CTk):
         fmt = self.selected_format.get()
         target_dir = self._get_target_dir(fmt)
         browser = self._get_active_browser()
-        count = self.queue_manager.add_batch(selected_items, format_type=fmt, output_dir=target_dir, browser=browser)
+        subtitles = bool(self.config.get("subtitles_enabled", False))
+        aria2c = bool(self.config.get("aria2c_enabled", True))
+        count = self.queue_manager.add_batch(
+            selected_items, format_type=fmt, output_dir=target_dir,
+            browser=browser, download_subtitles=subtitles, use_aria2c=aria2c
+        )
         messagebox.showinfo("Descarga en Lote", f"Se han añadido {count} elementos a la cola de descargas.")
         self._select_tab("downloads")
 
@@ -722,7 +749,12 @@ class OmniVaultApp(ctk.CTk):
         fmt = self.selected_format.get()
         target_dir = self._get_target_dir(fmt)
         browser = self._get_active_browser()
-        count = self.queue_manager.add_batch(selected, format_type=fmt, output_dir=target_dir, browser=browser)
+        subtitles = bool(self.config.get("subtitles_enabled", False))
+        aria2c = bool(self.config.get("aria2c_enabled", True))
+        count = self.queue_manager.add_batch(
+            selected, format_type=fmt, output_dir=target_dir,
+            browser=browser, download_subtitles=subtitles, use_aria2c=aria2c
+        )
         messagebox.showinfo("Playlist Encolada", f"Se han añadido {count} descargas a la cola activa.")
         self._select_tab("downloads")
 
@@ -825,9 +857,13 @@ class OmniVaultApp(ctk.CTk):
         thumb = self.current_media.get("thumbnail")
         browser = self._get_active_browser()
 
+        subtitles = bool(self.config.get("subtitles_enabled", False))
+        aria2c = bool(self.config.get("aria2c_enabled", True))
+
         self.queue_manager.add_download(
             url=url, format_type=fmt, output_dir=target_dir,
-            title=title, thumbnail_url=thumb, browser=browser
+            title=title, thumbnail_url=thumb, browser=browser,
+            download_subtitles=subtitles, use_aria2c=aria2c
         )
 
         messagebox.showinfo("Descarga Encolada", f"'{title[:35]}...' añadido a la cola.")
@@ -1029,7 +1065,7 @@ class OmniVaultApp(ctk.CTk):
             ctk.CTkButton(
                 actions_frame, text="▶ Reproducir", width=85, height=28,
                 fg_color=theme.BTN_PRIMARY_BG, hover_color=theme.BTN_PRIMARY_HOVER, text_color=theme.BTN_PRIMARY_TEXT,
-                font=ctk.CTkFont(size=10, weight="bold"), command=lambda p=item.get("file_path"): self.history.play_media(p)
+                font=ctk.CTkFont(size=10, weight="bold"), command=lambda it=item: self._on_play_library_item(it)
             ).pack(side="left", padx=2)
 
             ctk.CTkButton(
@@ -1151,7 +1187,36 @@ class OmniVaultApp(ctk.CTk):
             variable=self.clip_switch_var, font=ctk.CTkFont(size=11),
             command=self._on_clipboard_watch_toggle
         )
-        clip_sw.pack(anchor="w", padx=14, pady=(4, 12))
+        clip_sw.pack(anchor="w", padx=14, pady=(2, 6))
+
+        # Switch Aria2c
+        aria_ok = is_aria2c_available()
+        aria_status = "Activo (8 hilos)" if aria_ok else "No detectado (Opcional)"
+        self.aria2c_switch_var = ctk.BooleanVar(value=bool(self.config.get("aria2c_enabled", True)))
+        aria_sw = ctk.CTkSwitch(
+            box2, text=f"Acelerador de red multihilo Aria2c — {aria_status}",
+            variable=self.aria2c_switch_var, font=ctk.CTkFont(size=11),
+            command=self._on_aria2c_toggle
+        )
+        aria_sw.pack(anchor="w", padx=14, pady=(2, 6))
+
+        # Switch Notificaciones
+        self.notify_switch_var = ctk.BooleanVar(value=bool(self.config.get("notifications_enabled", True)))
+        notify_sw = ctk.CTkSwitch(
+            box2, text="Notificaciones nativas y sonido sutil al terminar descargas",
+            variable=self.notify_switch_var, font=ctk.CTkFont(size=11),
+            command=self._on_notify_toggle
+        )
+        notify_sw.pack(anchor="w", padx=14, pady=(2, 6))
+
+        # Switch Subtítulos
+        self.subtitles_switch_var = ctk.BooleanVar(value=bool(self.config.get("subtitles_enabled", False)))
+        subs_sw = ctk.CTkSwitch(
+            box2, text="Descargar subtítulos automáticamente (.srt e incrustados en video)",
+            variable=self.subtitles_switch_var, font=ctk.CTkFont(size=11),
+            command=self._on_subtitles_toggle
+        )
+        subs_sw.pack(anchor="w", padx=14, pady=(2, 12))
 
         # Bloque 3: Sesión de Navegador & Cookies
         box3 = ctk.CTkFrame(settings_scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
@@ -1294,9 +1359,16 @@ class OmniVaultApp(ctk.CTk):
         ff_found = is_ffmpeg_available()
         ff_detail = f"Habilitado ({FFMPEG_DIR or 'PATH'})" if ff_found else "No detectado (Instala FFmpeg o coloca ffmpeg.exe en la carpeta)"
 
+        gpu_accel = detect_hardware_acceleration() or "Procesamiento por CPU estándar"
+        aria_ok = is_aria2c_available()
+        aria_detail = "Habilitado (8 conexiones simultáneas por archivo)" if aria_ok else "No detectado (Opcional)"
+
         diag_text = (
             f"• Aplicación: OmniVault Desktop (Obsidian & Titanium Edition)\n"
             f"• Python: {sys.version.split()[0]} ({sys.platform})\n"
+            f"• Reproductor de Audio: MCI Nativo winmm.dll (Bajo consumo de memoria)\n"
+            f"• Aceleración GPU FFmpeg: {gpu_accel}\n"
+            f"• Acelerador Aria2c: {aria_detail}\n"
             f"• Motor TikTok: Directo HD sin marca de agua activo con soporte ID3\n"
             f"• Impersonación TLS: Habilitada con curl_cffi\n"
             f"• Motor FFmpeg: {ff_detail}\n"
@@ -1316,6 +1388,18 @@ class OmniVaultApp(ctk.CTk):
         self.config.set("clipboard_watch", val)
         if not val:
             self._dismiss_clipboard_banner()
+
+    def _on_aria2c_toggle(self):
+        val = self.aria2c_switch_var.get()
+        self.config.set("aria2c_enabled", val)
+
+    def _on_notify_toggle(self):
+        val = self.notify_switch_var.get()
+        self.config.set("notifications_enabled", val)
+
+    def _on_subtitles_toggle(self):
+        val = self.subtitles_switch_var.get()
+        self.config.set("subtitles_enabled", val)
 
     def _change_audio_dir(self):
         chosen = filedialog.askdirectory(initialdir=self.config.get_audio_dir())
@@ -1448,6 +1532,235 @@ class OmniVaultApp(ctk.CTk):
         )
         self.session_lbl.configure(text="● Sesión: Anónima", text_color=theme.TEXT_MUTED)
         messagebox.showinfo("Sesión Limpiada", "Se ha eliminado el archivo de cookies y se ha restablecido el modo anónimo.")
+
+    # =========================================================================
+    # REPRODUCTOR DE AUDIO INTEGRADO (MINI-PLAYER NATIVO MCI)
+    # =========================================================================
+    def _create_player_bar(self) -> ctk.CTkFrame:
+        bar = ctk.CTkFrame(
+            self,
+            height=66,
+            corner_radius=0,
+            fg_color=theme.BG_SIDEBAR,
+            border_width=1,
+            border_color=theme.BORDER_COLOR
+        )
+        bar.grid_propagate(False)
+
+        bar.grid_columnconfigure(0, weight=1, minsize=240)
+        bar.grid_columnconfigure(1, weight=2, minsize=320)
+        bar.grid_columnconfigure(2, weight=1, minsize=200)
+        bar.grid_rowconfigure(0, weight=1)
+
+        # Columna 1: Info pista
+        info_col = ctk.CTkFrame(bar, fg_color="transparent")
+        info_col.grid(row=0, column=0, sticky="w", padx=16)
+
+        self.player_icon_lbl = ctk.CTkLabel(info_col, text="🎵", font=ctk.CTkFont(size=22), width=36)
+        self.player_icon_lbl.pack(side="left", padx=(0, 10))
+
+        text_col = ctk.CTkFrame(info_col, fg_color="transparent")
+        text_col.pack(side="left", fill="both", expand=True)
+
+        self.player_title_lbl = ctk.CTkLabel(
+            text_col, text="Ninguna pista", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            text_color=theme.TEXT_PRIMARY, anchor="w"
+        )
+        self.player_title_lbl.pack(fill="x")
+
+        self.player_artist_lbl = ctk.CTkLabel(
+            text_col, text="OmniVault Player", font=ctk.CTkFont(family="Segoe UI", size=10),
+            text_color=theme.TEXT_MUTED, anchor="w"
+        )
+        self.player_artist_lbl.pack(fill="x")
+
+        # Columna 2: Controles & Timeline
+        center_col = ctk.CTkFrame(bar, fg_color="transparent")
+        center_col.grid(row=0, column=1, sticky="nsew", pady=4)
+
+        ctrl_row = ctk.CTkFrame(center_col, fg_color="transparent")
+        ctrl_row.pack()
+
+        self.player_play_btn = ctk.CTkButton(
+            ctrl_row, text="⏸", width=36, height=28,
+            fg_color=theme.BTN_PRIMARY_BG, hover_color=theme.BTN_PRIMARY_HOVER,
+            text_color=theme.BTN_PRIMARY_TEXT, font=ctk.CTkFont(size=14, weight="bold"),
+            command=self._toggle_player_playback
+        )
+        self.player_play_btn.pack(side="left", padx=4)
+
+        self.player_stop_btn = ctk.CTkButton(
+            ctrl_row, text="⏹", width=30, height=28,
+            fg_color=theme.BTN_SECONDARY_BG, hover_color=theme.BTN_SECONDARY_HOVER,
+            text_color=theme.BTN_SECONDARY_TEXT, font=ctk.CTkFont(size=11),
+            command=self._stop_player_playback
+        )
+        self.player_stop_btn.pack(side="left", padx=4)
+
+        seek_row = ctk.CTkFrame(center_col, fg_color="transparent")
+        seek_row.pack(fill="x", padx=12, pady=(2, 0))
+
+        self.player_time_cur_lbl = ctk.CTkLabel(seek_row, text="00:00", font=ctk.CTkFont(size=10), text_color=theme.TEXT_MUTED, width=35)
+        self.player_time_cur_lbl.pack(side="left")
+
+        self.player_slider = ctk.CTkSlider(
+            seek_row, from_=0, to=1000, height=14,
+            button_length=10, button_color=theme.ACCENT_CYAN,
+            progress_color=theme.ACCENT_CYAN, fg_color=theme.BG_CARD_HOVER,
+            command=self._on_player_slider_change
+        )
+        self.player_slider.set(0)
+        self.player_slider.pack(side="left", fill="x", expand=True, padx=8)
+
+        self.player_time_tot_lbl = ctk.CTkLabel(seek_row, text="00:00", font=ctk.CTkFont(size=10), text_color=theme.TEXT_MUTED, width=35)
+        self.player_time_tot_lbl.pack(side="right")
+
+        # Columna 3: Volumen y Botón Cerrar
+        right_col = ctk.CTkFrame(bar, fg_color="transparent")
+        right_col.grid(row=0, column=2, sticky="e", padx=16)
+
+        ctk.CTkLabel(right_col, text="🔊", font=ctk.CTkFont(size=12)).pack(side="left", padx=(0, 4))
+
+        self.player_vol_slider = ctk.CTkSlider(
+            right_col, from_=0.0, to=1.0, width=90, height=14,
+            button_length=10, button_color=theme.TEXT_PRIMARY,
+            command=self._on_volume_slider_change
+        )
+        self.player_vol_slider.set(0.8)
+        self.player_vol_slider.pack(side="left", padx=(0, 10))
+
+        close_btn = ctk.CTkButton(
+            right_col, text="✕", width=26, height=26,
+            fg_color="transparent", hover_color=theme.BTN_DANGER_BG,
+            text_color=theme.TEXT_SECONDARY, font=ctk.CTkFont(size=12),
+            command=self._hide_player
+        )
+        close_btn.pack(side="left")
+
+        return bar
+
+    def _play_in_app_audio(self, item: dict):
+        file_path = item.get("file_path")
+        if not file_path or not os.path.isfile(file_path):
+            messagebox.showerror("Archivo no encontrado", "El archivo de audio no se encuentra en el disco.")
+            return
+
+        title = item.get("title", os.path.basename(file_path))
+        label = item.get("format_label", "Audio")
+
+        if self.player.load(file_path):
+            self.player.play()
+            self.player_title_lbl.configure(text=title[:38] + ("..." if len(title) > 38 else ""))
+            self.player_artist_lbl.configure(text=label)
+            self.player_play_btn.configure(text="⏸")
+            self.player_slider.set(0)
+
+            dur_s = int(self.player.get_duration() / 1000)
+            self.player_time_tot_lbl.configure(text=format_duration(dur_s))
+            self.player_time_cur_lbl.configure(text="00:00")
+
+            self._is_player_visible = True
+            self.player_frame.grid(row=1, column=0, columnspan=2, sticky="ew")
+        else:
+            self.history.play_media(file_path)
+
+    def _on_play_library_item(self, item: dict):
+        fp = (item.get("file_path") or "").lower()
+        is_audio = item.get("media_type") == "audio" or any(fp.endswith(ext) for ext in [".mp3", ".wav", ".m4a"])
+        if is_audio:
+            self._play_in_app_audio(item)
+        else:
+            self.history.play_media(item.get("file_path"))
+
+    def _toggle_player_playback(self):
+        if self.player.is_playing():
+            self.player.pause()
+            self.player_play_btn.configure(text="▶")
+        else:
+            self.player.resume()
+            self.player_play_btn.configure(text="⏸")
+
+    def _stop_player_playback(self):
+        self.player.stop()
+        self.player_play_btn.configure(text="▶")
+        self.player_slider.set(0)
+        self.player_time_cur_lbl.configure(text="00:00")
+
+    def _hide_player(self):
+        self.player.stop()
+        self._is_player_visible = False
+        self.player_frame.grid_forget()
+
+    def _on_player_slider_change(self, val):
+        self._is_seeking = True
+        dur_ms = self.player.get_duration()
+        if dur_ms > 0:
+            target_ms = int((val / 1000.0) * dur_ms)
+            self.player.seek(target_ms)
+            cur_s = int(target_ms / 1000)
+            self.player_time_cur_lbl.configure(text=format_duration(cur_s))
+        self._is_seeking = False
+
+    def _on_volume_slider_change(self, val):
+        self.player.set_volume(float(val))
+
+    def _update_player_loop(self):
+        if self._is_player_visible and self.player.is_playing() and not self._is_seeking:
+            pos_ms = self.player.get_position()
+            dur_ms = self.player.get_duration()
+            if dur_ms > 0:
+                fraction = pos_ms / dur_ms
+                self.player_slider.set(fraction * 1000)
+                cur_s = int(pos_ms / 1000)
+                tot_s = int(dur_ms / 1000)
+                self.player_time_cur_lbl.configure(text=format_duration(cur_s))
+                self.player_time_tot_lbl.configure(text=format_duration(tot_s))
+
+            if pos_ms >= dur_ms and dur_ms > 0:
+                self.player_play_btn.configure(text="▶")
+
+        self.after(300, self._update_player_loop)
+
+    # =========================================================================
+    # ATAJOS DE TECLADO RÁPIDOS
+    # =========================================================================
+    def _setup_keyboard_shortcuts(self):
+        self.bind("<Control-v>", self._on_shortcut_paste)
+        self.bind("<Control-V>", self._on_shortcut_paste)
+        self.bind("<Control-f>", self._on_shortcut_search)
+        self.bind("<Control-F>", self._on_shortcut_search)
+        self.bind("<space>", self._on_shortcut_space)
+        self.bind("<Escape>", self._on_shortcut_escape)
+
+    def _on_shortcut_paste(self, event=None):
+        focused = self.focus_get()
+        if isinstance(focused, (tk.Entry, tk.Text)) or "entry" in str(focused).lower():
+            return
+        try:
+            clip = self.clipboard_get().strip()
+            if is_url(clip):
+                self._select_tab("explore")
+                self.url_entry.delete(0, tk.END)
+                self.url_entry.insert(0, clip)
+                self._on_search_clicked()
+        except Exception:
+            pass
+
+    def _on_shortcut_search(self, event=None):
+        self._select_tab("library")
+        if hasattr(self, "lib_search_entry"):
+            self.lib_search_entry.focus_set()
+
+    def _on_shortcut_space(self, event=None):
+        focused = self.focus_get()
+        if isinstance(focused, (tk.Entry, tk.Text)) or "entry" in str(focused).lower():
+            return
+        if self._is_player_visible:
+            self._toggle_player_playback()
+
+    def _on_shortcut_escape(self, event=None):
+        if self._is_player_visible:
+            self._hide_player()
 
 
 if __name__ == "__main__":
