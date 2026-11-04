@@ -32,6 +32,36 @@ from config_manager import ConfigManager
 from audio_player import AudioPlayer
 from notifications import send_notification
 
+import traceback
+import time
+
+def get_app_dir() -> str:
+    """Devuelve la ruta raíz de la aplicación, compatible con Python directo y PyInstaller."""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+def _global_exception_handler(exc_type, exc_value, exc_traceback):
+    """Captura errores no manejados, escribe en crash_log.txt y muestra una alerta."""
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+    err_text = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+    try:
+        log_path = os.path.join(get_app_dir(), "crash_log.txt")
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(f"\n--- ERROR {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")
+            f.write(err_text)
+    except Exception:
+        pass
+    try:
+        import tkinter.messagebox as mb
+        mb.showerror("Error Inesperado en OmniVault", f"Ocurrió un error al ejecutar la aplicación:\n\n{err_text[:400]}")
+    except Exception:
+        pass
+
+sys.excepthook = _global_exception_handler
+
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
@@ -46,8 +76,12 @@ class OmniVaultApp(ctk.CTk):
         self.configure(fg_color=theme.BG_MAIN)
 
         # Icono oficial de la ventana
-        base_dir = os.path.dirname(os.path.abspath(__file__))
+        base_dir = get_app_dir()
         ico_file = os.path.join(base_dir, "assets", "icon.ico")
+        if not os.path.isfile(ico_file) and hasattr(sys, '_MEIPASS'):
+            cand = os.path.join(sys._MEIPASS, "assets", "icon.ico")
+            if os.path.isfile(cand):
+                ico_file = cand
         if os.path.isfile(ico_file):
             try:
                 self.iconbitmap(ico_file)
@@ -187,7 +221,7 @@ class OmniVaultApp(ctk.CTk):
             pass
 
     def _get_active_browser(self):
-        saved = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
+        saved = os.path.join(get_app_dir(), "saved_cookies.txt")
         if os.path.exists(saved) and os.path.getsize(saved) > 0:
             return None
         b = self.config.get("browser_cookies", "none")
@@ -223,8 +257,12 @@ class OmniVaultApp(ctk.CTk):
         brand_row = ctk.CTkFrame(brand_frame, fg_color="transparent")
         brand_row.pack(fill="x")
 
-        base_dir = os.path.dirname(os.path.abspath(__file__))
+        base_dir = get_app_dir()
         icon_path = os.path.join(base_dir, "assets", "icon.png")
+        if not os.path.isfile(icon_path) and hasattr(sys, '_MEIPASS'):
+            cand = os.path.join(sys._MEIPASS, "assets", "icon.png")
+            if os.path.isfile(cand):
+                icon_path = cand
         if os.path.isfile(icon_path):
             try:
                 from PIL import Image
@@ -312,7 +350,7 @@ class OmniVaultApp(ctk.CTk):
         )
         status_box.pack(fill="x", padx=12, pady=14)
 
-        saved_cookie = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
+        saved_cookie = os.path.join(get_app_dir(), "saved_cookies.txt")
         has_saved = os.path.exists(saved_cookie) and os.path.getsize(saved_cookie) > 0
         self.session_lbl = ctk.CTkLabel(
             status_box,
@@ -2063,7 +2101,7 @@ class OmniVaultApp(ctk.CTk):
         )
         ctk.CTkLabel(box3, text=desc, font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY, justify="left").pack(anchor="w", padx=14, pady=(0, 6))
 
-        saved_cookie_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
+        saved_cookie_file = os.path.join(get_app_dir(), "saved_cookies.txt")
         self.cookie_status_lbl = ctk.CTkLabel(
             box3,
             text="✔ Sesión guardada en archivo local (Sin bloqueos de navegador)" if os.path.exists(saved_cookie_file) else "ℹ Modo anónimo activo (Sin credenciales guardadas)",
@@ -2335,7 +2373,7 @@ class OmniVaultApp(ctk.CTk):
             filetypes=[("Archivos de texto", "*.txt"), ("Todos los archivos", "*.*")]
         )
         if path:
-            dest = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
+            dest = os.path.join(get_app_dir(), "saved_cookies.txt")
             import shutil
             shutil.copy(path, dest)
             try:
@@ -2350,7 +2388,7 @@ class OmniVaultApp(ctk.CTk):
             messagebox.showinfo("Éxito", "El archivo cookies.txt ha sido importado correctamente.")
 
     def _clear_saved_cookies(self):
-        dest = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
+        dest = os.path.join(get_app_dir(), "saved_cookies.txt")
         if os.path.exists(dest):
             try:
                 os.remove(dest)

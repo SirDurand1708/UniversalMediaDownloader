@@ -64,8 +64,17 @@ class OmniVaultTray:
             return
 
         def _setup_and_run():
-            base_dir = os.path.dirname(os.path.abspath(__file__))
+            if getattr(sys, 'frozen', False):
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                base_dir = os.path.dirname(os.path.abspath(__file__))
+
             custom_icon = os.path.join(base_dir, "assets", "icon.png")
+            if not os.path.isfile(custom_icon) and hasattr(sys, '_MEIPASS'):
+                cand = os.path.join(sys._MEIPASS, "assets", "icon.png")
+                if os.path.isfile(cand):
+                    custom_icon = cand
+
             if os.path.isfile(custom_icon):
                 try:
                     image = Image.open(custom_icon).resize((64, 64), Image.Resampling.LANCZOS)

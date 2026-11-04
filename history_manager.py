@@ -11,7 +11,12 @@ import threading
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
-HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "library.json")
+def get_app_dir() -> str:
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+HISTORY_FILE = os.path.join(get_app_dir(), "library.json")
 
 # Lista blanca estricta de extensiones multimedia permitidas para reproducción
 ALLOWED_MEDIA_EXTENSIONS = {

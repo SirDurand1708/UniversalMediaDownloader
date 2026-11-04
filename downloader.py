@@ -18,6 +18,11 @@ import urllib.request
 from typing import Callable, Optional, Dict, Any, List
 import yt_dlp
 
+def get_app_dir() -> str:
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
 def _ensure_ffmpeg() -> Optional[str]:
     """Garantiza que FFmpeg esté en el PATH del proceso, buscando en PATH, registro y carpeta local."""
     found = shutil.which("ffmpeg")
@@ -25,12 +30,19 @@ def _ensure_ffmpeg() -> Optional[str]:
         return os.path.dirname(os.path.abspath(found))
 
     # Buscar en carpeta local del proyecto o subcarpeta 'bin'
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    base_dir = get_app_dir()
     local_candidates = [
         base_dir,
         os.path.join(base_dir, "bin"),
         os.path.join(base_dir, "ffmpeg"),
+        os.path.dirname(os.path.abspath(__file__)),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin"),
     ]
+    if hasattr(sys, '_MEIPASS'):
+        local_candidates.extend([
+            sys._MEIPASS,
+            os.path.join(sys._MEIPASS, "bin"),
+        ])
     for cand in local_candidates:
         cand_exe = os.path.join(cand, "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg")
         if os.path.isfile(cand_exe):
@@ -61,12 +73,15 @@ def _get_aria2c_path() -> Optional[str]:
     found = shutil.which("aria2c")
     if found:
         return found
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    base_dir = get_app_dir()
     candidates = [
         os.path.join(base_dir, "bin", "aria2c.exe"),
         os.path.join(base_dir, "aria2c.exe"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin", "aria2c.exe"),
         r"C:\Users\georg\Documents\Software\aria2-1.37.0-win-64bit-build1\aria2-1.37.0-win-64bit-build1\aria2c.exe",
     ]
+    if hasattr(sys, '_MEIPASS'):
+        candidates.insert(0, os.path.join(sys._MEIPASS, "bin", "aria2c.exe"))
     docs_software = os.path.expanduser(r"~\Documents\Software")
     if os.path.isdir(docs_software):
         try:
@@ -500,7 +515,7 @@ class DownloaderEngine:
         """
         Extrae las cookies del navegador especificado y las guarda en un archivo local 'saved_cookies.txt'.
         """
-        dest_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
+        dest_path = os.path.join(get_app_dir(), "saved_cookies.txt")
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
@@ -536,7 +551,7 @@ class DownloaderEngine:
 
     def test_youtube_auth(self) -> Dict[str, Any]:
         """Comprueba si las cookies guardadas permiten acceso autenticado a YouTube."""
-        saved_cookie = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
+        saved_cookie = os.path.join(get_app_dir(), "saved_cookies.txt")
         if not os.path.exists(saved_cookie) or os.path.getsize(saved_cookie) == 0:
             return {
                 'ok': False,
@@ -623,7 +638,7 @@ class DownloaderEngine:
             opts['ffmpeg_location'] = ff if os.path.isdir(ff) else os.path.dirname(ff)
 
         if use_cookies:
-            saved_cookie = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
+            saved_cookie = os.path.join(get_app_dir(), "saved_cookies.txt")
             if cookiefile and os.path.exists(cookiefile):
                 opts['cookiefile'] = cookiefile
             elif os.path.exists(saved_cookie) and os.path.getsize(saved_cookie) > 0:

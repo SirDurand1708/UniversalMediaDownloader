@@ -5,6 +5,7 @@ detectando periódicamente nuevos videos/audios y descargándolos automáticamen
 """
 
 import os
+import sys
 import json
 import time
 import threading
@@ -13,7 +14,12 @@ import yt_dlp
 
 from notifications import send_notification
 
-SUBSCRIPTIONS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "subscriptions.json")
+def get_app_dir() -> str:
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+SUBSCRIPTIONS_FILE = os.path.join(get_app_dir(), "subscriptions.json")
 
 
 class SubscriptionsManager:

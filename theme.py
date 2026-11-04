@@ -33,6 +33,7 @@ TEXT_ACCENT = "#CBD5E1"      # Plata suave
 
 # Indicadores de estado
 ACCENT_CYAN = "#38BDF8"      # Plata hielo / azul cian para barras de progreso
+ACCENT_CYAN_HOVER = "#0EA5E9"# Azul cian brillante al pasar el mouse
 STATUS_SUCCESS = "#10B981"   # Verde Esmeralda sutil para completado
 STATUS_WARNING = "#F59E0B"   # Ámbar suave
 STATUS_ERROR = "#EF4444"     # Carmesí para errores
