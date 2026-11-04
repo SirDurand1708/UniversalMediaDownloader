@@ -26,6 +26,7 @@ class DownloadTask:
         use_aria2c: bool = True,
         clip_start: Optional[str] = None,
         clip_end: Optional[str] = None,
+        normalize_audio: bool = False,
     ):
         self.id = task_id
         self.url = url
@@ -38,6 +39,7 @@ class DownloadTask:
         self.use_aria2c = use_aria2c
         self.clip_start = clip_start
         self.clip_end = clip_end
+        self.normalize_audio = normalize_audio
         self.format_label = format_type
         self.media_type = "audio" if format_type in ["mp3_320", "mp3_192", "m4a_best", "wav"] else "video"
 
@@ -60,6 +62,9 @@ class QueueManager:
         self.task_queue: queue.Queue = queue.Queue()
         self.active_workers: List[threading.Thread] = []
         self._running = True
+        self._is_paused = False
+        self._pause_event = threading.Event()
+        self._pause_event.set()
         self._lock = threading.Lock()
 
         self.on_task_updated: Optional[Callable[[DownloadTask], None]] = None
@@ -96,6 +101,7 @@ class QueueManager:
         use_aria2c: bool = True,
         clip_start: Optional[str] = None,
         clip_end: Optional[str] = None,
+        normalize_audio: bool = False,
     ) -> DownloadTask:
         task_id = f"task_{int(time.time())}_{uuid.uuid4().hex[:6]}"
         task = DownloadTask(
@@ -110,6 +116,7 @@ class QueueManager:
             use_aria2c=use_aria2c,
             clip_start=clip_start,
             clip_end=clip_end,
+            normalize_audio=normalize_audio,
         )
 
         with self._lock:
@@ -129,6 +136,7 @@ class QueueManager:
         use_aria2c: bool = True,
         clip_start: Optional[str] = None,
         clip_end: Optional[str] = None,
+        normalize_audio: bool = False,
     ) -> int:
         """Encola una lista de elementos (playlist o selección múltiple)."""
         count = 0
@@ -149,6 +157,7 @@ class QueueManager:
                 use_aria2c=use_aria2c,
                 clip_start=clip_start,
                 clip_end=clip_end,
+                normalize_audio=normalize_audio,
             )
             count += 1
         return count
@@ -190,8 +199,31 @@ class QueueManager:
     def stop(self):
         """Detiene la ejecución de los workers de forma limpia."""
         self._running = False
+        self._pause_event.set()
         for task in self.get_active_tasks():
             self.cancel_download(task.id)
+
+    def is_paused(self) -> bool:
+        """Indica si la cola de descargas está pausada."""
+        return self._is_paused
+
+    def pause_queue(self):
+        """Pausa la cola: los workers no tomarán nuevas tareas hasta que se reanude."""
+        self._is_paused = True
+        self._pause_event.clear()
+
+    def resume_queue(self):
+        """Reanuda la cola de descargas."""
+        self._is_paused = False
+        self._pause_event.set()
+
+    def toggle_pause_queue(self) -> bool:
+        """Alterna el estado de pausa de la cola y devuelve True si quedó pausada."""
+        if self._is_paused:
+            self.resume_queue()
+        else:
+            self.pause_queue()
+        return self._is_paused
 
     def _notify_update(self, task: DownloadTask):
         if self.on_task_updated:
@@ -216,6 +248,10 @@ class QueueManager:
 
     def _worker_loop(self):
         while self._running:
+            # Si la cola está pausada, esperar hasta que sea reanudada
+            if not self._pause_event.wait(timeout=0.5):
+                continue
+
             try:
                 task: DownloadTask = self.task_queue.get(timeout=0.5)
             except queue.Empty:
@@ -260,6 +296,7 @@ class QueueManager:
                     use_aria2c=task.use_aria2c,
                     clip_start=task.clip_start,
                     clip_end=task.clip_end,
+                    normalize_audio=task.normalize_audio,
                 )
 
                 if task.status != "cancelled":

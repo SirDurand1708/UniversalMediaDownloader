@@ -16,6 +16,9 @@ import theme
 import themes
 from tray import OmniVaultTray
 from converter import LocalConverter, get_media_info
+from transcriber import MediaTranscriber
+from subscriptions_manager import SubscriptionsManager
+from mini_hud import MiniHUD
 from downloader import (
     DownloaderEngine, is_url, normalize_url, clean_error_text,
     is_ffmpeg_available, FFMPEG_DIR, is_browser_running,
@@ -42,6 +45,15 @@ class OmniVaultApp(ctk.CTk):
         self.minsize(760, 500)
         self.configure(fg_color=theme.BG_MAIN)
 
+        # Icono oficial de la ventana
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        ico_file = os.path.join(base_dir, "assets", "icon.ico")
+        if os.path.isfile(ico_file):
+            try:
+                self.iconbitmap(ico_file)
+            except Exception:
+                pass
+
         # Configuración persistente y tema de color de acento
         self.config = ConfigManager()
         self.theme_accent = themes.get_theme(self.config.get("accent_theme", "violet"))
@@ -56,25 +68,54 @@ class OmniVaultApp(ctk.CTk):
         )
         self.img_cache = ThumbnailCache(max_workers=4)
 
-        # Conversor multimedia offline
+        # Conversor multimedia offline y transcriptor de subtítulos IA
         self.converter = LocalConverter()
         self._converter_running = False
         self._converted_file_path = ""
+        self.transcriber = MediaTranscriber()
+        self._transcription_running = False
+        self._transcribed_srt_path = ""
+
+        # Gestor de monitoreo de canales y creadores (Auto-Sync)
+        self.subscriptions_manager = SubscriptionsManager()
 
         # Callbacks del gestor de descargas
         self.queue_manager.on_task_updated = self._on_task_updated
         self.queue_manager.on_task_finished = self._on_task_finished
         self.queue_manager.on_queue_completed = self._on_queue_all_completed
 
+        # Reproductor de audio integrado nativo
+        self.player = AudioPlayer()
+        self._is_player_visible = False
+        self._is_seeking = False
+
+        # Mini-Widget Flotante siempre visible (Mini-HUD / Picture-in-Picture)
+        self.mini_hud = MiniHUD(
+            self,
+            self.queue_manager,
+            self.player,
+            self.config,
+            on_restore_callback=self._restore_from_tray
+        )
+
         # Bandeja del sistema (System Tray)
         self.tray = OmniVaultTray(
             on_open=self._tray_restore,
             on_toggle_queue=self._tray_toggle_queue,
+            on_toggle_hud=self._tray_toggle_hud,
             on_quit=lambda: self._on_close(force=True),
             theme_color=self.theme_accent["primary"]
         )
         if self.config.get("tray_enabled", True) and self.tray.is_available():
             self.tray.start()
+
+        # Iniciar sincronización automática de canales si está habilitada
+        if self.config.get("sync_channels_auto", True):
+            self.subscriptions_manager.start_background_sync(
+                interval_seconds=int(self.config.get("sync_channels_interval_min", 30)) * 60,
+                queue_manager=self.queue_manager,
+                get_target_dir_func=self._get_target_dir
+            )
 
         # Protocolo de cierre limpio de ventana
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -90,11 +131,6 @@ class OmniVaultApp(ctk.CTk):
         # Detección inteligente de portapapeles
         self._last_detected_clipboard = ""
         self._clipboard_banner_visible = False
-
-        # Reproductor de audio integrado nativo
-        self.player = AudioPlayer()
-        self._is_player_visible = False
-        self._is_seeking = False
 
         self._build_layout()
         self._select_tab("explore")
@@ -123,6 +159,8 @@ class OmniVaultApp(ctk.CTk):
             if not confirm:
                 return
 
+        self.subscriptions_manager.stop_background_sync()
+        self.mini_hud.hide_hud()
         self.tray.stop()
         self.player.close()
         self.queue_manager.stop()
@@ -137,9 +175,16 @@ class OmniVaultApp(ctk.CTk):
         self.lift()
         self.focus_force()
 
+    def _tray_toggle_hud(self):
+        self.after(0, self.mini_hud.toggle_hud)
+
     def _tray_toggle_queue(self):
-        # Pausar o reanudar cola
-        pass
+        is_paused = self.queue_manager.toggle_pause_queue()
+        status_text = "Cola de descargas: Pausada" if is_paused else "Cola de descargas: Reanudada"
+        try:
+            send_notification("✦ OmniVault", status_text)
+        except Exception:
+            pass
 
     def _get_active_browser(self):
         saved = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_cookies.txt")
@@ -173,21 +218,39 @@ class OmniVaultApp(ctk.CTk):
         self.sidebar.grid_propagate(False)
 
         brand_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        brand_frame.pack(fill="x", padx=16, pady=(20, 16))
+        brand_frame.pack(fill="x", padx=14, pady=(18, 14))
+
+        brand_row = ctk.CTkFrame(brand_frame, fg_color="transparent")
+        brand_row.pack(fill="x")
+
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        icon_path = os.path.join(base_dir, "assets", "icon.png")
+        if os.path.isfile(icon_path):
+            try:
+                from PIL import Image
+                pil_icon = Image.open(icon_path)
+                self.logo_img = ctk.CTkImage(light_image=pil_icon, dark_image=pil_icon, size=(38, 38))
+                logo_lbl = ctk.CTkLabel(brand_row, text="", image=self.logo_img)
+                logo_lbl.pack(side="left", padx=(0, 10))
+            except Exception:
+                pass
+
+        titles_col = ctk.CTkFrame(brand_row, fg_color="transparent")
+        titles_col.pack(side="left", fill="both", expand=True)
 
         logo_title = ctk.CTkLabel(
-            brand_frame,
-            text="✦ OMNIVAULT",
-            font=ctk.CTkFont(family="Segoe UI", size=19, weight="bold"),
+            titles_col,
+            text="OMNIVAULT",
+            font=ctk.CTkFont(family="Segoe UI", size=18, weight="bold"),
             text_color=theme.TEXT_PRIMARY
         )
         logo_title.pack(anchor="w")
 
         logo_sub = ctk.CTkLabel(
-            brand_frame,
-            text="MEDIA HUB • OBSIDIAN",
-            font=ctk.CTkFont(family="Segoe UI", size=9, weight="bold"),
-            text_color=theme.TEXT_MUTED
+            titles_col,
+            text="UNIVERSAL MEDIA HUB",
+            font=ctk.CTkFont(family="Segoe UI", size=8, weight="bold"),
+            text_color=self.theme_accent["text_accent"]
         )
         logo_sub.pack(anchor="w")
 
@@ -198,6 +261,7 @@ class OmniVaultApp(ctk.CTk):
             ("downloads", "📥  Descargas", self._show_downloads),
             ("library", "🎵  Mi Biblioteca", self._show_library),
             ("converter", "🔄  Conversor Local", self._show_converter),
+            ("subscriptions", "📡  Canales / Sync", self._show_subscriptions),
             ("settings", "⚙  Ajustes", self._show_settings),
         ]
 
@@ -209,7 +273,7 @@ class OmniVaultApp(ctk.CTk):
                 self.nav_frame,
                 text=text,
                 anchor="w",
-                height=40,
+                height=38,
                 corner_radius=theme.CORNER_RADIUS,
                 font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
                 fg_color="transparent",
@@ -217,8 +281,23 @@ class OmniVaultApp(ctk.CTk):
                 hover_color=theme.BG_CARD_HOVER,
                 command=cmd
             )
-            btn.pack(fill="x", pady=3)
+            btn.pack(fill="x", pady=2)
             self.nav_btns[tab_id] = btn
+
+        # Botón para activar el Mini-Widget HUD flotante
+        self.hud_btn = ctk.CTkButton(
+            self.nav_frame,
+            text="📌  Mini-Widget HUD",
+            anchor="w",
+            height=34,
+            corner_radius=theme.CORNER_RADIUS,
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            fg_color=theme.BG_INPUT,
+            text_color=self.theme_accent["text_accent"],
+            hover_color=theme.BG_CARD_HOVER,
+            command=self.mini_hud.toggle_hud
+        )
+        self.hud_btn.pack(fill="x", pady=(8, 2))
 
         self.sidebar_spacer = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         self.sidebar_spacer.pack(fill="both", expand=True)
@@ -266,6 +345,7 @@ class OmniVaultApp(ctk.CTk):
             "downloads": self._create_downloads_view(),
             "library": self._create_library_view(),
             "converter": self._create_converter_view(),
+            "subscriptions": self._create_subscriptions_view(),
             "settings": self._create_settings_view(),
         }
 
@@ -285,11 +365,14 @@ class OmniVaultApp(ctk.CTk):
             self._refresh_library_list()
         elif tab_id == "downloads":
             self._refresh_downloads_list()
+        elif tab_id == "subscriptions":
+            self._refresh_subscriptions_list()
 
     def _show_explore(self): self._select_tab("explore")
     def _show_downloads(self): self._select_tab("downloads")
     def _show_library(self): self._select_tab("library")
     def _show_converter(self): self._select_tab("converter")
+    def _show_subscriptions(self): self._select_tab("subscriptions")
     def _show_settings(self): self._select_tab("settings")
 
     # =========================================================================
@@ -644,9 +727,11 @@ class OmniVaultApp(ctk.CTk):
         browser = self._get_active_browser()
         subtitles = bool(self.config.get("subtitles_enabled", False))
         aria2c = bool(self.config.get("aria2c_enabled", True))
+        normalize = bool(self.config.get("normalize_audio", False))
         count = self.queue_manager.add_batch(
             selected_items, format_type=fmt, output_dir=target_dir,
-            browser=browser, download_subtitles=subtitles, use_aria2c=aria2c
+            browser=browser, download_subtitles=subtitles, use_aria2c=aria2c,
+            normalize_audio=normalize
         )
         messagebox.showinfo("Descarga en Lote", f"Se han añadido {count} elementos a la cola de descargas.")
         self._select_tab("downloads")
@@ -792,9 +877,11 @@ class OmniVaultApp(ctk.CTk):
         browser = self._get_active_browser()
         subtitles = bool(self.config.get("subtitles_enabled", False))
         aria2c = bool(self.config.get("aria2c_enabled", True))
+        normalize = bool(self.config.get("normalize_audio", False))
         count = self.queue_manager.add_batch(
             selected, format_type=fmt, output_dir=target_dir,
-            browser=browser, download_subtitles=subtitles, use_aria2c=aria2c
+            browser=browser, download_subtitles=subtitles, use_aria2c=aria2c,
+            normalize_audio=normalize
         )
         messagebox.showinfo("Playlist Encolada", f"Se han añadido {count} descargas a la cola activa.")
         self._select_tab("downloads")
@@ -950,6 +1037,7 @@ class OmniVaultApp(ctk.CTk):
 
         subtitles = bool(self.config.get("subtitles_enabled", False))
         aria2c = bool(self.config.get("aria2c_enabled", True))
+        normalize = bool(self.config.get("normalize_audio", False))
 
         clip_start = None
         clip_end = None
@@ -961,7 +1049,8 @@ class OmniVaultApp(ctk.CTk):
             url=url, format_type=fmt, output_dir=target_dir,
             title=title, thumbnail_url=thumb, browser=browser,
             download_subtitles=subtitles, use_aria2c=aria2c,
-            clip_start=clip_start, clip_end=clip_end
+            clip_start=clip_start, clip_end=clip_end,
+            normalize_audio=normalize
         )
 
         messagebox.showinfo("Descarga Encolada", f"'{title[:35]}...' añadido a la cola.")
@@ -1290,6 +1379,16 @@ class OmniVaultApp(ctk.CTk):
         ]:
             ctk.CTkRadioButton(col_v, text=lbl, variable=self.conv_format_var, value=val, font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY).pack(anchor="w", padx=10, pady=4)
 
+        self.conv_norm_var = ctk.BooleanVar(value=bool(self.config.get("normalize_audio", False)))
+        ctk.CTkCheckBox(
+            box2,
+            text="🔊 Aplicar normalización inteligente de volumen EBU R128 (-16 LUFS estándar Spotify)",
+            variable=self.conv_norm_var,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color=self.theme_accent["primary"],
+            hover_color=self.theme_accent["hover"]
+        ).pack(anchor="w", padx=14, pady=(2, 10))
+
         # Tarjeta 3: Carpeta de Destino
         box3 = ctk.CTkFrame(scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
         box3.pack(fill="x", pady=6)
@@ -1344,6 +1443,50 @@ class OmniVaultApp(ctk.CTk):
             font=ctk.CTkFont(size=11, weight="bold"), command=self._open_converted_file, state="disabled"
         )
         self.conv_open_btn.pack(side="left")
+
+        # Tarjeta 4: Transcripción con IA y Subtítulos (.SRT / .TXT)
+        ai_box = ctk.CTkFrame(scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
+        ai_box.pack(fill="x", pady=8)
+
+        ctk.CTkLabel(ai_box, text="🤖 Generador de Subtítulos y Transcripción con IA", font=ctk.CTkFont(size=13, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=14, pady=(12, 4))
+        ctk.CTkLabel(ai_box, text="Extrae la voz de cualquier archivo y crea subtítulos sincronizados (.srt) y texto plano (.txt).", font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY).pack(anchor="w", padx=14, pady=(0, 10))
+
+        row_lang = ctk.CTkFrame(ai_box, fg_color="transparent")
+        row_lang.pack(fill="x", padx=14, pady=(0, 8))
+
+        ctk.CTkLabel(row_lang, text="Idioma del Audio:", font=ctk.CTkFont(size=11, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(side="left", padx=(0, 8))
+        self.trans_lang_var = ctk.StringVar(value="Español (es-ES)")
+        ctk.CTkOptionMenu(
+            row_lang,
+            values=["Español (es-ES)", "English (en-US)", "Português (pt-BR)", "Français (fr-FR)", "Deutsch (de-DE)", "Italiano (it-IT)"],
+            variable=self.trans_lang_var,
+            width=170,
+            height=30
+        ).pack(side="left")
+
+        self.trans_progress = ctk.CTkProgressBar(ai_box, height=8, corner_radius=theme.CORNER_RADIUS_SM)
+        self.trans_progress.set(0.0)
+        self.trans_progress.pack(fill="x", padx=14, pady=(8, 4))
+
+        self.trans_status_lbl = ctk.CTkLabel(ai_box, text="Listo para transcribir", font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY)
+        self.trans_status_lbl.pack(anchor="w", padx=14, pady=(0, 8))
+
+        trans_btn_row = ctk.CTkFrame(ai_box, fg_color="transparent")
+        trans_btn_row.pack(fill="x", padx=14, pady=(0, 14))
+
+        self.trans_btn = ctk.CTkButton(
+            trans_btn_row, text="📝 GENERAR SUBTÍTULOS (.SRT Y .TXT)", height=36,
+            fg_color=theme.BTN_PRIMARY_BG, hover_color=theme.BTN_PRIMARY_HOVER, text_color=theme.BTN_PRIMARY_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"), command=self._start_transcription
+        )
+        self.trans_btn.pack(side="left", fill="x", expand=True, padx=(0, 6))
+
+        self.trans_open_btn = ctk.CTkButton(
+            trans_btn_row, text="📄 Abrir .SRT", width=110, height=36,
+            fg_color=theme.BTN_SECONDARY_BG, hover_color=theme.BTN_SECONDARY_HOVER, text_color=theme.BTN_SECONDARY_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"), command=self._open_transcribed_srt, state="disabled"
+        )
+        self.trans_open_btn.pack(side="left")
 
         return view
 
@@ -1412,7 +1555,8 @@ class OmniVaultApp(ctk.CTk):
                     output_format=out_fmt,
                     output_dir=out_dir,
                     progress_callback=prog,
-                    status_callback=stat
+                    status_callback=stat,
+                    normalize_audio=self.conv_norm_var.get()
                 )
                 self.after(0, lambda: self._on_converter_success(res))
             except Exception as e:
@@ -1457,6 +1601,279 @@ class OmniVaultApp(ctk.CTk):
                 os.startfile(self._converted_file_path)
             except Exception:
                 self._open_folder_safe(os.path.dirname(self._converted_file_path))
+
+    # --- TRANSCRIPCIÓN INTELIGENTE Y SUBTÍTULOS IA ---
+    def _start_transcription(self):
+        in_file = self.conv_file_entry.get().strip()
+        if not in_file or not os.path.isfile(in_file):
+            messagebox.showwarning("Atención", "Por favor selecciona un archivo multimedia válido en el paso 1.")
+            return
+
+        out_dir = self.conv_dst_entry.get().strip() or os.path.dirname(in_file)
+        lang_choice = self.trans_lang_var.get()
+        # Mapear opción legible a código de idioma
+        lang_code = "es-ES"
+        if "en-US" in lang_choice: lang_code = "en-US"
+        elif "pt-BR" in lang_choice: lang_code = "pt-BR"
+        elif "fr-FR" in lang_choice: lang_code = "fr-FR"
+        elif "de-DE" in lang_choice: lang_code = "de-DE"
+        elif "it-IT" in lang_choice: lang_code = "it-IT"
+
+        self._transcription_running = True
+        self.trans_btn.configure(state="disabled", text="Transcribiendo audio...")
+        self.trans_open_btn.configure(state="disabled")
+        self.trans_progress.set(0.0)
+        self.trans_status_lbl.configure(text="Iniciando motor de reconocimiento...", text_color=theme.ACCENT_CYAN)
+
+        def run():
+            def prog(pct, msg):
+                self.after(0, lambda: self._update_transcription_progress(pct, msg))
+
+            def stat(txt):
+                self.after(0, lambda: self.trans_status_lbl.configure(text=txt))
+
+            try:
+                res = self.transcriber.transcribe(
+                    media_path=in_file,
+                    output_dir=out_dir,
+                    language=lang_code,
+                    progress_callback=prog,
+                    status_callback=stat
+                )
+                self.after(0, lambda: self._on_transcription_success(res))
+            except Exception as e:
+                err = str(e)
+                self.after(0, lambda: self._on_transcription_error(err))
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _update_transcription_progress(self, pct: float, msg: str):
+        if self._transcription_running:
+            self.trans_progress.set(pct)
+            self.trans_status_lbl.configure(text=f"Procesando: {int(pct * 100)}%  •  {msg}")
+
+    def _on_transcription_success(self, res: dict):
+        self._transcription_running = False
+        self.trans_btn.configure(state="normal", text="📝 GENERAR SUBTÍTULOS (.SRT Y .TXT)")
+        self.trans_open_btn.configure(state="normal")
+        self.trans_progress.set(1.0)
+        self._transcribed_srt_path = res.get("srt_path", "")
+        count = res.get("segments_count", 0)
+        fname = os.path.basename(self._transcribed_srt_path)
+        self.trans_status_lbl.configure(
+            text=f"✔ ¡Subtítulos listos! Generados {count} bloques de diálogo en: {fname}",
+            text_color=theme.STATUS_SUCCESS
+        )
+        send_notification("✦ OmniVault Transcriptor", f"¡Subtítulos generados con éxito!\n{fname}")
+        messagebox.showinfo("Transcripción Completada", f"Se han creado los subtítulos y la transcripción:\n\n• {res.get('srt_path')}\n• {res.get('txt_path')}")
+
+    def _on_transcription_error(self, err_msg: str):
+        self._transcription_running = False
+        self.trans_btn.configure(state="normal", text="📝 GENERAR SUBTÍTULOS (.SRT Y .TXT)")
+        first_l = err_msg.splitlines()[0]
+        self.trans_status_lbl.configure(text=f"✖ {first_l[:75]}", text_color=theme.STATUS_ERROR)
+        messagebox.showerror("Error en Transcripción", f"No se pudo completar la transcripción:\n\n{err_msg}")
+
+    def _open_transcribed_srt(self):
+        if self._transcribed_srt_path and os.path.isfile(self._transcribed_srt_path):
+            try:
+                os.startfile(self._transcribed_srt_path)
+            except Exception:
+                self._open_folder_safe(os.path.dirname(self._transcribed_srt_path))
+
+    # =========================================================================
+    # VISTA 5: CANALES Y MONITOREO AUTOMÁTICO (AUTO-SYNC)
+    # =========================================================================
+    def _create_subscriptions_view(self) -> ctk.CTkFrame:
+        view = ctk.CTkFrame(self.main_container, fg_color="transparent")
+        view.grid_rowconfigure(2, weight=1)
+        view.grid_columnconfigure(0, weight=1)
+
+        header = ctk.CTkFrame(view, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+
+        ctk.CTkLabel(
+            header, text="Monitoreo de Canales y Creadores (Auto-Sync)",
+            font=ctk.CTkFont(size=19, weight="bold"), text_color=theme.TEXT_PRIMARY
+        ).pack(side="left")
+
+        self.btn_sync_all = ctk.CTkButton(
+            header, text="🔄 Comprobar Novedades Ahora",
+            height=32, fg_color=theme.BTN_SECONDARY_BG, hover_color=theme.BTN_SECONDARY_HOVER,
+            text_color=theme.BTN_SECONDARY_TEXT, font=ctk.CTkFont(size=11, weight="bold"),
+            command=self._sync_all_subs_now
+        )
+        self.btn_sync_all.pack(side="right")
+
+        # Tarjeta para añadir nuevo canal
+        add_card = ctk.CTkFrame(view, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
+        add_card.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+
+        ctk.CTkLabel(
+            add_card, text="Añadir Nuevo Canal / Perfil para Monitoreo Automático",
+            font=ctk.CTkFont(size=12, weight="bold"), text_color=theme.TEXT_PRIMARY
+        ).pack(anchor="w", padx=14, pady=(10, 4))
+
+        input_row = ctk.CTkFrame(add_card, fg_color="transparent")
+        input_row.pack(fill="x", padx=14, pady=(0, 12))
+
+        self.sub_url_entry = ctk.CTkEntry(
+            input_row, placeholder_text="Enlace del Canal de YouTube o Perfil de TikTok (ej. https://www.youtube.com/@Canal)",
+            height=34, font=ctk.CTkFont(size=11), fg_color=theme.BG_INPUT
+        )
+        self.sub_url_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        self.sub_fmt_var = ctk.StringVar(value="mp3_320")
+        self.sub_fmt_menu = ctk.CTkOptionMenu(
+            input_row,
+            values=["mp3_320", "mp3_192", "mp4_1080", "mp4_720"],
+            variable=self.sub_fmt_var,
+            width=115,
+            height=34
+        )
+        self.sub_fmt_menu.pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            input_row, text="➕ Suscribirse", width=120, height=34,
+            fg_color=self.theme_accent["primary"], hover_color=self.theme_accent["hover"],
+            font=ctk.CTkFont(size=11, weight="bold"), command=self._add_new_subscription
+        ).pack(side="left")
+
+        # Lista de suscripciones
+        self.subs_scroll = ctk.CTkScrollableFrame(view, fg_color="transparent", corner_radius=theme.CORNER_RADIUS)
+        self.subs_scroll.grid(row=2, column=0, sticky="nsew")
+        self.subs_scroll.grid_columnconfigure(0, weight=1)
+
+        return view
+
+    def _refresh_subscriptions_list(self):
+        for w in self.subs_scroll.winfo_children():
+            w.destroy()
+
+        subs = self.subscriptions_manager.get_subscriptions()
+        if not subs:
+            hint_box = ctk.CTkFrame(self.subs_scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
+            hint_box.pack(fill="x", pady=20, padx=8)
+            ctk.CTkLabel(hint_box, text="📡 No tienes canales suscritos para monitoreo todavía.", font=ctk.CTkFont(size=14, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(pady=(20, 6))
+            ctk.CTkLabel(
+                hint_box,
+                text="Pega la URL de tu canal favorito de YouTube o perfil de TikTok arriba y presiona 'Suscribirse'.\n"
+                     "OmniVault revisará automáticamente en segundo plano si el creador sube música o videos nuevos y los descargará al instante.",
+                font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY, justify="center"
+            ).pack(pady=(0, 20), padx=20)
+            return
+
+        for s in subs:
+            sub_id = s.get("id")
+            name = s.get("name") or s.get("url")
+            url = s.get("url")
+            fmt = s.get("format_type", "mp3_320")
+            last_checked = s.get("last_checked_str", "Nunca")
+            count = s.get("downloaded_count", 0)
+            auto_dl = bool(s.get("auto_download", True))
+
+            card = ctk.CTkFrame(self.subs_scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
+            card.pack(fill="x", pady=4, padx=4)
+
+            row = ctk.CTkFrame(card, fg_color="transparent")
+            row.pack(fill="x", padx=12, pady=10)
+
+            icon_lbl = ctk.CTkLabel(row, text="📡", font=ctk.CTkFont(size=18), width=32)
+            icon_lbl.pack(side="left", padx=(0, 10))
+
+            info_box = ctk.CTkFrame(row, fg_color="transparent")
+            info_box.pack(side="left", fill="both", expand=True)
+
+            ctk.CTkLabel(info_box, text=name, font=ctk.CTkFont(size=13, weight="bold"), text_color=theme.TEXT_PRIMARY, anchor="w").pack(fill="x")
+            sub_meta = f"Formato: {fmt.upper()}  •  Último escaneo: {last_checked}  •  Descargados: {count}"
+            ctk.CTkLabel(info_box, text=sub_meta, font=ctk.CTkFont(size=10), text_color=theme.TEXT_SECONDARY, anchor="w").pack(fill="x", pady=(2, 0))
+
+            ctrl_box = ctk.CTkFrame(row, fg_color="transparent")
+            ctrl_box.pack(side="right")
+
+            auto_var = ctk.BooleanVar(value=auto_dl)
+            ctk.CTkSwitch(
+                ctrl_box, text="Auto-Bajar", variable=auto_var,
+                font=ctk.CTkFont(size=11), command=lambda sid=sub_id, v=auto_var: self._toggle_sub_auto(sid, v.get())
+            ).pack(side="left", padx=(0, 10))
+
+            ctk.CTkButton(
+                ctrl_box, text="🔍 Escanear", width=80, height=28,
+                fg_color=theme.BTN_SECONDARY_BG, hover_color=theme.BTN_SECONDARY_HOVER, text_color=theme.BTN_SECONDARY_TEXT,
+                font=ctk.CTkFont(size=11, weight="bold"), command=lambda s_item=s: self._sync_single_sub(s_item)
+            ).pack(side="left", padx=(0, 6))
+
+            ctk.CTkButton(
+                ctrl_box, text="🗑", width=34, height=28,
+                fg_color=theme.BTN_DANGER_BG, hover_color=theme.BTN_DANGER_HOVER, text_color=theme.BTN_DANGER_TEXT,
+                font=ctk.CTkFont(size=12, weight="bold"), command=lambda sid=sub_id: self._remove_sub(sid)
+            ).pack(side="left")
+
+    def _add_new_subscription(self):
+        url = self.sub_url_entry.get().strip()
+        if not url or not is_url(url):
+            messagebox.showwarning("Atención", "Por favor ingresa un enlace de canal o perfil válido.")
+            return
+
+        fmt = self.sub_fmt_var.get()
+        try:
+            self.subscriptions_manager.add_subscription(url=url, format_type=fmt)
+            self.sub_url_entry.delete(0, tk.END)
+            self._refresh_subscriptions_list()
+            messagebox.showinfo("Canal Suscrito", "¡Canal añadido con éxito al monitoreo automático!")
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    def _sync_all_subs_now(self):
+        self.btn_sync_all.configure(state="disabled", text="Comprobando...")
+
+        def run():
+            try:
+                new_c = self.subscriptions_manager.check_all(
+                    queue_manager=self.queue_manager,
+                    get_target_dir_func=self._get_target_dir
+                )
+                self.after(0, lambda: self._on_sync_finished(new_c))
+            except Exception as e:
+                self.after(0, lambda: messagebox.showerror("Error en Sincronización", str(e)))
+                self.after(0, lambda: self.btn_sync_all.configure(state="normal", text="🔄 Comprobar Novedades Ahora"))
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _sync_single_sub(self, sub: dict):
+        def run():
+            try:
+                items = self.subscriptions_manager.check_channel(
+                    sub,
+                    queue_manager=self.queue_manager,
+                    get_target_dir_func=self._get_target_dir
+                )
+                self.after(0, lambda: self._refresh_subscriptions_list())
+                if items:
+                    self.after(0, lambda: messagebox.showinfo("Novedades", f"Se encontraron {len(items)} nuevos contenidos y se agregaron a la cola."))
+                else:
+                    self.after(0, lambda: messagebox.showinfo("Sin Novedades", "El canal está al día, no hay publicaciones nuevas no descargadas."))
+            except Exception as e:
+                self.after(0, lambda: messagebox.showerror("Error", str(e)))
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_sync_finished(self, new_count: int):
+        self.btn_sync_all.configure(state="normal", text="🔄 Comprobar Novedades Ahora")
+        self._refresh_subscriptions_list()
+        if new_count > 0:
+            messagebox.showinfo("Sincronización Completa", f"¡Se encontraron y encolaron {new_count} nuevos archivos!")
+        else:
+            messagebox.showinfo("Sincronización Completa", "Todos los canales están al día. No hay nuevos lanzamientos.")
+
+    def _toggle_sub_auto(self, sub_id: str, val: bool):
+        self.subscriptions_manager.update_subscription(sub_id, auto_download=val)
+
+    def _remove_sub(self, sub_id: str):
+        confirm = messagebox.askyesno("Eliminar Monitoreo", "¿Estás seguro de que deseas dejar de monitorear este canal?")
+        if confirm:
+            self.subscriptions_manager.remove_subscription(sub_id)
+            self._refresh_subscriptions_list()
 
     # =========================================================================
     # VISTA 5: AJUSTES (DIRECTORIOS, RENDIMIENTO Y SESIÓN)
@@ -1571,6 +1988,24 @@ class OmniVaultApp(ctk.CTk):
             command=self._on_subtitles_toggle
         )
         subs_sw.pack(anchor="w", padx=14, pady=(2, 6))
+
+        # Switch Normalización de Volumen EBU R128
+        self.norm_switch_var = ctk.BooleanVar(value=bool(self.config.get("normalize_audio", False)))
+        norm_sw = ctk.CTkSwitch(
+            box2, text="Normalización inteligente de volumen EBU R128 (-16 LUFS estándar Spotify)",
+            variable=self.norm_switch_var, font=ctk.CTkFont(size=11),
+            command=self._on_normalize_toggle
+        )
+        norm_sw.pack(anchor="w", padx=14, pady=(2, 6))
+
+        # Switch Monitoreo Automático de Canales
+        self.sync_switch_var = ctk.BooleanVar(value=bool(self.config.get("sync_channels_auto", True)))
+        sync_sw = ctk.CTkSwitch(
+            box2, text="Monitoreo y auto-descarga de Canales / Creadores suscritos (Auto-Sync)",
+            variable=self.sync_switch_var, font=ctk.CTkFont(size=11),
+            command=self._on_sync_toggle
+        )
+        sync_sw.pack(anchor="w", padx=14, pady=(2, 6))
 
         # Switch System Tray
         self.tray_switch_var = ctk.BooleanVar(value=bool(self.config.get("tray_enabled", True)))
@@ -1965,6 +2400,22 @@ class OmniVaultApp(ctk.CTk):
             self.tray.start()
         elif not val and self.tray._is_running:
             self.tray.stop()
+
+    def _on_normalize_toggle(self):
+        val = self.norm_switch_var.get()
+        self.config.set("normalize_audio", val)
+
+    def _on_sync_toggle(self):
+        val = self.sync_switch_var.get()
+        self.config.set("sync_channels_auto", val)
+        if val:
+            self.subscriptions_manager.start_background_sync(
+                interval_seconds=int(self.config.get("sync_channels_interval_min", 30)) * 60,
+                queue_manager=self.queue_manager,
+                get_target_dir_func=self._get_target_dir
+            )
+        else:
+            self.subscriptions_manager.stop_background_sync()
 
     def _get_finish_action_label(self, val: str) -> str:
         mapping = {

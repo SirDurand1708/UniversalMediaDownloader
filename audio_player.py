@@ -48,8 +48,21 @@ class AudioPlayer:
             if res != 0:
                 # Reintentar sin especificar 'type mpegvideo' para WAV u otros
                 res, _ = self._exec(f'open "{clean_path}" alias {self._alias}')
-                if res != 0:
-                    return False
+
+            # Si falla con ruta estándar (ej. acentos o caracteres especiales), intentar con nombre corto 8.3 de Windows
+            if res != 0 and sys.platform == "win32":
+                try:
+                    short_buf = ctypes.create_unicode_buffer(512)
+                    if ctypes.windll.kernel32.GetShortPathNameW(file_path, short_buf, 512):
+                        short_clean = short_buf.value.replace("\\", "/")
+                        res, _ = self._exec(f'open "{short_clean}" type mpegvideo alias {self._alias}')
+                        if res != 0:
+                            res, _ = self._exec(f'open "{short_clean}" alias {self._alias}')
+                except Exception:
+                    pass
+
+            if res != 0:
+                return False
 
             self._exec(f'set {self._alias} time format milliseconds')
             _, len_str = self._exec(f'status {self._alias} length')

@@ -24,6 +24,9 @@ def build():
     dist_dir = os.path.join(base_dir, "dist")
     build_dir = os.path.join(base_dir, "build")
 
+    ico_file = os.path.join(base_dir, "assets", "icon.ico")
+    icon_args = ["--icon", ico_file] if os.path.isfile(ico_file) else []
+
     print("[*] Preparando argumentos de PyInstaller...")
     cmd = [
         sys.executable,
@@ -41,8 +44,8 @@ def build():
         "--hidden-import", "yt_dlp",
         "--hidden-import", "curl_cffi",
         "--hidden-import", "darkdetect",
-        os.path.join(base_dir, "app.py"),
-    ]
+        "--hidden-import", "speech_recognition",
+    ] + icon_args + [os.path.join(base_dir, "app.py")]
 
     print("[*] Ejecutando compilación...")
     ret = subprocess.call(cmd)
@@ -69,6 +72,15 @@ def build():
     src_cfg = os.path.join(base_dir, "config.example.json")
     if os.path.isfile(src_cfg):
         shutil.copy2(src_cfg, os.path.join(output_app_dir, "config.example.json"))
+
+    # Copiar carpeta assets (iconos y logos)
+    src_assets = os.path.join(base_dir, "assets")
+    dst_assets = os.path.join(output_app_dir, "assets")
+    if os.path.isdir(src_assets):
+        if os.path.exists(dst_assets):
+            shutil.rmtree(dst_assets)
+        shutil.copytree(src_assets, dst_assets)
+        print("    -> Carpeta assets copiada con iconos oficiales.")
 
     print("\n" + "=" * 60)
     print("¡COMPILACIÓN EXITOSA!")

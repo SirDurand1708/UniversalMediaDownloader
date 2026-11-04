@@ -38,10 +38,14 @@ class ConfigManager:
             "clipboard_watch": True,
             "notifications_enabled": True,
             "subtitles_enabled": False,
+            "normalize_audio": False,
             "aria2c_enabled": True,
             "accent_theme": "violet",
             "tray_enabled": True,
             "on_finish_action": "none",
+            "sync_channels_auto": True,
+            "sync_channels_interval_min": 30,
+            "floating_hud_enabled": False,
         }
 
     def _load(self) -> Dict[str, Any]:

@@ -3,6 +3,7 @@ Módulo de Integración con la Bandeja del Sistema (System Tray) para OmniVault 
 Permite minimizar la aplicación al área de notificación de Windows al lado del reloj.
 """
 
+import os
 import sys
 import threading
 from typing import Callable, Optional
@@ -40,11 +41,13 @@ class OmniVaultTray:
         self,
         on_open: Optional[Callable[[], None]] = None,
         on_toggle_queue: Optional[Callable[[], None]] = None,
+        on_toggle_hud: Optional[Callable[[], None]] = None,
         on_quit: Optional[Callable[[], None]] = None,
         theme_color: str = "#8B5CF6",
     ):
         self.on_open = on_open
         self.on_toggle_queue = on_toggle_queue
+        self.on_toggle_hud = on_toggle_hud
         self.on_quit = on_quit
         self.theme_color = theme_color
         self._icon: Optional[pystray.Icon] = None
@@ -61,9 +64,19 @@ class OmniVaultTray:
             return
 
         def _setup_and_run():
-            image = create_default_tray_image(self.theme_color)
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            custom_icon = os.path.join(base_dir, "assets", "icon.png")
+            if os.path.isfile(custom_icon):
+                try:
+                    image = Image.open(custom_icon).resize((64, 64), Image.Resampling.LANCZOS)
+                except Exception:
+                    image = create_default_tray_image(self.theme_color)
+            else:
+                image = create_default_tray_image(self.theme_color)
+
             menu = pystray.Menu(
                 pystray.MenuItem("✦ Abrir OmniVault", self._handle_open, default=True),
+                pystray.MenuItem("📌 Mini-Widget Flotante (HUD)", self._handle_toggle_hud),
                 pystray.MenuItem("⏸ / ▶ Pausar / Reanudar Cola", self._handle_toggle_queue),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("❌ Salir de OmniVault", self._handle_quit)
@@ -101,6 +114,10 @@ class OmniVaultTray:
     def _handle_open(self, icon=None, item=None):
         if self.on_open:
             self.on_open()
+
+    def _handle_toggle_hud(self, icon=None, item=None):
+        if self.on_toggle_hud:
+            self.on_toggle_hud()
 
     def _handle_toggle_queue(self, icon=None, item=None):
         if self.on_toggle_queue:

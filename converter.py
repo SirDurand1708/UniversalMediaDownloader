@@ -140,6 +140,7 @@ class LocalConverter:
         output_dir: str,
         progress_callback: Optional[Callable[[float, str, str], None]] = None,
         status_callback: Optional[Callable[[str], None]] = None,
+        normalize_audio: bool = False,
     ) -> Dict[str, Any]:
         """
         Ejecuta la conversión de un archivo local.
@@ -162,6 +163,10 @@ class LocalConverter:
         base_name = os.path.splitext(os.path.basename(input_path))[0]
         media_info = get_media_info(input_path)
         total_duration = media_info.get("duration_sec", 0.0)
+
+        # Validación preventiva: no convertir audio puro a video
+        if not media_info.get("has_video") and output_format in ["mp4", "compress_mp4"]:
+            raise ValueError("El archivo fuente solo contiene audio. Selecciona un formato de audio (MP3, WAV, M4A o FLAC) para convertirlo.")
 
         # Construir argumentos de salida
         extra_args: List[str] = []
@@ -204,6 +209,9 @@ class LocalConverter:
                 extra_args = ["-c:v", "libx264", "-preset", "medium", "-crf", "27", "-c:a", "aac", "-b:a", "128k"]
         else:
             raise ValueError(f"Formato desconocido: {output_format}")
+
+        if normalize_audio:
+            extra_args = ["-filter:a", "loudnorm=I=-16:TP=-1.5:LRA=11"] + extra_args
 
         output_file = os.path.join(output_dir, f"{base_name}{ext}")
 
@@ -261,7 +269,14 @@ class LocalConverter:
                     pct = min(curr_sec / total_duration, 0.99)
 
                     speed_str = speed_m.group(1) if speed_m else "--"
-                    rem_sec = int((total_duration - curr_sec) / max(float(speed_m.group(1).replace('x','')) if speed_m else 1.0, 0.1))
+                    speed_val = 1.0
+                    if speed_m:
+                        try:
+                            speed_val = max(float(speed_m.group(1).replace('x', '').strip()), 0.1)
+                        except ValueError:
+                            speed_val = 1.0
+
+                    rem_sec = int((total_duration - curr_sec) / speed_val)
                     eta_str = f"{rem_sec}s" if rem_sec >= 0 else "--"
 
                     if progress_callback:
@@ -278,8 +293,21 @@ class LocalConverter:
 
         rc = proc.wait()
         if rc != 0 or not os.path.isfile(output_file):
-            err_summary = "".join(stderr_output[-15:])
-            raise RuntimeError(f"Error durante la conversión FFmpeg (código {rc}):\n{err_summary}")
+            # Fallback inteligente: si la GPU falló, reintentar con CPU libx264
+            if gpu and output_format in ["mp4", "compress_mp4"]:
+                if status_callback:
+                    status_callback("GPU no disponible para este códec. Reintentando con CPU (libx264)...")
+                cpu_args = ["-c:v", "libx264", "-preset", "fast", "-crf", "23", "-c:a", "aac", "-b:a", "192k"]
+                cmd_cpu = [ffmpeg, "-y", "-i", input_path] + cpu_args + [output_file]
+                res_cpu = subprocess.run(cmd_cpu, capture_output=True, text=True, errors="replace", creationflags=flags)
+                if res_cpu.returncode == 0 and os.path.isfile(output_file):
+                    gpu = "CPU (Fallback de GPU)"
+                else:
+                    err_summary = "".join(stderr_output[-15:])
+                    raise RuntimeError(f"Error durante la conversión FFmpeg (código {rc}):\n{err_summary}")
+            else:
+                err_summary = "".join(stderr_output[-15:])
+                raise RuntimeError(f"Error durante la conversión FFmpeg (código {rc}):\n{err_summary}")
 
         if progress_callback:
             progress_callback(1.0, "100%", "0s")

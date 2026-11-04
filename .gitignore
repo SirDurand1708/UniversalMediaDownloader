@@ -32,6 +32,7 @@ cookies*.txt
 *.cookies
 config.json
 library.json
+subscriptions.json
 
 # IDE
 .vscode/

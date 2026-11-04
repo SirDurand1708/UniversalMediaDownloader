@@ -8,8 +8,12 @@
   "clipboard_watch": true,
   "notifications_enabled": true,
   "subtitles_enabled": false,
+  "normalize_audio": false,
   "aria2c_enabled": true,
   "accent_theme": "violet",
   "tray_enabled": true,
-  "on_finish_action": "none"
+  "on_finish_action": "none",
+  "sync_channels_auto": true,
+  "sync_channels_interval_min": 30,
+  "floating_hud_enabled": false
 }

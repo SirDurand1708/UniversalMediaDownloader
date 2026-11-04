@@ -244,6 +244,49 @@ def _convert_with_ffmpeg(input_file: str, output_file: str, codec: str = "mp3", 
     except Exception:
         return False
 
+def normalize_audio_file(file_path: str) -> bool:
+    """
+    Aplica normalización inteligente EBU R128 (-16 LUFS estándar de streaming y Spotify)
+    mediante el filtro de audio loudnorm de FFmpeg.
+    """
+    ff = shutil.which("ffmpeg") or (os.path.join(FFMPEG_DIR, "ffmpeg.exe") if FFMPEG_DIR else None)
+    if not ff or not os.path.isfile(file_path):
+        return False
+
+    base, ext = os.path.splitext(file_path)
+    tmp_out = f"{base}_norm{ext}"
+    if os.path.exists(tmp_out):
+        try: os.remove(tmp_out)
+        except Exception: pass
+
+    cmd = [ff, "-y", "-i", file_path, "-filter:a", "loudnorm=I=-16:TP=-1.5:LRA=11"]
+    ext_l = ext.lower()
+    if ext_l == ".mp3":
+        cmd.extend(["-vn", "-c:a", "libmp3lame", "-b:a", "320k", tmp_out])
+    elif ext_l == ".wav":
+        cmd.extend(["-vn", "-c:a", "pcm_s16le", tmp_out])
+    elif ext_l == ".m4a":
+        cmd.extend(["-vn", "-c:a", "aac", "-b:a", "256k", tmp_out])
+    elif ext_l in [".mp4", ".mkv", ".webm"]:
+        cmd.extend(["-c:v", "copy", "-c:a", "aac", "-b:a", "192k", tmp_out])
+    else:
+        cmd.extend(["-vn", tmp_out])
+
+    flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0) if sys.platform == "win32" else 0
+    try:
+        res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, creationflags=flags)
+        if res.returncode == 0 and os.path.isfile(tmp_out) and os.path.getsize(tmp_out) > 1024:
+            os.replace(tmp_out, file_path)
+            return True
+        elif os.path.exists(tmp_out):
+            try: os.remove(tmp_out)
+            except Exception: pass
+    except Exception:
+        if os.path.exists(tmp_out):
+            try: os.remove(tmp_out)
+            except Exception: pass
+    return False
+
 def embed_id3_metadata(mp3_path: str, title: str, artist: str = "", album: str = "", thumbnail_url: str = ""):
     """Incrusta título, artista y carátula del álbum en archivos MP3 usando mutagen."""
     if not mp3_path or not os.path.isfile(mp3_path) or not mp3_path.lower().endswith(".mp3"):
@@ -315,8 +358,17 @@ def _trim_file_with_ffmpeg(input_file: str, start_sec: Optional[float], end_sec:
     if not ff or not os.path.isfile(input_file):
         return None
 
+    # Validar rangos
+    if start_sec is not None and start_sec < 0:
+        start_sec = 0.0
+    if end_sec is not None and start_sec is not None and end_sec <= start_sec:
+        end_sec = None
+
     base, ext = os.path.splitext(input_file)
     output_file = f"{base}_clip{ext}"
+    if os.path.exists(output_file):
+        try: os.remove(output_file)
+        except Exception: pass
 
     cmd = [ff, "-y"]
     if start_sec is not None and start_sec > 0:
@@ -807,6 +859,7 @@ class DownloaderEngine:
         status_callback: Optional[Callable[[str], None]] = None,
         clip_start: Optional[str] = None,
         clip_end: Optional[str] = None,
+        normalize_audio: bool = False,
     ) -> Dict[str, Any]:
         """Descarga directa de video o audio de TikTok sin marca de agua y en alta definición."""
         is_audio = format_type in ['mp3_320', 'mp3_192', 'wav', 'm4a_best']
@@ -867,14 +920,12 @@ class DownloaderEngine:
                     if status_callback: status_callback("Convirtiendo a MP3...")
                     if not _convert_with_ffmpeg(temp_file, final_path, codec="mp3", bitrate="320k"):
                         shutil.move(temp_file, final_path)
-                    embed_id3_metadata(final_path, title=tt_data.get('title', ''), artist=tt_data.get('uploader', ''), album="OmniVault TikTok", thumbnail_url=tt_data.get('thumbnail', ''))
                 elif format_type == 'mp3_192':
                     format_label = "MP3 (192 kbps)"
                     final_path = os.path.join(output_dir, f"{safe_title}.mp3")
                     if status_callback: status_callback("Convirtiendo a MP3...")
                     if not _convert_with_ffmpeg(temp_file, final_path, codec="mp3", bitrate="192k"):
                         shutil.move(temp_file, final_path)
-                    embed_id3_metadata(final_path, title=tt_data.get('title', ''), artist=tt_data.get('uploader', ''), album="OmniVault TikTok", thumbnail_url=tt_data.get('thumbnail', ''))
                 elif format_type == 'wav':
                     format_label = "WAV Sin Compresión"
                     final_path = os.path.join(output_dir, f"{safe_title}.wav")
@@ -908,6 +959,19 @@ class DownloaderEngine:
                     except Exception: pass
                     final_path = trimmed
 
+            if normalize_audio:
+                if status_callback: status_callback("Normalizando audio EBU R128...")
+                normalize_audio_file(final_path)
+
+            if final_path.lower().endswith(".mp3"):
+                embed_id3_metadata(
+                    final_path,
+                    title=tt_data.get('title', safe_title),
+                    artist=tt_data.get('uploader', ''),
+                    album="OmniVault TikTok",
+                    thumbnail_url=tt_data.get('thumbnail', '')
+                )
+
             return {
                 'title': tt_data.get('title', safe_title),
                 'file_path': final_path,
@@ -935,6 +999,7 @@ class DownloaderEngine:
         use_aria2c: bool = True,
         clip_start: Optional[str] = None,
         clip_end: Optional[str] = None,
+        normalize_audio: bool = False,
     ) -> Dict[str, Any]:
         """Descarga y convierte el archivo multimedia según el formato solicitado."""
         url = normalize_url(url)
@@ -956,6 +1021,7 @@ class DownloaderEngine:
                     status_callback=status_callback,
                     clip_start=clip_start,
                     clip_end=clip_end,
+                    normalize_audio=normalize_audio,
                 )
 
         # Validación preventiva de FFmpeg
@@ -1155,15 +1221,6 @@ class DownloaderEngine:
             title = info.get('title', os.path.basename(final_path))
             thumbnail = info.get('thumbnail', '')
 
-            if final_path.lower().endswith(".mp3"):
-                embed_id3_metadata(
-                    final_path,
-                    title=title,
-                    artist=info.get('uploader') or info.get('channel') or '',
-                    album="OmniVault",
-                    thumbnail_url=thumbnail
-                )
-
             # Recorte de tiempo si fue solicitado
             start_sec = parse_timestamp_str(clip_start)
             end_sec = parse_timestamp_str(clip_end)
@@ -1175,6 +1232,20 @@ class DownloaderEngine:
                     try: os.remove(final_path)
                     except Exception: pass
                     final_path = trimmed
+
+            if normalize_audio:
+                if status_callback:
+                    status_callback("Normalizando audio EBU R128...")
+                normalize_audio_file(final_path)
+
+            if final_path.lower().endswith(".mp3"):
+                embed_id3_metadata(
+                    final_path,
+                    title=title,
+                    artist=info.get('uploader') or info.get('channel') or '',
+                    album="OmniVault",
+                    thumbnail_url=thumbnail
+                )
 
             return {
                 'title': title,

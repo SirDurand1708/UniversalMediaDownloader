@@ -1,7 +1,13 @@
 # ✦ OmniVault Desktop v2.0 - Universal Media Hub & Creative Suite
 
+<p align="center">
+  <img src="assets/icon.png" width="128" height="128" alt="OmniVault Logo">
+  <br>
+  <b>Bóveda Multimedia Universal • Suite Creativa • Descargador de Alto Rendimiento</b>
+</p>
+
 > **Aplicación de escritorio de alto rendimiento para descarga, conversión, recorte y gestión multimedia.**  
-> Diseñada en arquitectura modular con estética prémium *Obsidian & Titanium*, soporte multiresolución responsivo, aceleración por hardware GPU, aceleración multihilo con `aria2c` y suite de herramientas offline sin conexión a internet.
+> Diseñada en arquitectura modular con estética prémium *Obsidian & Titanium*, soporte multiresolución responsivo, aceleración por hardware GPU, aceleración multihilo con `aria2c`, normalización de audio EBU R128, transcriptor de subtítulos con IA, Mini-HUD flotante Picture-in-Picture y sincronización automática de creadores.
 
 ---
 
@@ -150,7 +156,53 @@ Compatible con **Vivaldi, Firefox, Brave y Opera**:
 
 ---
 
-### 12. ⌨ Atajos de Teclado Rápidos
+### 12. 🔊 Normalización Inteligente de Volumen (EBU R128 / Spotify Standard)
+¿Cansado de que una canción suene demasiado baja y la siguiente te aturda los oídos?
+- OmniVault integra el filtro profesional de masterización de volumen **EBU R128 (`loudnorm=I=-16:TP=-1.5:LRA=11`)**, el mismo estándar adoptado por **Spotify, Apple Music y YouTube**.
+- **En descargas:** Activa la casilla en **⚙ Ajustes** > *Normalización inteligente de volumen*. Todos los audios y videos descargados tendrán un nivel sonoro homogéneo y balanceado.
+- **En el conversor local:** Marca la casilla *🔊 Aplicar normalización inteligente de volumen EBU R128* al convertir cualquier canción o video de tu PC.
+
+---
+
+### 13. 🤖 Transcriptor con IA & Generador de Subtítulos (.SRT / .TXT)
+Genera subtítulos estándar y transcripciones completas de cualquier video, podcast o canción local:
+1. Dirígete a la pestaña **🔄 Conversor Local**.
+2. Selecciona cualquier archivo de video o audio en el Paso 1.
+3. En la tarjeta **🤖 Generador de Subtítulos y Transcripción con IA**, selecciona el idioma del audio (**Español, Inglés, Portugués, Francés, Alemán o Italiano**).
+4. Haz clic en **📝 GENERAR SUBTÍTULOS (.SRT Y .TXT)**.
+5. OmniVault extraerá el flujo de voz en 16kHz mono, fragmentará el audio y reconocerá los diálogos generando:
+   - Archivo `.srt` con marcas de tiempo sincronizadas con precisión de milisegundos para reproductores como VLC o edición de video.
+   - Archivo `.txt` plano con el texto completo organizado en párrafos legibles.
+6. Al finalizar, haz clic en **📄 Abrir .SRT** para revisar tus subtítulos al instante.
+
+---
+
+### 14. 📌 Mini-Widget Flotante (Floating Mini-HUD / Picture-in-Picture)
+Mantén el control total de OmniVault sin tener que cambiar de ventana mientras juegas, estudias o trabajas:
+- **Siempre Visible al Frente:** Un widget compacto y sin marco flotante (`Always-On-Top`) que puedes arrastrar a cualquier esquina de tu pantalla.
+- **Información en Tiempo Real:** Visualiza la velocidad de descarga actual (`⚡ 4.8 MB/s`), porcentaje de progreso y cuántos elementos restan en cola.
+- **Control de Cola:** Botón rápido para **pausar (⏸)** y **reanudar (▶)** todas las descargas con 1 clic.
+- **Descargas Ultrarrápidas Directas:** Pega cualquier enlace directamente en la barra del HUD y presiona **⬇ Bajar** para añadirlo a la cola sin abrir la app completa.
+- **Control Musical:** Muestra el título de la canción en reproducción y su estado.
+- **Cómo abrirlo:**
+  - Presiona el botón **📌 Mini-Widget HUD** en la barra lateral de OmniVault.
+  - O haz clic derecho en el icono de la bandeja del sistema (al lado del reloj) y selecciona **📌 Mini-Widget Flotante (HUD)**.
+
+---
+
+### 15. 📡 Monitoreo Automático de Canales y Creadores (Auto-Sync)
+¿Sigues a canales de YouTube o creadores de TikTok y quieres tener sus nuevos videos o canciones en cuanto se publiquen?
+1. Ve a la nueva pestaña **📡 Canales / Sync** en la barra lateral.
+2. Pega el enlace del canal (por ejemplo: `https://www.youtube.com/@Canal` o tu perfil favorito).
+3. Selecciona el formato deseado para las descargas automáticas (`MP3 320k HD`, `MP4 1080p Full HD`, etc.).
+4. Presiona **➕ Suscribirse**.
+5. OmniVault monitoreará periódicamente en segundo plano si el canal publica nuevos contenidos.
+6. En cuanto detecte un nuevo lanzamiento, lo descargará automáticamente a tu carpeta de Música o Videos y te avisará con una notificación nativa de Windows.
+7. Puedes activar o desactivar la auto-descarga por canal en cualquier momento o presionar **🔄 Comprobar Novedades Ahora** para forzar un escaneo inmediato.
+
+---
+
+### 16. ⌨ Atajos de Teclado Rápidos
 - **`Ctrl + V`:** Pega y analiza automáticamente cualquier enlace del portapapeles.
 - **`Ctrl + F`:** Abre la biblioteca y enfoca el buscador.
 - **`Barra Espaciadora`:** Pausa o reanuda la música del mini-reproductor.
