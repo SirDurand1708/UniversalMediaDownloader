@@ -93,14 +93,23 @@ class DownloadManager private constructor(private val context: Context) {
             val outputFile = File(targetDir, fileName)
 
             // 3. Descargar flujo mediante OkHttp con seguimiento de progreso
-            val request = Request.Builder()
+            val reqBuilder = Request.Builder()
                 .url(info.directStreamUrl)
-                .header("User-Agent", "Mozilla/5.0 (Android; Mobile; rv:120.0) Gecko/120.0 Firefox/120.0")
-                .build()
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+
+            for ((k, v) in info.requestHeaders) {
+                reqBuilder.header(k, v)
+            }
+            val request = reqBuilder.build()
 
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     throw Exception("Servidor respondió con código HTTP: ${response.code}")
+                }
+
+                val contentType = response.header("Content-Type") ?: ""
+                if (contentType.contains("text/html", ignoreCase = true)) {
+                    throw Exception("El enlace proporcionó una página web en lugar de un flujo multimedia.")
                 }
 
                 val body = response.body ?: throw Exception("Cuerpo de respuesta vacío")
@@ -108,11 +117,23 @@ class DownloadManager private constructor(private val context: Context) {
                 val inputStream = body.byteStream()
                 val outputStream = FileOutputStream(outputFile)
 
-                val buffer = ByteArray(8192)
+                val buffer = ByteArray(16384)
                 var bytesRead: Int
                 var totalRead = 0L
                 var lastTime = System.currentTimeMillis()
                 var lastBytes = 0L
+
+                // Validar el primer bloque
+                val initialRead = inputStream.read(buffer)
+                if (initialRead <= 0) {
+                    throw Exception("El flujo descargado está vacío.")
+                }
+                val previewStr = String(buffer, 0, minOf(initialRead, 80), Charsets.UTF_8).lowercase()
+                if (previewStr.contains("<!doctype") || previewStr.contains("<html")) {
+                    throw Exception("El enlace retornó HTML en lugar de un archivo multimedia válido.")
+                }
+                outputStream.write(buffer, 0, initialRead)
+                totalRead += initialRead
 
                 while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                     outputStream.write(buffer, 0, bytesRead)
@@ -120,11 +141,11 @@ class DownloadManager private constructor(private val context: Context) {
 
                     val now = System.currentTimeMillis()
                     val timeDiff = now - lastTime
-                    if (timeDiff >= 500) {
+                    if (timeDiff >= 400) {
                         val speedBytesPerSec = ((totalRead - lastBytes) * 1000.0) / timeDiff
                         item.speedText = String.format("%.2f MB/s", speedBytesPerSec / (1024 * 1024))
                         if (totalBytes > 0) {
-                            item.progress = ((totalRead * 100) / totalBytes).toInt()
+                            item.progress = ((totalRead * 100) / totalBytes).toInt().coerceIn(1, 99)
                         }
                         lastTime = now
                         lastBytes = totalRead

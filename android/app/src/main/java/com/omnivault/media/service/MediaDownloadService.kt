@@ -19,7 +19,7 @@ class MediaDownloadService : Service() {
         const val EXTRA_FORMAT = "extra_format"
         const val EXTRA_TASK_ID = "extra_task_id"
 
-        private const val NOTIFICATION_ID_BASE = 5000
+        private const val FOREGROUND_SERVICE_NOTIF_ID = 4001
     }
 
     private lateinit var downloadManager: DownloadManager
@@ -28,17 +28,47 @@ class MediaDownloadService : Service() {
         super.onCreate()
         downloadManager = DownloadManager.getInstance(this)
         downloadManager.onDownloadUpdatedListener = { item ->
-            val notification = NotificationHelper.buildProgressNotification(this, item).build()
-            try {
-                NotificationManagerCompat.from(this).notify(NOTIFICATION_ID_BASE + item.id.hashCode() % 1000, notification)
-            } catch (_: SecurityException) {}
+            val notifId = NotificationHelper.NOTIFICATION_ID_BASE + Math.abs(item.id.hashCode() % 1000)
 
-            if (item.status == DownloadStatus.COMPLETED || item.status == DownloadStatus.ERROR || item.status == DownloadStatus.CANCELLED) {
-                // Si no quedan tareas activas, detener el servicio
-                if (downloadManager.getActiveDownloads().isEmpty()) {
-                    stopSelf()
+            when (item.status) {
+                DownloadStatus.DOWNLOADING, DownloadStatus.FETCHING_METADATA, DownloadStatus.QUEUED -> {
+                    // Actualizar barra de progreso y velocidad en vivo
+                    val progressNotification = NotificationHelper.buildProgressNotification(this, item).build()
+                    try {
+                        NotificationManagerCompat.from(this).notify(notifId, progressNotification)
+                    } catch (_: SecurityException) {}
                 }
+                DownloadStatus.COMPLETED -> {
+                    // 1. Cancelar la notificación de descarga en progreso
+                    NotificationHelper.cancelNotification(this, notifId)
+                    // 2. Emitir notificación de completado con sonido y acciones (Reproducir / Compartir)
+                    try {
+                        NotificationHelper.showCompletedNotification(this, item)
+                    } catch (_: SecurityException) {}
+
+                    checkIfServiceShouldStop()
+                }
+                DownloadStatus.ERROR -> {
+                    // Cancelar progreso y emitir error
+                    NotificationHelper.cancelNotification(this, notifId)
+                    try {
+                        NotificationHelper.showErrorNotification(this, item)
+                    } catch (_: SecurityException) {}
+
+                    checkIfServiceShouldStop()
+                }
+                DownloadStatus.CANCELLED -> {
+                    NotificationHelper.cancelNotification(this, notifId)
+                    checkIfServiceShouldStop()
+                }
+                else -> {}
             }
+        }
+    }
+
+    private fun checkIfServiceShouldStop() {
+        if (downloadManager.getActiveDownloads().isEmpty()) {
+            stopSelf()
         }
     }
 

@@ -1,16 +1,18 @@
 package com.omnivault.media.ui
 
-import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.view.Gravity
+import android.view.ViewGroup
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import com.omnivault.media.databinding.ActivityQuickShareBinding
 import com.omnivault.media.model.MediaFormat
 import com.omnivault.media.model.PlatformType
 import com.omnivault.media.service.MediaDownloadService
 import com.omnivault.media.utils.UrlUtils
 
-class QuickShareActivity : Activity() {
+class QuickShareActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityQuickShareBinding
     private var targetUrl: String? = null
@@ -19,6 +21,14 @@ class QuickShareActivity : Activity() {
         super.onCreate(savedInstanceState)
         binding = ActivityQuickShareBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        window?.let { win ->
+            win.setLayout(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            win.setGravity(Gravity.BOTTOM)
+        }
 
         handleIncomingIntent(intent)
         setupClickListeners()
