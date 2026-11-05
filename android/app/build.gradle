@@ -11,8 +11,8 @@ android {
         applicationId "com.omnivault.media"
         minSdk 26
         targetSdk 34
-        versionCode 204
-        versionName "2.0.4"
+        versionCode 205
+        versionName "2.0.5"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -20,19 +20,18 @@ android {
         }
     }
 
-    // Firma del APK de Release: usa debug.keystore para distribución directa (sideload).
-    // En CI: KEYSTORE_PATH se establece como env var apuntando al keystore generado.
-    // En local: usa el debug.keystore estándar del SDK si existe.
+    // Keystore Oficial Permanente de OmniVault
+    // Almacenado en android/omnivault-release.keystore para que TODAS las versiones
+    // compartan siempre la misma firma criptográfica y eviten el error de conflicto de paquete.
     signingConfigs {
         release {
-            def ksPath = System.getenv("KEYSTORE_PATH") ?:
-                "${System.getProperty('user.home')}/.android/debug.keystore"
-            def ksFile = file(ksPath)
+            def ksFile = file("${rootDir}/omnivault-release.keystore")
             if (ksFile.exists()) {
                 storeFile ksFile
-                storePassword (System.getenv("KEYSTORE_PASSWORD") ?: "android")
-                keyAlias (System.getenv("KEY_ALIAS") ?: "androiddebugkey")
-                keyPassword (System.getenv("KEY_PASSWORD") ?: "android")
+                storeType "PKCS12"
+                storePassword "android"
+                keyAlias "androiddebugkey"
+                keyPassword "android"
             }
         }
     }
@@ -40,11 +39,7 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            def ksPath = System.getenv("KEYSTORE_PATH") ?:
-                "${System.getProperty('user.home')}/.android/debug.keystore"
-            if (file(ksPath).exists()) {
-                signingConfig signingConfigs.release
-            }
+            signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {

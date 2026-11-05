@@ -24,23 +24,7 @@ jobs:
           distribution: 'temurin'
           java-version: 17
 
-      - name: 🔑 Generar debug.keystore para compilación CI
-        run: |
-          keytool -genkey -v \
-            -keystore ${{ github.workspace }}/debug.keystore \
-            -alias androiddebugkey \
-            -keyalg RSA -keysize 2048 \
-            -validity 10000 \
-            -storepass android \
-            -keypass android \
-            -dname "CN=OmniVault,O=OmniVault,C=US"
-
-      - name: 🔨 Compilar APK con Gradle (Release)
-        env:
-          KEYSTORE_PATH: ${{ github.workspace }}/debug.keystore
-          KEYSTORE_PASSWORD: android
-          KEY_ALIAS: androiddebugkey
-          KEY_PASSWORD: android
+      - name: 🔨 Compilar APK con Gradle (Release firmado con Keystore oficial)
         run: |
           cd android
           chmod +x gradlew

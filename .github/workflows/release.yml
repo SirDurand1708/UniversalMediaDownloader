@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Nombre de la versión / Etiqueta (ej. v2.0.3)'
+        description: 'Nombre de la versión / Etiqueta (ej. v2.0.5)'
         required: false
-        default: 'v2.0.3'
+        default: 'v2.0.5'
 
 permissions:
   contents: write
@@ -80,23 +80,7 @@ jobs:
           distribution: 'temurin'
           java-version: 17
 
-      - name: 🔑 Generar debug.keystore para firma del APK de release
-        run: |
-          keytool -genkey -v \
-            -keystore ${{ github.workspace }}/debug.keystore \
-            -alias androiddebugkey \
-            -keyalg RSA -keysize 2048 \
-            -validity 10000 \
-            -storepass android \
-            -keypass android \
-            -dname "CN=OmniVault,O=OmniVault,C=US"
-
-      - name: 🐘 Compilar APK de OmniVault con Gradle (Release firmado)
-        env:
-          KEYSTORE_PATH: ${{ github.workspace }}/debug.keystore
-          KEYSTORE_PASSWORD: android
-          KEY_ALIAS: androiddebugkey
-          KEY_PASSWORD: android
+      - name: 🐘 Compilar APK de OmniVault con Gradle (Release firmado con Keystore oficial)
         run: |
           cd android
           chmod +x gradlew
@@ -107,7 +91,7 @@ jobs:
             TAG_VAL="${{ inputs.tag_name }}"
           fi
           if [ -z "$TAG_VAL" ]; then
-            TAG_VAL="v2.0.3"
+            TAG_VAL="v2.0.5"
           fi
           find app/build/outputs/apk/release/ -name "*.apk" -exec cp {} ../dist/Releases/OmniVault-${TAG_VAL}-Android.apk \;
 
@@ -177,10 +161,11 @@ jobs:
 
             ---
 
-            ### 📱 Nueva Versión para Teléfonos Android (Estilo Snaptube)
-            - **⚡ Integración Directa con Menú Compartir:** Abre YouTube, TikTok, Facebook, Instagram o Twitter, presiona *Compartir* y selecciona **OmniVault** para descargar audio o video en 1 clic.
+            ### 📱 Nueva Versión para Teléfonos Android (Descargas en Segundo Plano & Keystore Oficial)
+            - **⚡ Keystore Oficial Permanente:** Firma criptográfica fija para garantizar que todas las actualizaciones se instalen sin conflictos de paquetes.
+            - **📥 Descarga 100% en Segundo Plano:** Servicio persistente con WakeLock, barra de progreso en vivo y velocidad en MB/s en la barra de notificaciones del celular.
+            - **🔔 Notificación de Descarga Completada:** Con sonido, vibración y botones directos para Reproducir o Compartir.
             - **📋 Auto-Detección de Portapapeles (Snaptube-like):** Al copiar un enlace en cualquier navegador o aplicación, OmniVault te muestra un aviso flotante interactivo con botones de descarga directa (*MP3 320k* y *MP4 FHD*).
-            - **📥 Descarga en Segundo Plano:** Servicio persistente con barra de progreso, velocidad en MB/s y registro directo en la Galería y reproductores de Android.
 
             ---
 
@@ -197,7 +182,7 @@ jobs:
 
             | Plataforma | Paquete | Archivo | Descripción |
             | :--- | :--- | :--- | :--- |
-            | 📱 **Android** | **APK Instalable** | `OmniVault-${{ steps.resolve_tag.outputs.tag }}-Android.apk` | Compatible con Android 8.0 a 14+. Descarga estilo Snaptube con menú compartir. |
+            | 📱 **Android** | **APK Instalable** | `OmniVault-${{ steps.resolve_tag.outputs.tag }}-Android.apk` | Compatible con Android 8.0 a 14+. Firma oficial permanente con descargas en segundo plano. |
             | 💻 **Windows** | **Instalador Setup** | `OmniVault-${{ steps.resolve_tag.outputs.tag }}-Windows-x64-Setup.exe` | Instalación guiada clásica para Windows 10 y 11 (64 bits). |
             | 💻 **Windows** | **Versión Portátil** | `OmniVault-${{ steps.resolve_tag.outputs.tag }}-Windows-x64-Portable.zip` | No requiere instalación. Extraer y ejecutar. Ideal para memorias USB. |
             | 🛡️ **Seguridad** | **Sumas de Integridad** | `SHA256SUMS.txt` | Hashes criptográficos SHA-256 para validar la autenticidad de los archivos. |
