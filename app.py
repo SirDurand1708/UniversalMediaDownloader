@@ -22,7 +22,7 @@ from mini_hud import MiniHUD
 from downloader import (
     DownloaderEngine, is_url, normalize_url, clean_error_text,
     is_ffmpeg_available, FFMPEG_DIR, is_browser_running,
-    is_aria2c_available, detect_hardware_acceleration, format_duration,
+    is_aria2c_available, install_aria2, detect_hardware_acceleration, format_duration,
     parse_timestamp_str, estimate_sizes_for_video
 )
 from queue_manager import QueueManager, DownloadTask
@@ -1998,16 +1998,44 @@ class OmniVaultApp(ctk.CTk):
         )
         clip_sw.pack(anchor="w", padx=14, pady=(2, 6))
 
-        # Switch Aria2c
+        # Switch y Gestor de Instalación Aria2c
         aria_ok = is_aria2c_available()
-        aria_status = "Activo (8 hilos)" if aria_ok else "No detectado (Opcional)"
         self.aria2c_switch_var = ctk.BooleanVar(value=bool(self.config.get("aria2c_enabled", True)))
-        aria_sw = ctk.CTkSwitch(
-            box2, text=f"Acelerador de red multihilo Aria2c — {aria_status}",
+
+        aria_container = ctk.CTkFrame(box2, fg_color="transparent")
+        aria_container.pack(fill="x", padx=14, pady=(2, 6))
+
+        aria_row = ctk.CTkFrame(aria_container, fg_color="transparent")
+        aria_row.pack(fill="x")
+
+        self.aria_sw = ctk.CTkSwitch(
+            aria_row, text="Acelerador de red multihilo Aria2c (8 conexiones en paralelo)",
             variable=self.aria2c_switch_var, font=ctk.CTkFont(size=11),
             command=self._on_aria2c_toggle
         )
-        aria_sw.pack(anchor="w", padx=14, pady=(2, 6))
+        self.aria_sw.pack(side="left")
+
+        btn_txt = "🔄 Reinstalar Aria2c" if aria_ok else "⚡ Instalar Aria2c (1-Clic)"
+        btn_fg = theme.BTN_SECONDARY_BG if aria_ok else theme.ACCENT_CYAN
+        btn_hover = theme.BTN_SECONDARY_HOVER if aria_ok else theme.ACCENT_CYAN_HOVER
+        btn_text_color = theme.BTN_SECONDARY_TEXT if aria_ok else "#000000"
+
+        self.aria_install_btn = ctk.CTkButton(
+            aria_row, text=btn_txt, width=175, height=26,
+            font=ctk.CTkFont(size=10, weight="bold"),
+            fg_color=btn_fg, hover_color=btn_hover, text_color=btn_text_color,
+            command=self._on_install_aria2_clicked
+        )
+        self.aria_install_btn.pack(side="right")
+
+        self.aria_status_lbl = ctk.CTkLabel(
+            aria_container,
+            text="✔ Acelerador activo y configurado en bin/aria2c.exe (8 hilos en paralelo)" if aria_ok else "⚠ Aria2c no detectado. Presiona 'Instalar Aria2c' para activarlo automáticamente.",
+            font=ctk.CTkFont(size=10),
+            text_color=theme.STATUS_SUCCESS if aria_ok else theme.STATUS_WARNING,
+            anchor="w"
+        )
+        self.aria_status_lbl.pack(fill="x", padx=(36, 0), pady=(1, 2))
 
         # Switch Notificaciones
         self.notify_switch_var = ctk.BooleanVar(value=bool(self.config.get("notifications_enabled", True)))
@@ -2263,6 +2291,54 @@ class OmniVaultApp(ctk.CTk):
     def _on_aria2c_toggle(self):
         val = self.aria2c_switch_var.get()
         self.config.set("aria2c_enabled", val)
+
+    def _on_install_aria2_clicked(self):
+        self.aria_install_btn.configure(state="disabled", text="⏳ Instalando Aria2c...")
+        self.aria_status_lbl.configure(text="Descargando y extrayendo paquete oficial de Aria2c (64 bits)...", text_color=theme.ACCENT_CYAN)
+
+        def _worker():
+            def _status(msg):
+                self.after(0, lambda: self.aria_status_lbl.configure(text=msg))
+
+            ok, msg = install_aria2(status_callback=_status)
+
+            def _done():
+                self.aria_install_btn.configure(state="normal")
+                if ok:
+                    self.aria_install_btn.configure(
+                        text="🔄 Reinstalar Aria2c",
+                        fg_color=theme.BTN_SECONDARY_BG,
+                        hover_color=theme.BTN_SECONDARY_HOVER,
+                        text_color=theme.BTN_SECONDARY_TEXT
+                    )
+                    self.aria_status_lbl.configure(
+                        text="✔ Acelerador activo y configurado en bin/aria2c.exe (8 hilos en paralelo)",
+                        text_color=theme.STATUS_SUCCESS
+                    )
+                    self.aria2c_switch_var.set(True)
+                    self.config.set("aria2c_enabled", True)
+                    send_notification("OmniVault - Aria2c", "¡Acelerador de red Aria2c instalado y activo!")
+                    messagebox.showinfo(
+                        "Aria2c Instalado con Éxito",
+                        "Aria2c se ha descargado y configurado correctamente en la carpeta bin/." + "\n\n" +
+                        "Las descargas pesadas ahora se realizarán con 8 conexiones simultáneas en paralelo, " +
+                        "multiplicando tu velocidad de descarga hasta por 5x."
+                    )
+                else:
+                    self.aria_install_btn.configure(
+                        text="⚡ Reintentar Instalación",
+                        fg_color=theme.ACCENT_CYAN,
+                        text_color="#000000"
+                    )
+                    self.aria_status_lbl.configure(
+                        text=f"❌ Error al instalar: {msg[:65]}",
+                        text_color=theme.STATUS_ERROR
+                    )
+                    messagebox.showerror("Error al instalar Aria2c", msg)
+
+            self.after(0, _done)
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _on_notify_toggle(self):
         val = self.notify_switch_var.get()

@@ -1,0 +1,98 @@
+name: ✦ OmniVault Official Release CI/CD
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Nombre de la versión / Etiqueta (ej. v2.0.0)'
+        required: false
+        default: 'v2.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Publish Release
+    runs-on: windows-latest
+
+    steps:
+      - name: 📥 Clonar repositorio
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🐍 Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 📦 Instalar Inno Setup Compiler
+        run: |
+          choco install innosetup --no-progress --no-color
+
+      - name: 📚 Instalar dependencias de Python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 🧪 Ejecutar suite de pruebas unitarias
+        run: |
+          python run_tests.py
+
+      - name: ⚙️ Compilar a ejecutable autónomo (PyInstaller)
+        run: |
+          python build_exe.py
+
+      - name: 📦 Generar paquetes portátiles, instalador y sumas SHA-256
+        run: |
+          python package_release.py
+
+      - name: 🚀 Publicar en GitHub Releases
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          name: "✦ OmniVault Desktop ${{ github.ref_name || inputs.tag_name }} — Obsidian & Titanium Release"
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+          files: |
+            dist/Releases/OmniVault-*-Windows-x64-Setup.exe
+            dist/Releases/OmniVault-*-Windows-x64-Portable.zip
+            dist/Releases/SHA256SUMS.txt
+          body: |
+            ## ✦ OmniVault Desktop ${{ github.ref_name || inputs.tag_name }} — Obsidian & Titanium Edition
+
+            > **Bóveda Multimedia Universal • Suite Creativa • Descargador de Alto Rendimiento**
+
+            ---
+
+            ### 🚀 Nuevas Funcionalidades
+            - **🎨 Diseño Obsidian & Titanium:** Interfaz prémium de alto contraste con 5 colores de acento configurables (*Cyberpunk Violet, Electric Blue, Emerald Matrix, Sunset Orange, Rose Quartz*).
+            - **⚡ Instalador Automático de Aria2c (1-Clic):** Botón integrado en Ajustes para descargar, configurar y activar el acelerador multihilo de 8 conexiones paralelas automáticamente.
+            - **✂️ Recorte Milimétrico de Audio y Video (Trim & Clip):** Descarga fragmentos exactos especificando minutos y segundos con precisión de fotograma mediante FFmpeg.
+            - **🔊 Normalización de Volumen EBU R128:** Calibración psicoacústica a -16 LUFS (estándar Spotify / Apple Music) para evitar cambios bruscos de volumen.
+            - **📝 Transcriptor de Subtítulos con IA:** Extracción y generación de archivos sincronizados `.srt` y `.txt` en múltiples idiomas.
+            - **🪟 Mini-HUD Flotante Picture-in-Picture:** Widget compacto arrastrable para supervisar descargas y controlar música mientras juegas o trabajas.
+            - **🔔 Sincronización Automática de Canales:** Monitoreo y auto-descarga periódica de creadores favoritos de YouTube y TikTok.
+            - **🎵 Mini-Reproductor Integrado:** Reproducción nativa mediante Windows MCI (`winmm.dll`) sin consumo excesivo de memoria.
+
+            ---
+
+            ### 📦 Descargas Disponibles
+
+            | Tipo de Paquete | Archivo | Descripción |
+            | :--- | :--- | :--- |
+            | **Instalador Oficial** | `OmniVault-v2.0.0-Windows-x64-Setup.exe` | Instalación guiada clásica con accesos directos y desinstalador en Windows. |
+            | **Versión Portátil** | `OmniVault-v2.0.0-Windows-x64-Portable.zip` | No requiere instalación. Extraer y ejecutar `OmniVault.exe`. Ideal para USBs. |
+            | **Sumas de Integridad** | `SHA256SUMS.txt` | Hashes criptográficos para validar la autenticidad de los binarios. |
+
+            ---
+
+            ### 🛡️ Requisitos del Sistema
+            - **Sistema Operativo:** Windows 10 u 11 (64 bits).
+            - **Aceleración GPU:** Compatible con NVIDIA NVENC, Intel QuickSync y AMD AMF.

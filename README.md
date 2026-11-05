@@ -245,29 +245,29 @@ py run_tests.py
 
 ---
 
-## 📦 Creación del Instalador Oficial de Windows (.exe / Setup)
+## 📦 Empaquetado y Publicación Profesional (Releases)
 
-### Paso 1: Compilar a Ejecutable Autónomo (.exe)
+### Generación de Paquetes Locales (Portátil + Instalador + Checksums)
 Haz doble clic en:
 ```text
-compilar.bat
+empaquetar.bat
 ```
-O ejecuta en consola:
+O ejecuta en terminal:
 ```bash
-py build_exe.py
+py package_release.py
 ```
-El ejecutable resultante estará en:
-```text
-dist\OmniVault\OmniVault.exe
-```
+Este proceso generará automáticamente en la carpeta `dist\Releases\`:
+1. `OmniVault-v2.0.0-Windows-x64-Setup.exe` (Instalador oficial guiado)
+2. `OmniVault-v2.0.0-Windows-x64-Portable.zip` (Versión sin instalación)
+3. `SHA256SUMS.txt` (Sumas criptográficas de verificación)
 
-### Paso 2: Generar el Instalador Setup (Inno Setup)
-1. Descarga e instala [Inno Setup (Gratuito)](https://jrsoftware.org/isdl.php).
-2. Haz clic derecho en [`installer.iss`](installer.iss) y selecciona **Compile** (o presiona `F9` dentro de Inno Setup).
-3. Obtendrás el instalador final en:
-   ```text
-   dist\Installer\OmniVault_Setup_v2.0.exe
-   ```
+### Automatización CI/CD en GitHub
+El proyecto cuenta con GitHub Actions preconfigurado (`.github/workflows/release.yml`). Para publicar una nueva versión automáticamente:
+```bash
+git tag v2.0.0
+git push origin v2.0.0
+```
+Consulta la [**Guía Completa de Lanzamientos (RELEASE_GUIDE.md)**](RELEASE_GUIDE.md) para más detalles.
 
 ---
 

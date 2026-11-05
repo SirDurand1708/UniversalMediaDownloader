@@ -15,6 +15,8 @@ import threading
 import subprocess
 import urllib.parse
 import urllib.request
+import zipfile
+import tempfile
 from typing import Callable, Optional, Dict, Any, List
 import yt_dlp
 
@@ -104,6 +106,94 @@ def _get_aria2c_path() -> Optional[str]:
 def is_aria2c_available() -> bool:
     """Comprueba si el acelerador de red multihilo aria2c está disponible."""
     return bool(_get_aria2c_path())
+
+def install_aria2(
+    status_callback: Optional[Callable[[str], None]] = None
+) -> tuple[bool, str]:
+    """
+    Descarga, extrae y configura automáticamente aria2c.exe en la carpeta bin/ del proyecto.
+    Utiliza curl.exe nativo de Windows (o urllib como respaldo) y extrae aria2c.exe
+    sin requerir permisos de administrador.
+    """
+    base_dir = get_app_dir()
+    bin_dir = os.path.join(base_dir, "bin")
+    os.makedirs(bin_dir, exist_ok=True)
+    target_exe = os.path.join(bin_dir, "aria2c.exe")
+
+    url = "https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip"
+    temp_zip = os.path.join(tempfile.gettempdir(), f"omnivault_aria2_{int(time.time())}.zip")
+
+    flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0) if sys.platform == "win32" else 0
+
+    try:
+        if status_callback:
+            status_callback("Conectando con el servidor de Aria2c...")
+
+        # 1. Intentar con curl.exe nativo de Windows
+        curl_bin = shutil.which("curl") or r"C:\Windows\System32\curl.exe"
+        downloaded = False
+
+        if os.path.isfile(curl_bin):
+            if status_callback:
+                status_callback("Descargando paquete oficial de Aria2c (64-bit)...")
+            cmd = [curl_bin, "-L", "-A", "Mozilla/5.0", "--connect-timeout", "10", "--retry", "3", url, "-o", temp_zip]
+            res = subprocess.run(cmd, creationflags=flags, timeout=120)
+            if res.returncode == 0 and os.path.isfile(temp_zip) and os.path.getsize(temp_zip) > 500000:
+                downloaded = True
+
+        # 2. Fallback con urllib si curl no pudo completarlo
+        if not downloaded:
+            if status_callback:
+                status_callback("Descargando mediante protocolo HTTP alternativo...")
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=45) as resp:
+                with open(temp_zip, "wb") as f_out:
+                    shutil.copyfileobj(resp, f_out)
+            if os.path.isfile(temp_zip) and os.path.getsize(temp_zip) > 500000:
+                downloaded = True
+
+        if not downloaded:
+            return False, "No se pudo descargar el paquete de Aria2c. Comprueba tu conexión a internet."
+
+        if status_callback:
+            status_callback("Extrayendo aria2c.exe en la carpeta bin/...")
+
+        with zipfile.ZipFile(temp_zip, "r") as zf:
+            found_name = None
+            for name in zf.namelist():
+                if name.lower().endswith("aria2c.exe"):
+                    found_name = name
+                    break
+            if not found_name:
+                return False, "El archivo descargado no contiene el binario aria2c.exe esperado."
+
+            with zf.open(found_name) as src, open(target_exe, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+
+        if not os.path.isfile(target_exe):
+            return False, "No se pudo escribir aria2c.exe en la carpeta bin/."
+
+        # Probar ejecución
+        test_run = subprocess.run([target_exe, "--version"], capture_output=True, text=True, creationflags=flags)
+        if test_run.returncode != 0:
+            return False, "Aria2c se extrajo pero no pudo ser ejecutado en este sistema."
+
+        # Actualizar variable PATH en el proceso actual
+        if bin_dir not in os.environ.get("PATH", ""):
+            os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
+
+        first_line = test_run.stdout.splitlines()[0] if test_run.stdout else "Versión 1.37.0"
+        return True, f"Aria2c instalado y activo ({first_line})."
+
+    except Exception as e:
+        return False, f"Error durante la instalación de Aria2c: {str(e)}"
+    finally:
+        if os.path.isfile(temp_zip):
+            try:
+                os.remove(temp_zip)
+            except Exception:
+                pass
 
 def is_curl_cffi_available() -> bool:
     """Comprueba si curl_cffi está presente y disponible para impersonación TLS."""

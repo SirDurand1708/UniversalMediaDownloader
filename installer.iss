@@ -1,4 +1,4 @@
-; Inno Setup Script para generar el instalador de OmniVault Desktop
+; Inno Setup Script para generar el instalador oficial de OmniVault Desktop
 ; Para compilar este instalador, descarga e instala Inno Setup (gratuito) desde https://jrsoftware.org/isdl.php
 ; Abre este archivo en Inno Setup Compiler y presiona 'Compile' (F9).
 
@@ -19,8 +19,8 @@ AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DisableProgramGroupPage=yes
 LicenseFile=LICENSE
-OutputDir=dist\Installer
-OutputBaseFilename=OmniVault_Setup_v2.0
+OutputDir=dist\Releases
+OutputBaseFilename=OmniVault-v2.0.0-Windows-x64-Setup
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
