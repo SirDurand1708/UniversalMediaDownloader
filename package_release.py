@@ -31,7 +31,6 @@ def make_portable_zip(source_dir: str, target_zip: str):
     print(f"[*] Comprimiendo versión portátil: {target_zip}...")
     with zipfile.ZipFile(target_zip, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
         for root, dirs, files in os.walk(source_dir):
-            # Excluir carpetas __pycache__
             dirs[:] = [d for d in dirs if d != "__pycache__"]
             for file in files:
                 if file.endswith((".pyc", ".tmp")):
@@ -47,6 +46,8 @@ def compile_inno_setup(iss_file: str) -> bool:
     print("[*] Buscando compilador Inno Setup (ISCC.exe)...")
     iscc_candidates = [
         shutil.which("iscc"),
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"),
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\Inno Setup 7\ISCC.exe"),
         r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
         r"C:\Program Files\Inno Setup 6\ISCC.exe",
         r"C:\Program Files (x86)\Inno Setup 5\ISCC.exe",

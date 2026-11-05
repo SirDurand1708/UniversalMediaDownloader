@@ -45,3 +45,10 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 .DS_Store
+
+# Android
+.gradle/
+android/app/build/
+android/.gradle/
+*.apk
+*.aab

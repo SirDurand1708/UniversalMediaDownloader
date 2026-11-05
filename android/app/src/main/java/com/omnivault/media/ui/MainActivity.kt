@@ -1,0 +1,262 @@
+package com.omnivault.media.ui
+
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
+import android.view.View
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
+import androidx.recyclerview.widget.LinearLayoutManager
+import com.omnivault.media.databinding.ActivityMainBinding
+import com.omnivault.media.downloader.DownloadManager
+import com.omnivault.media.model.DownloadItem
+import com.omnivault.media.model.MediaFormat
+import com.omnivault.media.model.PlatformType
+import com.omnivault.media.service.ClipboardMonitorService
+import com.omnivault.media.utils.UrlUtils
+import java.io.File
+
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var binding: ActivityMainBinding
+    private lateinit var downloadManager: DownloadManager
+    private lateinit var downloadAdapter: DownloadAdapter
+    private lateinit var historyAdapter: HistoryAdapter
+
+    private var selectedFormat: MediaFormat = MediaFormat.MP3_320
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        downloadManager = DownloadManager.getInstance(this)
+
+        setupRecyclerViews()
+        setupListeners()
+        handlePreloadedUrl(intent)
+        checkClipboardForMediaUrl()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshLists()
+        checkClipboardForMediaUrl()
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handlePreloadedUrl(intent)
+    }
+
+    private fun handlePreloadedUrl(intent: Intent?) {
+        val preloaded = intent?.getStringExtra("preloaded_url")
+        if (!preloaded.isNullOrBlank()) {
+            binding.etUrlInput.setText(preloaded)
+            updatePlatformBadge(preloaded)
+        }
+    }
+
+    private fun setupRecyclerViews() {
+        // Active Downloads
+        downloadAdapter = DownloadAdapter { item ->
+            downloadManager.cancelDownload(item.id)
+            refreshLists()
+        }
+        binding.rvActiveDownloads.layoutManager = LinearLayoutManager(this)
+        binding.rvActiveDownloads.adapter = downloadAdapter
+
+        // History
+        historyAdapter = HistoryAdapter(
+            onPlayClick = { item -> playMediaFile(item) },
+            onShareClick = { item -> shareMediaFile(item) },
+            onDeleteClick = { item ->
+                downloadManager.removeHistoryItem(item)
+                refreshLists()
+            }
+        )
+        binding.rvHistory.layoutManager = LinearLayoutManager(this)
+        binding.rvHistory.adapter = historyAdapter
+
+        downloadManager.onDownloadUpdatedListener = {
+            runOnUiThread { refreshLists() }
+        }
+        downloadManager.onHistoryUpdatedListener = {
+            runOnUiThread { refreshLists() }
+        }
+        refreshLists()
+    }
+
+    private fun setupListeners() {
+        // Switch Auto Clipboard
+        val prefs = getSharedPreferences("omnivault_prefs", Context.MODE_PRIVATE)
+        binding.switchAutoClipboard.isChecked = prefs.getBoolean("auto_clipboard_detection", true)
+        binding.switchAutoClipboard.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("auto_clipboard_detection", isChecked).apply()
+            if (isChecked) {
+                ClipboardMonitorService.startService(this)
+                Toast.makeText(this, "Monitor de enlaces activado", Toast.LENGTH_SHORT).show()
+            } else {
+                ClipboardMonitorService.stopService(this)
+                Toast.makeText(this, "Monitor de enlaces desactivado", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // Paste Button
+        binding.btnPasteUrl.setOnClickListener {
+            val clipMgr = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = clipMgr.primaryClip
+            if (clip != null && clip.itemCount > 0) {
+                val text = clip.getItemAt(0).text?.toString() ?: ""
+                val extracted = UrlUtils.extractUrlFromText(text)
+                if (!extracted.isNullOrBlank()) {
+                    binding.etUrlInput.setText(extracted)
+                    updatePlatformBadge(extracted)
+                } else {
+                    binding.etUrlInput.setText(text)
+                }
+            }
+        }
+
+        // Clear Button
+        binding.btnClearUrl.setOnClickListener {
+            binding.etUrlInput.setText("")
+        }
+
+        // TextWatcher
+        binding.etUrlInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val text = s?.toString() ?: ""
+                binding.btnClearUrl.visibility = if (text.isNotEmpty()) View.VISIBLE else View.GONE
+                updatePlatformBadge(text)
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+
+        // Format Chips
+        binding.chipGroupFormats.setOnCheckedStateChangeListener { _, checkedIds ->
+            selectedFormat = when {
+                checkedIds.contains(binding.chipMp3.id) -> MediaFormat.MP3_320
+                checkedIds.contains(binding.chipMp4Full.id) -> MediaFormat.MP4_1080
+                checkedIds.contains(binding.chipMp4Hd.id) -> MediaFormat.MP4_720
+                checkedIds.contains(binding.chipM4a.id) -> MediaFormat.M4A
+                else -> MediaFormat.MP3_320
+            }
+        }
+
+        // Start Download Button
+        binding.btnStartDownload.setOnClickListener {
+            val url = binding.etUrlInput.text.toString().trim()
+            val extracted = UrlUtils.extractUrlFromText(url)
+
+            if (extracted.isNullOrBlank()) {
+                Toast.makeText(this, "Por favor ingresa o pega un enlace válido", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            downloadManager.enqueueDownload(extracted, selectedFormat)
+            binding.etUrlInput.setText("")
+            Toast.makeText(this, "Descarga agregada a la cola", Toast.LENGTH_SHORT).show()
+            refreshLists()
+        }
+
+        // Clear History
+        binding.tvClearHistory.setOnClickListener {
+            downloadManager.clearAllHistory()
+            refreshLists()
+        }
+    }
+
+    private fun checkClipboardForMediaUrl() {
+        try {
+            val clipMgr = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = clipMgr.primaryClip
+            if (clip != null && clip.itemCount > 0) {
+                val text = clip.getItemAt(0).text?.toString() ?: ""
+                val extracted = UrlUtils.extractUrlFromText(text)
+                if (!extracted.isNullOrBlank() && UrlUtils.isSupportedMediaUrl(extracted) && binding.etUrlInput.text.isEmpty()) {
+                    binding.etUrlInput.setText(extracted)
+                    updatePlatformBadge(extracted)
+                    Toast.makeText(this, "✦ Enlace de video auto-detectado del portapapeles", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun updatePlatformBadge(url: String) {
+        val extracted = UrlUtils.extractUrlFromText(url)
+        if (!extracted.isNullOrBlank()) {
+            val platform = PlatformType.fromUrl(extracted)
+            binding.tvDetectedPlatform.text = platform.displayName
+        } else {
+            binding.tvDetectedPlatform.text = "Listo para pegar"
+        }
+    }
+
+    private fun refreshLists() {
+        val active = downloadManager.getActiveDownloads()
+        val history = downloadManager.getHistory()
+
+        if (active.isNotEmpty()) {
+            binding.tvActiveDownloadsHeader.visibility = View.VISIBLE
+            binding.rvActiveDownloads.visibility = View.VISIBLE
+            downloadAdapter.updateList(active)
+        } else {
+            binding.tvActiveDownloadsHeader.visibility = View.GONE
+            binding.rvActiveDownloads.visibility = View.GONE
+        }
+
+        if (history.isNotEmpty()) {
+            binding.rvHistory.visibility = View.VISIBLE
+            binding.layoutEmptyHistory.visibility = View.GONE
+            historyAdapter.updateList(history)
+        } else {
+            binding.rvHistory.visibility = View.GONE
+            binding.layoutEmptyHistory.visibility = View.VISIBLE
+        }
+    }
+
+    private fun playMediaFile(item: DownloadItem) {
+        val path = item.localFilePath ?: return
+        val file = File(path)
+        if (!file.exists()) {
+            Toast.makeText(this, "El archivo ya no se encuentra en el dispositivo", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val uri = FileProvider.getUriForFile(this, "${applicationContext.packageName}.fileprovider", file)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, item.format.mimeType)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "No se encontró un reproductor compatible", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun shareMediaFile(item: DownloadItem) {
+        val path = item.localFilePath ?: return
+        val file = File(path)
+        if (!file.exists()) {
+            Toast.makeText(this, "El archivo no existe", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val uri = FileProvider.getUriForFile(this, "${applicationContext.packageName}.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = item.format.mimeType
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(intent, "Compartir con"))
+    }
+}

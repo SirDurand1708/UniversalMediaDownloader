@@ -1,4 +1,4 @@
-name: ✦ OmniVault Official Release CI/CD
+name: ✦ OmniVault Official Multiplatform Release CI/CD
 
 on:
   push:
@@ -15,8 +15,11 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    name: Build & Publish Release
+  # =========================================================================
+  # 1. Compilación de Distribuciones Windows (Instalador + Versión Portátil)
+  # =========================================================================
+  build-windows:
+    name: Build Windows (Portable + Installer)
     runs-on: windows-latest
 
     steps:
@@ -48,51 +51,122 @@ jobs:
         run: |
           python build_exe.py
 
-      - name: 📦 Generar paquetes portátiles, instalador y sumas SHA-256
+      - name: 📦 Generar paquetes portátiles e instalador
         run: |
           python package_release.py
 
+      - name: 📤 Subir artefactos de Windows
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binaries
+          path: |
+            dist/Releases/OmniVault-*-Windows-x64-Setup.exe
+            dist/Releases/OmniVault-*-Windows-x64-Portable.zip
+
+  # =========================================================================
+  # 2. Compilación de Distribución Android (APK Oficial)
+  # =========================================================================
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: ☕ Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      - name: 📱 Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 🐘 Compilar APK de OmniVault con Gradle
+        run: |
+          cd android
+          gradle assembleRelease || gradle assembleDebug
+          mkdir -p ../dist/Releases
+          find app/build/outputs/apk/ -name "*.apk" -exec cp {} ../dist/Releases/OmniVault-v2.0.0-Android.apk \;
+
+      - name: 📤 Subir artefacto de Android
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: dist/Releases/OmniVault-v2.0.0-Android.apk
+
+  # =========================================================================
+  # 3. Publicación Oficial en GitHub Releases
+  # =========================================================================
+  publish-release:
+    name: Publish Official Release
+    needs: [build-windows, build-android]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: 📥 Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: 📥 Descargar binarios de Windows
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-binaries
+          path: dist/Releases
+
+      - name: 📥 Descargar APK de Android
+        uses: actions/download-artifact@v4
+        with:
+          name: android-apk
+          path: dist/Releases
+
+      - name: 🛡️ Calcular Sumas de Verificación SHA-256
+        run: |
+          cd dist/Releases
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
       - name: 🚀 Publicar en GitHub Releases
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         with:
-          name: "✦ OmniVault Desktop ${{ github.ref_name || inputs.tag_name }} — Obsidian & Titanium Release"
+          name: "✦ OmniVault ${{ github.ref_name || inputs.tag_name }} — Windows PC & Android"
           draft: false
           prerelease: false
           generate_release_notes: false
           files: |
             dist/Releases/OmniVault-*-Windows-x64-Setup.exe
             dist/Releases/OmniVault-*-Windows-x64-Portable.zip
+            dist/Releases/OmniVault-*-Android.apk
             dist/Releases/SHA256SUMS.txt
           body: |
-            ## ✦ OmniVault Desktop ${{ github.ref_name || inputs.tag_name }} — Obsidian & Titanium Edition
+            ## ✦ OmniVault ${{ github.ref_name || inputs.tag_name }} — Obsidian & Titanium Release
 
-            > **Bóveda Multimedia Universal • Suite Creativa • Descargador de Alto Rendimiento**
-
-            ---
-
-            ### 🚀 Nuevas Funcionalidades
-            - **🎨 Diseño Obsidian & Titanium:** Interfaz prémium de alto contraste con 5 colores de acento configurables (*Cyberpunk Violet, Electric Blue, Emerald Matrix, Sunset Orange, Rose Quartz*).
-            - **⚡ Instalador Automático de Aria2c (1-Clic):** Botón integrado en Ajustes para descargar, configurar y activar el acelerador multihilo de 8 conexiones paralelas automáticamente.
-            - **✂️ Recorte Milimétrico de Audio y Video (Trim & Clip):** Descarga fragmentos exactos especificando minutos y segundos con precisión de fotograma mediante FFmpeg.
-            - **🔊 Normalización de Volumen EBU R128:** Calibración psicoacústica a -16 LUFS (estándar Spotify / Apple Music) para evitar cambios bruscos de volumen.
-            - **📝 Transcriptor de Subtítulos con IA:** Extracción y generación de archivos sincronizados `.srt` y `.txt` en múltiples idiomas.
-            - **🪟 Mini-HUD Flotante Picture-in-Picture:** Widget compacto arrastrable para supervisar descargas y controlar música mientras juegas o trabajas.
-            - **🔔 Sincronización Automática de Canales:** Monitoreo y auto-descarga periódica de creadores favoritos de YouTube y TikTok.
-            - **🎵 Mini-Reproductor Integrado:** Reproducción nativa mediante Windows MCI (`winmm.dll`) sin consumo excesivo de memoria.
+            > **Bóveda Multimedia Universal • Suite Creativa Multiplataforma para PC y Teléfonos Android**
 
             ---
 
-            ### 📦 Descargas Disponibles
-
-            | Tipo de Paquete | Archivo | Descripción |
-            | :--- | :--- | :--- |
-            | **Instalador Oficial** | `OmniVault-v2.0.0-Windows-x64-Setup.exe` | Instalación guiada clásica con accesos directos y desinstalador en Windows. |
-            | **Versión Portátil** | `OmniVault-v2.0.0-Windows-x64-Portable.zip` | No requiere instalación. Extraer y ejecutar `OmniVault.exe`. Ideal para USBs. |
-            | **Sumas de Integridad** | `SHA256SUMS.txt` | Hashes criptográficos para validar la autenticidad de los binarios. |
+            ### 📱 Nueva Versión para Teléfonos Android (Estilo Snaptube)
+            - **⚡ Integración Directa con Menú Compartir:** Abre YouTube, TikTok, Facebook, Instagram o Twitter, presiona *Compartir* y selecciona **OmniVault** para descargar audio o video en 1 clic.
+            - **📋 Auto-Detección de Portapapeles (Snaptube-like):** Al copiar un enlace en cualquier navegador o aplicación, OmniVault te muestra un aviso flotante interactivo con botones de descarga directa (*MP3 320k* y *MP4 FHD*).
+            - **📥 Descarga en Segundo Plano:** Servicio persistente con barra de progreso, velocidad en MB/s y registro directo en la Galería y reproductores de Android.
 
             ---
 
-            ### 🛡️ Requisitos del Sistema
-            - **Sistema Operativo:** Windows 10 u 11 (64 bits).
-            - **Aceleración GPU:** Compatible con NVIDIA NVENC, Intel QuickSync y AMD AMF.
+            ### 💻 Versiones Disponibles para PC (Windows)
+            - **📦 Versión Portátil:** Totalmente autónoma en formato `.zip`. Solo descomprime y ejecuta `OmniVault.exe` en cualquier PC o memoria USB sin instalar nada.
+            - **🛠️ Instalador Oficial:** Instalador clásico `.exe` generado con Inno Setup, con accesos directos en el Escritorio y Menú Inicio.
+            - **⚡ Aceleración Aria2c:** Soporte multihilo de hasta 8 conexiones simultáneas.
+            - **✂️ Recorte de Medios (Trim):** Extrae fragmentos exactos de video y audio con precisión de fotograma.
+            - **🔊 Normalización EBU R128:** Calibración a -16 LUFS estándar de streaming musical.
+
+            ---
+
+            ### 📦 Paquetes Oficiales de Descarga
+
+            | Plataforma | Paquete | Archivo | Descripción |
+            | :--- | :--- | :--- | :--- |
+            | 📱 **Android** | **APK Instalable** | `OmniVault-v2.0.0-Android.apk` | Compatible con Android 8.0 a 14+. Descarga estilo Snaptube con menú compartir. |
+            | 💻 **Windows** | **Instalador Setup** | `OmniVault-v2.0.0-Windows-x64-Setup.exe` | Instalación guiada clásica para Windows 10 y 11 (64 bits). |
+            | 💻 **Windows** | **Versión Portátil** | `OmniVault-v2.0.0-Windows-x64-Portable.zip` | No requiere instalación. Extraer y ejecutar. Ideal para memorias USB. |
+            | 🛡️ **Seguridad** | **Sumas de Integridad** | `SHA256SUMS.txt` | Hashes criptográficos SHA-256 para validar la autenticidad de los archivos. |

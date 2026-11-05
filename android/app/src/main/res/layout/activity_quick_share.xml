@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/dialog_background"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <!-- Indicador de barra de arrastre superior -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="16dp"
+        android:background="@color/titanium_border" />
+
+    <!-- Cabecera con Icono y Nombre -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:id="@+id/imgAppLogo"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:src="@mipmap/ic_launcher" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-black"
+                android:text="OMNIVAULT DESCARGADOR"
+                android:textColor="@color/accent_cyan"
+                android:textSize="14sp"
+                android:letterSpacing="0.05" />
+
+            <TextView
+                android:id="@+id/tvPlatformBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Enlace Compartido Detectado"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/btnClose"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            app:tint="@color/text_secondary" />
+    </LinearLayout>
+
+    <!-- Vista Previa de la URL -->
+    <TextView
+        android:id="@+id/tvSharedUrl"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:background="@drawable/bg_input_box"
+        android:ellipsize="middle"
+        android:maxLines="2"
+        android:padding="12dp"
+        android:textColor="@color/text_primary"
+        android:textSize="12sp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Selecciona la calidad de descarga:"
+        android:textColor="@color/text_secondary"
+        android:textSize="13sp" />
+
+    <!-- Botones de Acción Estilo Snaptube -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="vertical">
+
+        <!-- Descargar Audio MP3 HQ -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDownloadMp3"
+            android:layout_width="match_parent"
+            android:layout_height="54dp"
+            android:text="🎵 Descargar Audio MP3 (320 kbps)"
+            android:textAllCaps="false"
+            android:textColor="@color/obsidian_darker"
+            android:textStyle="bold"
+            app:backgroundTint="@color/accent_cyan"
+            app:cornerRadius="12dp" />
+
+        <!-- Descargar Video MP4 1080p -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDownloadMp4Full"
+            android:layout_width="match_parent"
+            android:layout_height="54dp"
+            android:layout_marginTop="8dp"
+            android:text="🎬 Descargar Video Full HD (1080p)"
+            android:textAllCaps="false"
+            android:textColor="@color/text_primary"
+            android:textStyle="bold"
+            app:backgroundTint="@color/titanium_elevated"
+            app:strokeColor="@color/accent_cyan"
+            app:strokeWidth="1.5dp"
+            app:cornerRadius="12dp" />
+
+        <!-- Descargar Video MP4 720p -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDownloadMp4Hd"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:layout_marginTop="8dp"
+            android:text="🎬 Descargar Video HD (720p)"
+            android:textAllCaps="false"
+            android:textColor="@color/text_secondary"
+            app:backgroundTint="@color/titanium_elevated"
+            app:cornerRadius="12dp" />
+
+        <!-- Abrir en OmniVault Completo -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnOpenMain"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:layout_marginTop="8dp"
+            android:text="⚙️ Más opciones en OmniVault"
+            android:textAllCaps="false"
+            android:textColor="@color/accent_cyan"
+            style="@style/Widget.Material3.Button.TextButton" />
+    </LinearLayout>
+</LinearLayout>

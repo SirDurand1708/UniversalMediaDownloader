@@ -1,0 +1,44 @@
+<resources>
+    <string name="app_name">OmniVault</string>
+    <string name="app_tagline">Bóveda Multimedia Universal</string>
+    <string name="quick_share_title">Descarga Rápida con OmniVault</string>
+    <string name="input_hint">Pega aquí el enlace de YouTube, TikTok, Reels, Twitter…</string>
+    <string name="btn_paste">Pegar</string>
+    <string name="btn_clear">Limpiar</string>
+    <string name="btn_download">Descargar Ahora</string>
+
+    <!-- Opciones de Calidad -->
+    <string name="format_section_title">Formato y Calidad</string>
+    <string name="format_mp3_320">Audio MP3 (320 kbps HQ)</string>
+    <string name="format_mp4_1080">Video MP4 (1080p FHD)</string>
+    <string name="format_mp4_720">Video MP4 (720p HD)</string>
+    <string name="format_m4a">Audio M4A (Original)</string>
+
+    <!-- Snaptube Style Clipboard Service -->
+    <string name="clipboard_service_title">Monitor de Enlaces OmniVault</string>
+    <string name="clipboard_service_desc">Supervisando enlaces multimedia copiados en segundo plano</string>
+    <string name="clipboard_detected_title">✦ Enlace Multimedia Detectado</string>
+    <string name="clipboard_detected_msg">¿Deseas descargar este contenido con OmniVault?</string>
+    <string name="action_quick_mp3">🎵 Descargar MP3</string>
+    <string name="action_quick_mp4">🎬 Descargar MP4</string>
+    <string name="action_open_app">Abrir</string>
+    <string name="action_dismiss">Ignorar</string>
+
+    <!-- Secciones -->
+    <string name="section_active_downloads">Descargas en Progreso</string>
+    <string name="section_history">Biblioteca y Descargas Recientes</string>
+    <string name="section_settings">Ajustes Rápidos</string>
+    <string name="setting_auto_clipboard">Detector Automático de Enlaces (Estilo Snaptube)</string>
+    <string name="setting_auto_clipboard_desc">Al copiar un enlace de YouTube, TikTok o Instagram, muestra un aviso para descargarlo al instante</string>
+    <string name="empty_history">Aún no hay descargas registradas</string>
+    <string name="empty_downloads">No hay descargas activas en este momento</string>
+
+    <!-- Acciones de Descarga -->
+    <string name="status_downloading">Descargando a %1$s…</string>
+    <string name="status_completed">Descarga completada con éxito</string>
+    <string name="status_error">Error en la descarga: %1$s</string>
+    <string name="btn_open">Reproducir</string>
+    <string name="btn_share">Compartir</string>
+    <string name="btn_delete">Eliminar</string>
+    <string name="btn_cancel">Cancelar</string>
+</resources>
