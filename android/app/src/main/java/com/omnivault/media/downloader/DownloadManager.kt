@@ -7,6 +7,7 @@ import com.google.gson.reflect.TypeToken
 import com.omnivault.media.model.DownloadItem
 import com.omnivault.media.model.DownloadStatus
 import com.omnivault.media.model.MediaFormat
+import com.omnivault.media.utils.AudioExtractor
 import com.omnivault.media.utils.StorageHelper
 import kotlinx.coroutines.*
 import okhttp3.OkHttpClient
@@ -86,11 +87,12 @@ class DownloadManager private constructor(private val context: Context) {
             item.status = DownloadStatus.DOWNLOADING
             notifyUpdate(item)
 
-            // 2. Preparar archivo de destino
+            // 2. Preparar archivo temporal y destino final
             val targetDir = StorageHelper.getOutputDirectory(item.format.isAudio)
             val cleanTitle = StorageHelper.sanitizeFilename(info.title)
-            val fileName = "${cleanTitle}.${item.format.extension}"
-            val outputFile = File(targetDir, fileName)
+
+            val tempDownloadFile = File(context.cacheDir, "temp_stream_${item.id}.tmp")
+            if (tempDownloadFile.exists()) tempDownloadFile.delete()
 
             // 3. Descargar flujo mediante OkHttp con seguimiento de progreso
             val reqBuilder = Request.Builder()
@@ -115,7 +117,7 @@ class DownloadManager private constructor(private val context: Context) {
                 val body = response.body ?: throw Exception("Cuerpo de respuesta vacío")
                 val totalBytes = body.contentLength()
                 val inputStream = body.byteStream()
-                val outputStream = FileOutputStream(outputFile)
+                val outputStream = FileOutputStream(tempDownloadFile)
 
                 val buffer = ByteArray(16384)
                 var bytesRead: Int
@@ -158,14 +160,49 @@ class DownloadManager private constructor(private val context: Context) {
                 inputStream.close()
             }
 
-            // 4. Registro en el escáner del sistema Android (MediaStore)
-            StorageHelper.scanMediaFile(context, outputFile, item.format.mimeType)
+            // 4. Procesamiento final (Extracción de audio sin pérdida si aplica)
+            var finalOutputFile: File
+            var finalMimeType: String
 
-            // 5. Finalización con éxito
+            if (item.format.isAudio) {
+                if (info.directStreamUrl.contains(".mp3") || tempDownloadFile.name.endsWith(".mp3")) {
+                    finalOutputFile = File(targetDir, "${cleanTitle}.mp3")
+                    tempDownloadFile.copyTo(finalOutputFile, overwrite = true)
+                    tempDownloadFile.delete()
+                    finalMimeType = "audio/mpeg"
+                } else {
+                    // Flujo nativo AAC en contenedor MP4: extraer pista de audio pura en .m4a
+                    item.speedText = "Extrayendo audio AAC..."
+                    notifyUpdate(item)
+                    val m4aFile = File(targetDir, "${cleanTitle}.m4a")
+                    val extracted = AudioExtractor.extractAudio(tempDownloadFile, m4aFile)
+                    tempDownloadFile.delete()
+
+                    if (extracted && m4aFile.exists() && m4aFile.length() > 0) {
+                        finalOutputFile = m4aFile
+                        finalMimeType = "audio/mp4"
+                    } else {
+                        // Fallback
+                        finalOutputFile = File(targetDir, "${cleanTitle}.${item.format.extension}")
+                        tempDownloadFile.copyTo(finalOutputFile, overwrite = true)
+                        finalMimeType = item.format.mimeType
+                    }
+                }
+            } else {
+                finalOutputFile = File(targetDir, "${cleanTitle}.${item.format.extension}")
+                tempDownloadFile.copyTo(finalOutputFile, overwrite = true)
+                tempDownloadFile.delete()
+                finalMimeType = item.format.mimeType
+            }
+
+            // 5. Registro en el escáner del sistema Android (MediaStore)
+            StorageHelper.scanMediaFile(context, finalOutputFile, finalMimeType)
+
+            // 6. Finalización con éxito
             item.progress = 100
             item.status = DownloadStatus.COMPLETED
-            item.localFilePath = outputFile.absolutePath
-            item.fileSizeFormatted = StorageHelper.formatFileSize(outputFile.length())
+            item.localFilePath = finalOutputFile.absolutePath
+            item.fileSizeFormatted = StorageHelper.formatFileSize(finalOutputFile.length())
 
             activeTasks.remove(item.id)
             addToHistory(item)

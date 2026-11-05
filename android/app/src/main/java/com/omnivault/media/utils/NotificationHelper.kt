@@ -21,8 +21,10 @@ object NotificationHelper {
     const val CHANNEL_DOWNLOADS_ID = "omnivault_downloads"
     const val CHANNEL_COMPLETED_ID = "omnivault_completed"
     const val CHANNEL_CLIPBOARD_ID = "omnivault_clipboard"
+    const val CHANNEL_UPDATES_ID = "omnivault_updates"
 
     private const val CLIPBOARD_NOTIFICATION_ID = 9001
+    private const val UPDATE_NOTIFICATION_ID = 9002
     const val NOTIFICATION_ID_BASE = 5000
 
     fun createNotificationChannels(context: Context) {
@@ -61,9 +63,21 @@ object NotificationHelper {
                 setShowBadge(true)
             }
 
+            // Canal 4: Actualizaciones oficiales del sistema
+            val updatesChannel = NotificationChannel(
+                CHANNEL_UPDATES_ID,
+                "Actualizaciones de OmniVault",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Notificaciones de nuevas versiones disponibles"
+                enableVibration(true)
+                setShowBadge(true)
+            }
+
             manager.createNotificationChannel(downloadChannel)
             manager.createNotificationChannel(completedChannel)
             manager.createNotificationChannel(clipboardChannel)
+            manager.createNotificationChannel(updatesChannel)
         }
     }
 
@@ -239,6 +253,56 @@ object NotificationHelper {
             .setAutoCancel(true)
 
         manager.notify(notifId, builder.build())
+    }
+
+    /**
+     * Notificación cuando hay una nueva versión oficial de OmniVault disponible.
+     */
+    fun showUpdateNotification(context: Context, version: String, apkUrl: String, changelog: String) {
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            putExtra("trigger_update", true)
+            putExtra("update_version", version)
+            putExtra("update_url", apkUrl)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            UPDATE_NOTIFICATION_ID,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_UPDATES_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("🚀 Actualización disponible: OmniVault v$version")
+            .setContentText("Toca aquí para actualizar automáticamente con 1 solo toque.")
+            .setStyle(NotificationCompat.BigTextStyle().bigText("✦ Nueva versión disponible: v$version\n\n$changelog\n\nToca para descargar e instalar automáticamente."))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+
+        manager.notify(UPDATE_NOTIFICATION_ID, builder.build())
+    }
+
+    /**
+     * Progreso de la descarga de actualización.
+     */
+    fun showUpdateProgressNotification(context: Context, progress: Int, speed: String) {
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_UPDATES_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("⚡ Descargando actualización OmniVault...")
+            .setContentText("$progress% completado • $speed")
+            .setProgress(100, progress, progress == 0)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+
+        manager.notify(UPDATE_NOTIFICATION_ID, builder.build())
     }
 
     fun cancelNotification(context: Context, notifId: Int) {

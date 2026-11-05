@@ -31,6 +31,7 @@ from image_cache import ThumbnailCache
 from config_manager import ConfigManager
 from audio_player import AudioPlayer
 from notifications import send_notification
+import updater
 
 import traceback
 import time
@@ -177,6 +178,7 @@ class OmniVaultApp(ctk.CTk):
 
         # Iniciar monitoreo del portapapeles si está activado
         self.after(1500, self._check_clipboard_loop)
+        self.after(3500, self._check_updates_startup)
 
     def _on_close(self, force: bool = False):
         """Maneja el cierre ordenado de la aplicación o la minimiza a la bandeja del sistema."""
@@ -2275,6 +2277,27 @@ class OmniVaultApp(ctk.CTk):
         )
         ctk.CTkLabel(box4, text=diag_text, font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY, justify="left").pack(anchor="w", padx=14, pady=(0, 12))
 
+        # Bloque 5: Actualizaciones Oficiales
+        box5 = ctk.CTkFrame(settings_scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
+        box5.pack(fill="x", pady=6)
+
+        ctk.CTkLabel(box5, text="🚀 Actualizaciones Oficiales (1 Clic)", font=ctk.CTkFont(size=13, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=14, pady=(12, 4))
+        ctk.CTkLabel(box5, text=f"Versión actual instalada: OmniVault v{updater.CURRENT_VERSION}. Comprueba nuevas funciones y parches.", font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY).pack(anchor="w", padx=14, pady=(0, 10))
+
+        row_up = ctk.CTkFrame(box5, fg_color="transparent")
+        row_up.pack(fill="x", padx=14, pady=(0, 12))
+
+        ctk.CTkButton(
+            row_up,
+            text="🔄 Buscar Actualizaciones Ahora",
+            height=32,
+            fg_color=theme.BTN_PRIMARY_BG,
+            hover_color=theme.BTN_PRIMARY_HOVER,
+            text_color=theme.BTN_PRIMARY_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=self._check_updates_manual
+        ).pack(side="left")
+
         return view
 
     def _on_workers_changed(self, value: str):
@@ -2842,3 +2865,120 @@ class OmniVaultApp(ctk.CTk):
 if __name__ == "__main__":
     app = OmniVaultApp()
     app.mainloop()
+
+
+    def _check_updates_startup(self):
+        """Verifica en segundo plano si hay una nueva versión oficial de OmniVault."""
+        def _on_result(has_update, data, err):
+            if has_update and data:
+                self.after(0, lambda: self._show_update_modal(data))
+        updater.check_for_updates_async(_on_result)
+
+    def _check_updates_manual(self):
+        """Verificación manual invocada desde los ajustes."""
+        def _on_result(has_update, data, err):
+            if err:
+                self.after(0, lambda: messagebox.showerror("Comprobación de Actualizaciones", f"No se pudo conectar al servidor:\n{err}"))
+            elif has_update and data:
+                self.after(0, lambda: self._show_update_modal(data))
+            else:
+                self.after(0, lambda: messagebox.showinfo("OmniVault al día", f"✓ Ya estás utilizando la versión oficial más reciente (v{updater.CURRENT_VERSION})."))
+        updater.check_for_updates_async(_on_result)
+
+    def _show_update_modal(self, data):
+        """Muestra un diálogo moderno informando la nueva versión con botón de 1 clic."""
+        remote_version = data.get("version", "2.0.0")
+        changelog = data.get("changelog", "Mejoras de rendimiento y estabilidad general.")
+        windows_data = data.get("windows", {})
+        setup_url = windows_data.get("setup_url", "")
+        portable_url = windows_data.get("portable_url", "")
+
+        is_frozen = getattr(sys, 'frozen', False)
+        is_installed = is_frozen and "program files" in sys.executable.lower()
+        target_url = setup_url if is_installed else (portable_url or setup_url)
+
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("🚀 Actualización Disponible - OmniVault")
+        dialog.geometry("500x380")
+        dialog.resizable(False, False)
+        dialog.transient(self)
+        dialog.grab_set()
+
+        dialog.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() - 500) // 2
+        y = self.winfo_y() + (self.winfo_height() - 380) // 2
+        dialog.geometry(f"+{max(0, x)}+{max(0, y)}")
+
+        frame = ctk.CTkFrame(dialog, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
+        frame.pack(fill="both", expand=True, padx=14, pady=14)
+
+        ctk.CTkLabel(
+            frame,
+            text=f"✦ ¡Nueva Versión v{remote_version} Disponible!",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color=theme.ACCENT_CYAN
+        ).pack(pady=(12, 4))
+
+        ctk.CTkLabel(
+            frame,
+            text="Una nueva versión oficial con mejoras está lista para instalar:",
+            font=ctk.CTkFont(size=11),
+            text_color=theme.TEXT_SECONDARY
+        ).pack(pady=(0, 8))
+
+        log_box = ctk.CTkTextbox(frame, height=110, fg_color=theme.BG_INPUT, corner_radius=6)
+        log_box.pack(fill="x", padx=14, pady=4)
+        log_box.insert("1.0", changelog)
+        log_box.configure(state="disabled")
+
+        progress_bar = ctk.CTkProgressBar(frame, height=8, corner_radius=4, progress_color=theme.ACCENT_CYAN)
+        progress_bar.set(0)
+        progress_lbl = ctk.CTkLabel(frame, text="", font=ctk.CTkFont(size=11), text_color=theme.TEXT_MUTED)
+
+        btn_row = ctk.CTkFrame(frame, fg_color="transparent")
+        btn_row.pack(fill="x", padx=14, pady=(12, 6))
+
+        def _do_update():
+            btn_up.configure(state="disabled", text="Descargando actualización...")
+            progress_bar.pack(fill="x", padx=14, pady=(6, 2))
+            progress_lbl.pack(pady=(0, 6))
+
+            def _progress(pct, downloaded, total):
+                self.after(0, lambda: progress_bar.set(pct / 100.0))
+                self.after(0, lambda: progress_lbl.configure(text=f"Descargando: {pct}% ({downloaded // (1024*1024)} MB / {total // (1024*1024)} MB)"))
+
+            def _finish(dest):
+                self.after(0, lambda: progress_lbl.configure(text="¡Descarga completada! Iniciando actualización..."))
+
+            def _error(err):
+                self.after(0, lambda: messagebox.showerror("Error de actualización", f"No se pudo descargar:\n{err}"))
+                self.after(0, lambda: btn_up.configure(state="normal", text="Reintentar"))
+
+            updater.download_and_install_update(
+                target_url,
+                is_installer=is_installed,
+                progress_callback=_progress,
+                finished_callback=_finish,
+                error_callback=_error
+            )
+
+        btn_up = ctk.CTkButton(
+            btn_row,
+            text="⚡ Actualizar Ahora (1 Clic)",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color=theme.BTN_PRIMARY_BG,
+            hover_color=theme.BTN_PRIMARY_HOVER,
+            text_color=theme.BTN_PRIMARY_TEXT,
+            command=_do_update
+        )
+        btn_up.pack(side="left", fill="x", expand=True, padx=(0, 6))
+
+        ctk.CTkButton(
+            btn_row,
+            text="Más tarde",
+            font=ctk.CTkFont(size=11),
+            fg_color=theme.BTN_SECONDARY_BG,
+            hover_color=theme.BTN_SECONDARY_HOVER,
+            text_color=theme.BTN_SECONDARY_TEXT,
+            command=dialog.destroy
+        ).pack(side="right", padx=(6, 0))

@@ -2,6 +2,8 @@ package com.omnivault.media.downloader
 
 import com.google.gson.JsonParser
 import com.omnivault.media.model.MediaFormat
+import com.omnivault.media.model.PlatformType
+import com.omnivault.media.utils.UrlUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -18,7 +20,17 @@ data class ExtractedMediaInfo(
     val format: MediaFormat,
     val durationSeconds: Long = 0,
     val author: String = "",
+    val thumbnailUrl: String = "",
     val requestHeaders: Map<String, String> = emptyMap()
+)
+
+data class MediaPreview(
+    val title: String,
+    val author: String,
+    val thumbnailUrl: String,
+    val platform: PlatformType,
+    val durationText: String = "",
+    val originalUrl: String
 )
 
 object MediaExtractor {
@@ -36,6 +48,113 @@ object MediaExtractor {
         "(?:youtu\\.be/|youtube\\.com/(?:embed/|v/|shorts/|watch\\?v=|watch\\?.+&v=))([\\w-]{11})"
     )
 
+    /**
+     * Analiza el enlace y devuelve metadatos enriquecidos (Título, Autor, Miniatura)
+     * para que el usuario previsualice el contenido antes de descargarlo.
+     */
+    suspend fun analyze(url: String): MediaPreview = withContext(Dispatchers.IO) {
+        val clean = UrlUtils.extractUrlFromText(url) ?: url
+        val platform = PlatformType.fromUrl(clean)
+
+        when (platform) {
+            PlatformType.YOUTUBE -> analyzeYouTube(clean)
+            PlatformType.TIKTOK -> analyzeTikTok(clean)
+            else -> analyzeGeneric(clean, platform)
+        }
+    }
+
+    private fun analyzeYouTube(url: String): MediaPreview {
+        val matcher = YT_VIDEO_ID_PATTERN.matcher(url)
+        val videoId = if (matcher.find()) matcher.group(1) else ""
+        val thumb = if (videoId.isNotBlank()) "https://i.ytimg.com/vi/$videoId/hqdefault.jpg" else ""
+
+        try {
+            val oembedUrl = "https://www.youtube.com/oembed?url=https://youtu.be/$videoId&format=json"
+            val req = Request.Builder()
+                .url(oembedUrl)
+                .header("User-Agent", BROWSER_USER_AGENT)
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val body = resp.body?.string() ?: ""
+                    val root = JsonParser.parseString(body).asJsonObject
+                    val title = root.get("title")?.asString ?: "YouTube Video"
+                    val author = root.get("author_name")?.asString ?: "YouTube Creator"
+                    val thumbUrl = root.get("thumbnail_url")?.asString ?: thumb
+                    return MediaPreview(
+                        title = title,
+                        author = author,
+                        thumbnailUrl = thumbUrl,
+                        platform = PlatformType.YOUTUBE,
+                        originalUrl = url
+                    )
+                }
+            }
+        } catch (_: Exception) {}
+
+        return MediaPreview(
+            title = if (videoId.isNotBlank()) "Video de YouTube ($videoId)" else "Video de YouTube",
+            author = "YouTube",
+            thumbnailUrl = thumb,
+            platform = PlatformType.YOUTUBE,
+            originalUrl = url
+        )
+    }
+
+    private fun analyzeTikTok(url: String): MediaPreview {
+        try {
+            val apiUrl = "https://www.tikwm.com/api/?url=${URLEncoder.encode(url, "UTF-8")}"
+            val req = Request.Builder()
+                .url(apiUrl)
+                .header("User-Agent", BROWSER_USER_AGENT)
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val body = resp.body?.string() ?: ""
+                    val json = JsonParser.parseString(body).asJsonObject
+                    if (json.get("code")?.asInt == 0) {
+                        val data = json.getAsJsonObject("data")
+                        val title = data?.get("title")?.asString?.ifBlank { "TikTok Video" } ?: "TikTok Video"
+                        val author = data?.getAsJsonObject("author")?.get("nickname")?.asString ?: "TikTok Creator"
+                        val cover = data?.get("cover")?.asString ?: ""
+                        val duration = data?.get("duration")?.asInt ?: 0
+                        val durationStr = if (duration > 0) String.format("%02d:%02d", duration / 60, duration % 60) else ""
+
+                        return MediaPreview(
+                            title = title,
+                            author = author,
+                            thumbnailUrl = cover,
+                            platform = PlatformType.TIKTOK,
+                            durationText = durationStr,
+                            originalUrl = url
+                        )
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        return MediaPreview(
+            title = "Contenido de TikTok",
+            author = "TikTok",
+            thumbnailUrl = "",
+            platform = PlatformType.TIKTOK,
+            originalUrl = url
+        )
+    }
+
+    private fun analyzeGeneric(url: String, platform: PlatformType): MediaPreview {
+        val cleanName = url.substringAfterLast("/").substringBefore("?").ifBlank { platform.displayName }
+        return MediaPreview(
+            title = cleanName,
+            author = platform.displayName,
+            thumbnailUrl = "",
+            platform = platform,
+            originalUrl = url
+        )
+    }
+
     suspend fun extract(url: String, requestedFormat: MediaFormat): ExtractedMediaInfo = withContext(Dispatchers.IO) {
         val lower = url.lowercase()
 
@@ -49,12 +168,14 @@ object MediaExtractor {
 
     /**
      * Extractor oficial de YouTube mediante la API InnerTube de Android con respaldo en Piped.
-     * Extrae flujos de video directos MP4 y flujos de audio directos M4A/MP3 (ftyp).
+     * Para video y canciones: utiliza flujos progresivos MP4 oficiales sin cifrado ni errores 403.
      */
     private fun extractYouTube(url: String, requestedFormat: MediaFormat): ExtractedMediaInfo {
         val matcher = YT_VIDEO_ID_PATTERN.matcher(url)
         val videoId = if (matcher.find()) matcher.group(1) else null
             ?: throw Exception("No se pudo identificar el ID del video de YouTube en el enlace proporcionado")
+
+        val thumbUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
 
         // 1. Intentar mediante la API oficial InnerTube (Cliente Android)
         try {
@@ -89,55 +210,29 @@ object MediaExtractor {
                     val body = resp.body?.string() ?: ""
                     val root = JsonParser.parseString(body).asJsonObject
 
-                    val title = root.getAsJsonObject("videoDetails")?.get("title")?.asString ?: "YouTube Media"
+                    val videoDetails = root.getAsJsonObject("videoDetails")
+                    val title = videoDetails?.get("title")?.asString ?: "YouTube Media"
+                    val author = videoDetails?.get("author")?.asString ?: "YouTube"
+                    val lengthSec = videoDetails?.get("lengthSeconds")?.asLong ?: 0L
+
                     val streaming = root.getAsJsonObject("streamingData")
 
                     if (streaming != null) {
-                        if (requestedFormat.isAudio) {
-                            // Buscar stream de audio en adaptiveFormats con URL directa
-                            val adaptives = streaming.getAsJsonArray("adaptiveFormats")
-                            if (adaptives != null) {
-                                for (elem in adaptives) {
-                                    val obj = elem.asJsonObject
-                                    val mime = obj.get("mimeType")?.asString ?: ""
-                                    if (mime.startsWith("audio/mp4") && obj.has("url")) {
-                                        val directUrl = obj.get("url").asString
-                                        return ExtractedMediaInfo(
-                                            title = title,
-                                            directStreamUrl = directUrl,
-                                            format = requestedFormat,
-                                            requestHeaders = mapOf("User-Agent" to YT_USER_AGENT)
-                                        )
-                                    }
-                                }
-                                // Fallback a cualquier audio con URL directa
-                                for (elem in adaptives) {
-                                    val obj = elem.asJsonObject
-                                    val mime = obj.get("mimeType")?.asString ?: ""
-                                    if (mime.startsWith("audio/") && obj.has("url")) {
-                                        return ExtractedMediaInfo(
-                                            title = title,
-                                            directStreamUrl = obj.get("url").asString,
-                                            format = requestedFormat,
-                                            requestHeaders = mapOf("User-Agent" to YT_USER_AGENT)
-                                        )
-                                    }
-                                }
-                            }
-                        } else {
-                            // Buscar stream de video combinado (audio+video) en formats
-                            val formats = streaming.getAsJsonArray("formats")
-                            if (formats != null && formats.size() > 0) {
-                                for (elem in formats) {
-                                    val obj = elem.asJsonObject
-                                    if (obj.has("url")) {
-                                        return ExtractedMediaInfo(
-                                            title = title,
-                                            directStreamUrl = obj.get("url").asString,
-                                            format = requestedFormat,
-                                            requestHeaders = mapOf("User-Agent" to YT_USER_AGENT)
-                                        )
-                                    }
+                        // Los flujos progresivos (formats) contienen audio AAC + video MP4 sin restricciones ni errores 403
+                        val formats = streaming.getAsJsonArray("formats")
+                        if (formats != null && formats.size() > 0) {
+                            for (elem in formats) {
+                                val obj = elem.asJsonObject
+                                if (obj.has("url")) {
+                                    return ExtractedMediaInfo(
+                                        title = title,
+                                        directStreamUrl = obj.get("url").asString,
+                                        format = requestedFormat,
+                                        durationSeconds = lengthSec,
+                                        author = author,
+                                        thumbnailUrl = thumbUrl,
+                                        requestHeaders = mapOf("User-Agent" to YT_USER_AGENT)
+                                    )
                                 }
                             }
                         }
@@ -173,7 +268,8 @@ object MediaExtractor {
                                     return ExtractedMediaInfo(
                                         title = title,
                                         directStreamUrl = streamUrl,
-                                        format = requestedFormat
+                                        format = requestedFormat,
+                                        thumbnailUrl = thumbUrl
                                     )
                                 }
                             }
@@ -188,7 +284,8 @@ object MediaExtractor {
                                     return ExtractedMediaInfo(
                                         title = title,
                                         directStreamUrl = sUrl,
-                                        format = requestedFormat
+                                        format = requestedFormat,
+                                        thumbnailUrl = thumbUrl
                                     )
                                 }
                             }
@@ -197,7 +294,8 @@ object MediaExtractor {
                                 return ExtractedMediaInfo(
                                     title = title,
                                     directStreamUrl = fallbackUrl,
-                                    format = requestedFormat
+                                    format = requestedFormat,
+                                    thumbnailUrl = thumbUrl
                                 )
                             }
                         }
@@ -235,6 +333,8 @@ object MediaExtractor {
 
             val data = json.getAsJsonObject("data") ?: throw Exception("Respuesta de TikTok inválida")
             val title = data.get("title")?.asString?.ifBlank { "TikTok Video" } ?: "TikTok Video"
+            val author = data.getAsJsonObject("author")?.get("nickname")?.asString ?: "TikTok Creator"
+            val cover = data.get("cover")?.asString ?: ""
 
             val streamUrl = if (requestedFormat.isAudio) {
                 var music = data.get("music")?.asString
@@ -251,7 +351,9 @@ object MediaExtractor {
             return ExtractedMediaInfo(
                 title = title,
                 directStreamUrl = fullStreamUrl,
-                format = requestedFormat
+                format = requestedFormat,
+                author = author,
+                thumbnailUrl = cover
             )
         }
     }
@@ -260,7 +362,6 @@ object MediaExtractor {
      * Extractor para Twitter / X e Instagram mediante TikWM / OpenGraph.
      */
     private fun extractSocial(url: String, requestedFormat: MediaFormat): ExtractedMediaInfo {
-        // TikWM también soporta Twitter/Instagram
         try {
             val apiUrl = "https://www.tikwm.com/api/?url=${URLEncoder.encode(url, "UTF-8")}"
             val req = Request.Builder()
@@ -293,7 +394,6 @@ object MediaExtractor {
             }
         } catch (_: Exception) {}
 
-        // Fallback a OpenGraph
         return extractGeneric(url, requestedFormat)
     }
 

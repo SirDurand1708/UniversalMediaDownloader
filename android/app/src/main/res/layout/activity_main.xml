@@ -15,7 +15,65 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="14dp">
+
+            <!-- Banner de Actualización Oficial (1 Toque) -->
+            <LinearLayout
+                android:id="@+id/bannerUpdateAvailable"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:background="@drawable/bg_update_banner"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="12dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🚀"
+                    android:textSize="22sp" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvUpdateTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-bold"
+                        android:text="¡Nueva versión disponible!"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/tvUpdateSubtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Actualizar automáticamente con 1 toque"
+                        android:textColor="@color/accent_cyan"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnUpdateNow"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:fontFamily="sans-serif-bold"
+                    android:text="Actualizar"
+                    android:textAllCaps="false"
+                    android:textColor="@color/obsidian_darker"
+                    android:textSize="12sp"
+                    app:backgroundTint="@color/accent_cyan"
+                    app:cornerRadius="8dp" />
+            </LinearLayout>
 
             <!-- Cabecera Superior OmniVault -->
             <LinearLayout
@@ -23,11 +81,12 @@
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingVertical="8dp">
+                android:paddingVertical="6dp">
 
                 <ImageView
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:id="@+id/imgAppLogo"
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
                     android:src="@mipmap/ic_launcher" />
 
                 <LinearLayout
@@ -47,14 +106,17 @@
                         android:letterSpacing="0.05" />
 
                     <TextView
+                        android:id="@+id/tvAppSubtitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Bóveda Multimedia • v2.0.0"
+                        android:background="?attr/selectableItemBackground"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="Bóveda Multimedia • v2.0.0 (Toca para buscar updates)"
                         android:textColor="@color/accent_cyan"
-                        android:textSize="12sp" />
+                        android:textSize="11sp" />
                 </LinearLayout>
 
-                <!-- Estado del Servicio Snaptube -->
+                <!-- Switch Auto-Clipboard -->
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/switchAutoClipboard"
                     android:layout_width="wrap_content"
@@ -64,15 +126,17 @@
                     app:trackTint="@color/titanium_elevated" />
             </LinearLayout>
 
-            <!-- Banner Snaptube Auto-Clipboard Info -->
+            <!-- Banner Auto-Captura Snaptube Info -->
             <LinearLayout
                 android:id="@+id/cardClipboardBanner"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:background="@drawable/bg_titanium_card"
+                android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:padding="12dp">
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="12dp">
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -85,16 +149,18 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="10dp"
                     android:layout_weight="1"
-                    android:text="Auto-captura activa: Al copiar o compartir cualquier enlace de video, OmniVault te sugerirá descargarlo al instante."
+                    android:fontFamily="sans-serif"
+                    android:lineSpacingExtra="2dp"
+                    android:text="Auto-captura activa: Al copiar o compartir cualquier enlace, OmniVault te sugerirá descargarlo al instante."
                     android:textColor="@color/text_secondary"
                     android:textSize="12sp" />
             </LinearLayout>
 
-            <!-- Card Principal de Entrada de Enlace -->
+            <!-- Card Principal de Entrada y Análisis de Enlace -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="14dp"
                 android:background="@drawable/bg_titanium_card"
                 android:orientation="vertical"
                 android:padding="16dp">
@@ -136,15 +202,23 @@
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
                     android:paddingHorizontal="12dp"
-                    android:paddingVertical="4dp">
+                    android:paddingVertical="2dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🔗"
+                        android:textSize="15sp" />
 
                     <EditText
                         android:id="@+id/etUrlInput"
                         android:layout_width="0dp"
                         android:layout_height="48dp"
+                        android:layout_marginStart="8dp"
                         android:layout_weight="1"
                         android:background="@android:color/transparent"
-                        android:hint="Pega aquí el enlace de video o audio..."
+                        android:fontFamily="sans-serif"
+                        android:hint="Pega aquí el enlace del video o canción..."
                         android:inputType="textUri"
                         android:maxLines="1"
                         android:textColor="@color/text_primary"
@@ -156,21 +230,150 @@
                         android:layout_width="36dp"
                         android:layout_height="36dp"
                         android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Limpiar enlace"
                         android:src="@android:drawable/ic_menu_close_clear_cancel"
                         android:visibility="gone"
                         app:tint="@color/text_muted" />
+                </LinearLayout>
+
+                <!-- Fila de Acciones Rápidas (Pegar + Analizar) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnPasteUrl"
                         style="@style/Widget.Material3.Button.TonalButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="36dp"
-                        android:paddingHorizontal="12dp"
-                        android:text="Pegar"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="📋 Pegar"
                         android:textColor="@color/accent_cyan"
                         android:textSize="12sp"
                         app:backgroundTint="@color/titanium_elevated"
                         app:cornerRadius="8dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnAnalyzeUrl"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="🔍 Analizar Enlace"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp"
+                        app:backgroundTint="@color/titanium_elevated"
+                        app:strokeColor="@color/accent_cyan"
+                        app:strokeWidth="1dp"
+                        app:cornerRadius="8dp" />
+
+                    <ProgressBar
+                        android:id="@+id/pbAnalyzing"
+                        android:layout_width="26dp"
+                        android:layout_height="26dp"
+                        android:layout_marginStart="8dp"
+                        android:indeterminateTint="@color/accent_cyan"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- Card de Vista Previa / Analizador de Enlace (Enriquecido) -->
+                <LinearLayout
+                    android:id="@+id/cardPreview"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_preview_card"
+                    android:orientation="vertical"
+                    android:padding="12dp"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/tvPreviewBadge"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_input_box"
+                            android:fontFamily="sans-serif-bold"
+                            android:paddingHorizontal="8dp"
+                            android:paddingVertical="3dp"
+                            android:text="YouTube"
+                            android:textColor="@color/accent_cyan"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:layout_weight="1"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="✓ Contenido verificado"
+                            android:textColor="@color/accent_emerald"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/tvPreviewDuration"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="03:45"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="11sp"
+                            android:visibility="gone" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:orientation="horizontal">
+
+                        <ImageView
+                            android:id="@+id/imgPreviewThumbnail"
+                            android:layout_width="100dp"
+                            android:layout_height="64dp"
+                            android:background="@drawable/bg_input_box"
+                            android:scaleType="centerCrop"
+                            android:src="@drawable/bg_titanium_card" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="10dp"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/tvPreviewTitle"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:ellipsize="end"
+                                android:fontFamily="sans-serif-bold"
+                                android:maxLines="2"
+                                android:text="Título del contenido multimedia..."
+                                android:textColor="@color/text_primary"
+                                android:textSize="13sp" />
+
+                            <TextView
+                                android:id="@+id/tvPreviewAuthor"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:fontFamily="sans-serif"
+                                android:text="👤 Creador / Canal"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+                    </LinearLayout>
                 </LinearLayout>
 
                 <!-- Selección de Formato -->
@@ -193,11 +396,22 @@
                     app:singleSelection="true">
 
                     <com.google.android.material.chip.Chip
-                        android:id="@+id/chipMp3"
+                        android:id="@+id/chipM4a"
                         style="@style/Widget.Material3.Chip.Filter"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:checked="true"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="🎵 Audio M4A (Original HQ)"
+                        android:textColor="@color/text_primary"
+                        app:chipBackgroundColor="@color/titanium_elevated" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipMp3"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-medium"
                         android:text="🎵 Audio MP3 (320k)"
                         android:textColor="@color/text_primary"
                         app:chipBackgroundColor="@color/titanium_elevated" />
@@ -207,6 +421,7 @@
                         style="@style/Widget.Material3.Chip.Filter"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-medium"
                         android:text="🎬 Video FHD (1080p)"
                         android:textColor="@color/text_primary"
                         app:chipBackgroundColor="@color/titanium_elevated" />
@@ -216,16 +431,8 @@
                         style="@style/Widget.Material3.Chip.Filter"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-medium"
                         android:text="🎬 Video HD (720p)"
-                        android:textColor="@color/text_primary"
-                        app:chipBackgroundColor="@color/titanium_elevated" />
-
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chipM4a"
-                        style="@style/Widget.Material3.Chip.Filter"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="🎵 Audio M4A"
                         android:textColor="@color/text_primary"
                         app:chipBackgroundColor="@color/titanium_elevated" />
                 </com.google.android.material.chip.ChipGroup>
@@ -235,9 +442,9 @@
                     android:id="@+id/btnStartDownload"
                     android:layout_width="match_parent"
                     android:layout_height="54dp"
-                    android:layout_marginTop="18dp"
+                    android:layout_marginTop="16dp"
                     android:fontFamily="sans-serif-black"
-                    android:text="DESCARGAR AHORA"
+                    android:text="📥 DESCARGAR AHORA"
                     android:textAllCaps="false"
                     android:textColor="@color/obsidian_darker"
                     android:textSize="15sp"
@@ -251,7 +458,7 @@
                 android:id="@+id/tvActiveDownloadsHeader"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="22dp"
+                android:layout_marginTop="20dp"
                 android:fontFamily="sans-serif-black"
                 android:text="DESCARGAS EN CURSO"
                 android:textColor="@color/text_primary"
@@ -271,7 +478,7 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
+                android:layout_marginTop="22dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
@@ -290,7 +497,8 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:background="?attr/selectableItemBackground"
-                    android:padding="4dp"
+                    android:fontFamily="sans-serif-bold"
+                    android:padding="6dp"
                     android:text="Limpiar"
                     android:textColor="@color/accent_cyan"
                     android:textSize="12sp" />
@@ -298,36 +506,23 @@
 
             <!-- Lista de Historial -->
             <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvHistory"
+                android:id="@+id/rvDownloadHistory"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:nestedScrollingEnabled="false" />
 
-            <!-- Estado Vacío -->
-            <LinearLayout
-                android:id="@+id/layoutEmptyHistory"
+            <TextView
+                android:id="@+id/tvEmptyHistory"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="20dp"
+                android:layout_marginBottom="30dp"
+                android:fontFamily="sans-serif"
                 android:gravity="center"
-                android:orientation="vertical"
-                android:padding="24dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="📥"
-                    android:textSize="36sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="Aún no tienes descargas guardadas"
-                    android:textColor="@color/text_muted"
-                    android:textSize="13sp" />
-            </LinearLayout>
+                android:text="Aún no tienes descargas registradas.\nCopia o pega un enlace para comenzar."
+                android:textColor="@color/text_muted"
+                android:textSize="13sp" />
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
