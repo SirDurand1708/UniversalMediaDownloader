@@ -86,7 +86,8 @@ jobs:
       - name: 🐘 Compilar APK de OmniVault con Gradle
         run: |
           cd android
-          gradle assembleRelease || gradle assembleDebug
+          chmod +x gradlew
+          ./gradlew assembleDebug
           mkdir -p ../dist/Releases
           find app/build/outputs/apk/ -name "*.apk" -exec cp {} ../dist/Releases/OmniVault-v2.0.0-Android.apk \;
 

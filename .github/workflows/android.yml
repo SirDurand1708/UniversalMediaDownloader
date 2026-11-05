@@ -30,4 +30,5 @@ jobs:
       - name: 🔨 Compilar APK con Gradle
         run: |
           cd android
-          gradle assembleDebug
+          chmod +x gradlew
+          ./gradlew assembleDebug
