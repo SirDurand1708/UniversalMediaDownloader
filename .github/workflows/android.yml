@@ -24,9 +24,6 @@ jobs:
           distribution: 'temurin'
           java-version: 17
 
-      - name: 📱 Configurar Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: 🔨 Compilar APK con Gradle
         run: |
           cd android

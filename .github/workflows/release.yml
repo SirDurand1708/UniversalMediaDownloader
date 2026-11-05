@@ -80,9 +80,6 @@ jobs:
           distribution: 'temurin'
           java-version: 17
 
-      - name: 📱 Configurar Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: 🐘 Compilar APK de OmniVault con Gradle
         run: |
           cd android
@@ -131,7 +128,8 @@ jobs:
       - name: 🚀 Publicar en GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          name: "✦ OmniVault ${{ github.ref_name || inputs.tag_name }} — Windows PC & Android"
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.tag_name || 'v2.0.0' }}
+          name: "✦ OmniVault ${{ github.ref_name || inputs.tag_name || 'v2.0.0' }} — Windows PC & Android"
           draft: false
           prerelease: false
           generate_release_notes: false
