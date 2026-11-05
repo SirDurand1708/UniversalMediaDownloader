@@ -46,6 +46,11 @@ def check_for_updates_async(callback):
                 remote_version = data.get("version", CURRENT_VERSION)
                 has_update = is_newer_version(remote_version, CURRENT_VERSION)
                 callback(has_update, data, None)
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                callback(False, {}, "El repositorio en GitHub es Privado 🔒. Para activar las actualizaciones públicas, cámbialo a Público en Settings de GitHub.")
+            else:
+                callback(False, {}, f"Servidor respondió con código HTTP {e.code}")
         except Exception as e:
             callback(False, {}, str(e))
 

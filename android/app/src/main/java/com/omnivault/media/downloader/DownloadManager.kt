@@ -206,7 +206,7 @@ class DownloadManager private constructor(private val context: Context) {
                 if (finalOutputFile.name.endsWith(".mp3", ignoreCase = true)) {
                     CoverArtHelper.embedCoverInMp3(finalOutputFile, coverBytes, info.title, info.author)
                 } else {
-                    CoverArtHelper.embedCoverInM4a(finalOutputFile, coverBytes)
+                    CoverArtHelper.embedCoverInM4a(finalOutputFile, coverBytes, info.title, info.author)
                 }
                 val cachedCover = CoverArtHelper.cacheCoverLocally(context, item.id, coverBytes)
                 if (cachedCover != null) {

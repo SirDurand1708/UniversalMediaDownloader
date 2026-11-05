@@ -61,6 +61,9 @@ object UpdateManager {
 
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
+                        if (response.code == 404) {
+                            throw Exception("El repositorio está configurado como Privado 🔒 en GitHub. Para activar las actualizaciones y descargas públicas, cámbialo a Público en Settings de tu repositorio.")
+                        }
                         throw Exception("Servidor respondió con código HTTP ${response.code}")
                     }
 
