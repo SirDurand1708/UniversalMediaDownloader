@@ -1,7 +1,9 @@
 # ✦ OmniVault Desktop v2.0 - Universal Media Hub & Creative Suite
 
 <p align="center">
-  <img src="assets/icon.png" width="128" height="128" alt="OmniVault Logo">
+  <img src="assets/omnivault_artwork.jpg" width="100%" style="max-height: 400px; object-fit: cover; border-radius: 12px;" alt="OmniVault Suite Artwork">
+  <br><br>
+  <img src="assets/icon.png" width="96" height="96" alt="OmniVault Logo">
   <br>
   <b>Bóveda Multimedia Universal • Suite Creativa • Descargador de Alto Rendimiento</b>
 </p>
@@ -76,7 +78,7 @@ OmniVault incluye un conversor multimedia completo que opera **100% de manera lo
 
 ### 5. ⚡ Aceleración de Red (Aria2c) y Hardware GPU
 - **Acelerador Multihilo Aria2c:**
-  - OmniVault detecta automáticamente `aria2c.exe` (en `bin/`, en `Documents/Software` o en tu `PATH`).
+  - OmniVault detecta automáticamente `aria2c.exe` (en `bin/`, en tu `PATH`, en Scoop o Chocolatey).
   - Cada descarga pesada se divide en **8 conexiones simultáneas en paralelo** (`-s 8 -x 8 -k 1M -j 4`), multiplicando la velocidad de descarga hasta por 5x.
 - **Aceleración por Tarjeta Gráfica (GPU):**
   - Detección automática de hardware:
@@ -98,149 +100,147 @@ OmniVault incluye un conversor multimedia completo que opera **100% de manera lo
 
 ---
 
-### 7. 💤 Acciones Automáticas al Terminar (*Apagado / Suspender Nocturno*)
-Ideal para dejar descargando listas de reproducción pesadas o cursos antes de irte a dormir:
-1. Ve a **⚙ Ajustes** > **Acción al completar todas las descargas**.
-2. Selecciona entre:
-   - **Ninguna**
-   - **Sonido de campana** (Timbre discreto de aviso)
-   - **Suspender equipo**
-   - **Apagar equipo (aviso 30s)**
-3. Cuando finalice la última descarga de la cola, OmniVault activará la acción elegida.
-4. Si elegiste **Apagar equipo**, aparecerá una ventana en pantalla con una cuenta regresiva de 30 segundos y un botón rojo **✖ CANCELAR APAGADO** por si sigues frente al ordenador.
+### 7. 🔊 Normalización Inteligente de Volumen (Estándar EBU R128)
+¿Cansado de canciones que suenan demasiado bajas y otras que te rompen los oídos?
+- Activa la casilla **🔊 Normalizar Volumen (EBU R128)** en Ajustes o durante la descarga individual.
+- OmniVault analiza la curva psicoacústica del audio y ajusta los decibelios de sonoridad integrada a **-14 LUFS** (el estándar de Spotify, YouTube Music y Apple Music), asegurando que toda tu biblioteca musical suene con volumen parejo y sin saturación.
 
 ---
 
-### 8. 🎵 Motor Especializado para TikTok (HD Sin Marcas de Agua)
-- Descarga directa de videos en resolución nativa HD sin marcas de agua de TikTok.
-- Extracción de pistas de audio originales (MP3/M4A).
-- Evasión automática de bloqueos de IP y retos anti-bot sin configuración técnica.
+### 8. 📝 Transcriptor Inteligente de Subtítulos con IA (.SRT y .TXT)
+Extrae el audio de cualquier video de tu PC o descargado y genera subtítulos profesionales con marcas de tiempo precisas:
+1. En la barra lateral, haz clic en **📝 Transcriptor IA**.
+2. Selecciona un archivo de video o audio.
+3. Elige el idioma de transcripción:
+   - 🇪🇸 Español (es-ES / es-MX / es-AR / es-CO / es-CL / es-PE)
+   - 🇺🇸 Inglés (en-US / en-GB)
+   - 🇧🇷 Portugués, 🇫🇷 Francés, 🇩🇪 Alemán, 🇮🇹 Italiano, 🇯🇵 Japonés, etc.
+4. Presiona **✨ INICIAR TRANSCRIPCIÓN**.
+5. Obtendrás un archivo de subtítulos sincronizado (`.srt`) compatible con reproductores de video (VLC, Premiere, DaVinci) y un resumen en texto plano (`.txt`).
 
 ---
 
-### 9. 📋 Playlists, Álbumes y Descarga Masiva
-- Pega cualquier enlace de playlist o álbum completo de YouTube o SoundCloud.
-- Elige qué canciones descargar marcando o desmarcando casillas.
-- Botones de acción rápida: `[✓ Todos]`, `[✖ Ninguno]` y descarga en lote con un solo clic.
+### 9. 🪟 Mini-Widget Flotante Always-on-Top (Mini-HUD PiP)
+Si estás jugando a pantalla completa, editando o trabajando en otra ventana:
+- Activa el **Mini-HUD** desde Ajustes o con un clic.
+- Una barra flotante compacta y arrastrable permanecerá siempre al frente sobre tus aplicaciones.
+- Muestra la velocidad en tiempo real, barra de progreso general, atajos de pausa/reanudación y un botón de descarga rápida con 1 clic para enlaces en el portapapeles.
 
 ---
 
-### 10. 🎧 Mini-Reproductor de Audio Integrado (Nativo MCI)
-- Reproductor de audio integrado en la barra inferior para escuchar tus canciones **sin abrir programas externos**.
-- Basado en la API nativa **Windows MCI (`winmm.dll`)**: 0% consumo de CPU adicional y cero dependencias pesadas.
-- Barra de desplazamiento interactiva (*Seekbar*), control de volumen suave y contador de tiempo.
+### 10. 🔔 Monitoreo Automático de Canales y Creadores (*Channel Auto-Sync*)
+No te pierdas ningún video de tus canales favoritos de YouTube ni directos:
+1. Ve a la pestaña **🔔 Creadores**.
+2. Añade la URL del canal de YouTube o perfil.
+3. Elige tu formato predilecto (`MP3 320k` o `MP4 1080p`).
+4. OmniVault revisará periódicamente en segundo plano y descargará automáticamente los nuevos lanzamientos.
 
 ---
 
-### 11. 🔒 Sesión Segura y Cookies (Para cualquier navegador)
-Por defecto, **no necesitas iniciar sesión para descargar el 95% del contenido**. Solo se requiere sesión para:
-- Videos con restricción de edad (+18).
-- Playlists privadas personales (como "Videos que me gustan").
-- Pistas protegidas por el filtro anti-bot de YouTube.
-
-#### ⭐ Método 1: Archivo `cookies.txt` (Recomendado y 100% Universal)
-Funciona en **Chrome, Edge, Firefox, Vivaldi, Brave, Opera**:
-1. Instala la extensión gratuita:
-   - Para navegadores Chromium: [Get cookies.txt LOCALLY (Chrome Web Store)](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc).
-   - Para Firefox: [cookies.txt (Firefox Add-ons)](https://addons.mozilla.org/es/firefox/addon/cookie-txt/).
-2. Abre [YouTube.com](https://www.youtube.com) con tu cuenta abierta.
-3. Haz clic en la extensión y presiona **Export** (descargará un archivo `.txt`).
-4. En OmniVault, ve a **⚙ Ajustes** > **📄 Cargar archivo cookies.txt**.
-5. Presiona **🧪 Probar Estado de Sesión** para comprobar la autenticación.
-
-#### ⚡ Método 2: Extracción Directa desde Navegador (Experimental)
-Compatible con **Vivaldi, Firefox, Brave y Opera**:
-1. Cierra completamente todas las ventanas de tu navegador y espera 3 segundos (para liberar el bloqueo de archivo en Windows).
-2. En OmniVault, ve a **⚙ Ajustes**, selecciona tu navegador y presiona **📸 Sincronizar**.
-3. ¡Listo! Vuelve a abrir tu navegador normalmente.
+### 11. 🎵 Mini-Reproductor de Audio Integrado
+Escucha tus canciones descargadas inmediatamente dentro de OmniVault sin abrir reproductores pesados de terceros:
+- Control de reproducción (Play / Pause).
+- Barra de desplazamiento milimétrica (Seek).
+- Deslizador de volumen en tiempo real.
+- Atajos de teclado: barra espaciadora para reproducir/pausar, Escape para cerrar.
 
 ---
 
-### 12. 🔊 Normalización Inteligente de Volumen (EBU R128 / Spotify Standard)
-¿Cansado de que una canción suene demasiado baja y la siguiente te aturda los oídos?
-- OmniVault integra el filtro profesional de masterización de volumen **EBU R128 (`loudnorm=I=-16:TP=-1.5:LRA=11`)**, el mismo estándar adoptado por **Spotify, Apple Music y YouTube**.
-- **En descargas:** Activa la casilla en **⚙ Ajustes** > *Normalización inteligente de volumen*. Todos los audios y videos descargados tendrán un nivel sonoro homogéneo y balanceado.
-- **En el conversor local:** Marca la casilla *🔊 Aplicar normalización inteligente de volumen EBU R128* al convertir cualquier canción o video de tu PC.
+## 🏗️ Estructura del Proyecto
 
----
-
-### 13. 🤖 Transcriptor con IA & Generador de Subtítulos (.SRT / .TXT)
-Genera subtítulos estándar y transcripciones completas de cualquier video, podcast o canción local:
-1. Dirígete a la pestaña **🔄 Conversor Local**.
-2. Selecciona cualquier archivo de video o audio en el Paso 1.
-3. En la tarjeta **🤖 Generador de Subtítulos y Transcripción con IA**, selecciona el idioma del audio (**Español, Inglés, Portugués, Francés, Alemán o Italiano**).
-4. Haz clic en **📝 GENERAR SUBTÍTULOS (.SRT Y .TXT)**.
-5. OmniVault extraerá el flujo de voz en 16kHz mono, fragmentará el audio y reconocerá los diálogos generando:
-   - Archivo `.srt` con marcas de tiempo sincronizadas con precisión de milisegundos para reproductores como VLC o edición de video.
-   - Archivo `.txt` plano con el texto completo organizado en párrafos legibles.
-6. Al finalizar, haz clic en **📄 Abrir .SRT** para revisar tus subtítulos al instante.
-
----
-
-### 14. 📌 Mini-Widget Flotante (Floating Mini-HUD / Picture-in-Picture)
-Mantén el control total de OmniVault sin tener que cambiar de ventana mientras juegas, estudias o trabajas:
-- **Siempre Visible al Frente:** Un widget compacto y sin marco flotante (`Always-On-Top`) que puedes arrastrar a cualquier esquina de tu pantalla.
-- **Información en Tiempo Real:** Visualiza la velocidad de descarga actual (`⚡ 4.8 MB/s`), porcentaje de progreso y cuántos elementos restan en cola.
-- **Control de Cola:** Botón rápido para **pausar (⏸)** y **reanudar (▶)** todas las descargas con 1 clic.
-- **Descargas Ultrarrápidas Directas:** Pega cualquier enlace directamente en la barra del HUD y presiona **⬇ Bajar** para añadirlo a la cola sin abrir la app completa.
-- **Control Musical:** Muestra el título de la canción en reproducción y su estado.
-- **Cómo abrirlo:**
-  - Presiona el botón **📌 Mini-Widget HUD** en la barra lateral de OmniVault.
-  - O haz clic derecho en el icono de la bandeja del sistema (al lado del reloj) y selecciona **📌 Mini-Widget Flotante (HUD)**.
-
----
-
-### 15. 📡 Monitoreo Automático de Canales y Creadores (Auto-Sync)
-¿Sigues a canales de YouTube o creadores de TikTok y quieres tener sus nuevos videos o canciones en cuanto se publiquen?
-1. Ve a la nueva pestaña **📡 Canales / Sync** en la barra lateral.
-2. Pega el enlace del canal (por ejemplo: `https://www.youtube.com/@Canal` o tu perfil favorito).
-3. Selecciona el formato deseado para las descargas automáticas (`MP3 320k HD`, `MP4 1080p Full HD`, etc.).
-4. Presiona **➕ Suscribirse**.
-5. OmniVault monitoreará periódicamente en segundo plano si el canal publica nuevos contenidos.
-6. En cuanto detecte un nuevo lanzamiento, lo descargará automáticamente a tu carpeta de Música o Videos y te avisará con una notificación nativa de Windows.
-7. Puedes activar o desactivar la auto-descarga por canal en cualquier momento o presionar **🔄 Comprobar Novedades Ahora** para forzar un escaneo inmediato.
-
----
-
-### 16. ⌨ Atajos de Teclado Rápidos
-- **`Ctrl + V`:** Pega y analiza automáticamente cualquier enlace del portapapeles.
-- **`Ctrl + F`:** Abre la biblioteca y enfoca el buscador.
-- **`Barra Espaciadora`:** Pausa o reanuda la música del mini-reproductor.
-- **`Escape`:** Oculta el mini-reproductor.
+```text
+UniversalMediaDownloader/
+├── app.py                      # Interfaz gráfica principal y controlador central
+├── main.py                     # Punto de entrada estándar para Python
+├── downloader.py               # Motor de descarga con yt-dlp, FFmpeg y Aria2c
+├── converter.py                # Conversor multimedia local y compresión GPU
+├── transcriber.py              # Extracción y transcripción de voz a subtítulos (.SRT)
+├── queue_manager.py            # Gestor de cola multihilo concurrente
+├── history_manager.py          # Registro atómico de biblioteca descargada
+├── config_manager.py           # Gestor de ajustes y preferencias del usuario
+├── subscriptions_manager.py    # Monitoreo y auto-descarga de canales
+├── audio_player.py             # Reproductor nativo de audio vía Windows MCI
+├── notifications.py            # Notificaciones Toast nativas de Windows
+├── mini_hud.py                 # Ventana flotante Picture-in-Picture
+├── tray.py                     # Integración con la bandeja del sistema (System Tray)
+├── theme.py                    # Constantes de diseño Obsidian & Titanium
+├── themes.py                   # Paletas de acento intercambiables
+├── image_cache.py              # Caché LRU en memoria para carátulas
+├── check_system.py             # Diagnóstico integral del sistema y dependencias
+├── run_tests.py                # Ejecutor de pruebas unitarias
+├── generate_assets.py          # Generador visual de iconos y logotipo
+├── build_exe.py                # Compilador con PyInstaller a binario autónomo
+├── compilar.bat                # Acceso rápido para compilar a .exe
+├── iniciar.bat                 # Lanzador sin ventana de consola (pyw)
+├── iniciar_consola.bat         # Lanzador con ventana de depuración
+├── installer.iss               # Script de Inno Setup para instalador oficial
+├── requirements.txt            # Dependencias oficiales de Python
+├── LICENSE                     # Licencia de código abierto MIT
+├── assets/                     # Recursos gráficos oficiales
+│   ├── icon.ico                # Icono de la aplicación multi-resolución
+│   ├── icon.png                # Icono maestro en alta definición
+│   ├── logo.png                # Logotipo horizontal
+│   └── omnivault_artwork.jpg   # Carátula oficial de OmniVault
+└── tests/                      # Suite completa de pruebas unitarias
+    ├── test_config.py
+    ├── test_downloader_helpers.py
+    ├── test_history.py
+    ├── test_themes.py
+    └── test_transcriber.py
+```
 
 ---
 
 ## ⚙️ Instalación y Requisitos
 
-### 1. Requisitos Previos
+### 1. Requisitos del Sistema
 - **Windows 10 u 11** (64 bits).
-- **Python 3.10 o superior** (o utiliza el ejecutable compilado).
+- **Python 3.10 o superior** (o utiliza el instalador compilado).
 
-### 2. Instalación de dependencias
+### 2. Instalación de Dependencias
 Abre la consola en la carpeta del proyecto y ejecuta:
 ```bash
 py -m pip install -r requirements.txt
 ```
 
-### 3. FFmpeg y Aria2c
-- **FFmpeg:** Ya está detectado automáticamente si lo instalaste con winget (`winget install Gyan.FFmpeg`) o colocándolo en la carpeta `bin/`.
-- **Aria2c:** Ya está integrado en la subcarpeta `bin/aria2c.exe`.
+### 3. Diagnóstico del Entorno
+Verifica que tu sistema cuente con todo lo necesario ejecutando:
+```bash
+py check_system.py
+```
+
+### 4. FFmpeg y Aria2c
+- **FFmpeg:** Detección automática en el sistema (mediante `winget install Gyan.FFmpeg`, en la carpeta `bin/` o en tu `PATH`).
+- **Aria2c (Opcional):** Detección en `bin/aria2c.exe`, Scoop, Chocolatey o `PATH`.
 
 ---
 
-## ▶️ Cómo ejecutar la aplicación
+## ▶️ Cómo Ejecutar la Aplicación
 
-### Modo Ventana Limpia (Sin Terminal / Ventana Negra)
+### Modo Ventana Limpia (Recomendado - Sin Terminal)
 Haz doble clic en:
 ```text
 iniciar.bat
 ```
-*(Utiliza el lanzador `pyw` nativo de Windows: la ventana se abre directamente y la consola se cierra en milisegundos).*
+*(Utiliza el lanzador `pyw` nativo de Windows: la interfaz se abre directamente sin ventanas negras de terminal).*
+
+### Modo Terminal Estándar
+```bash
+py main.py
+```
 
 ### Modo Depuración (Con Consola)
-Si quieres ver registros técnicos detallados en la terminal:
 ```text
 iniciar_consola.bat
+```
+
+---
+
+## 🧪 Ejecución de Pruebas Unitarias
+
+Para verificar la integridad y correcto funcionamiento de todos los módulos:
+```bash
+py run_tests.py
 ```
 
 ---
@@ -256,15 +256,14 @@ O ejecuta en consola:
 ```bash
 py build_exe.py
 ```
-Este proceso empaqueta automáticamente todo el código, librerías, CustomTkinter, FFmpeg y Aria2c dentro de la carpeta:
+El ejecutable resultante estará en:
 ```text
 dist\OmniVault\OmniVault.exe
 ```
 
 ### Paso 2: Generar el Instalador Setup (Inno Setup)
-Si deseas un instalador clásico de Windows con asistente de instalación, accesos directos en el Escritorio y Menú Inicio:
 1. Descarga e instala [Inno Setup (Gratuito)](https://jrsoftware.org/isdl.php).
-2. Haz clic derecho en [`installer.iss`](file:///c:/Users/georg/OneDrive/Documentos/GitHub/UniversalMediaDownloader/installer.iss) y selecciona **Compile** (o presiona `F9` dentro de Inno Setup).
+2. Haz clic derecho en [`installer.iss`](installer.iss) y selecciona **Compile** (o presiona `F9` dentro de Inno Setup).
 3. Obtendrás el instalador final en:
    ```text
    dist\Installer\OmniVault_Setup_v2.0.exe

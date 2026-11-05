@@ -42,3 +42,9 @@ STATUS_ERROR = "#EF4444"     # Carmesí para errores
 CORNER_RADIUS_SM = 6
 CORNER_RADIUS = 10
 CORNER_RADIUS_LG = 14
+
+# Re-exportación de temas dinámicos para una interfaz de estilos unificada
+try:
+    from themes import THEMES, DEFAULT_THEME, get_theme, get_available_themes
+except ImportError:
+    pass

@@ -36,6 +36,20 @@ def build():
     assets_dir = os.path.join(base_dir, "assets")
     add_data_args = ["--add-data", f"{assets_dir};assets"] if os.path.isdir(assets_dir) else []
 
+    # Paquetes requeridos y opcionales
+    packages_to_collect = ["customtkinter", "PIL", "mutagen", "yt_dlp"]
+    optional_packages = ["pystray", "curl_cffi", "darkdetect", "speech_recognition"]
+    for pkg in optional_packages:
+        try:
+            __import__(pkg)
+            packages_to_collect.append(pkg)
+        except ImportError:
+            pass
+
+    collect_args = []
+    for pkg in packages_to_collect:
+        collect_args.extend(["--collect-all", pkg])
+
     print("[*] Preparando argumentos de PyInstaller...")
     cmd = [
         sys.executable,
@@ -46,15 +60,7 @@ def build():
         "--windowed",
         "--name", "OmniVault",
         "--clean",
-        "--collect-all", "customtkinter",
-        "--collect-all", "pystray",
-        "--collect-all", "PIL",
-        "--collect-all", "mutagen",
-        "--collect-all", "yt_dlp",
-        "--collect-all", "curl_cffi",
-        "--collect-all", "darkdetect",
-        "--collect-all", "speech_recognition",
-    ] + icon_args + add_data_args + [os.path.join(base_dir, "app.py")]
+    ] + collect_args + icon_args + add_data_args + [os.path.join(base_dir, "app.py")]
 
     print("[*] Ejecutando compilación...")
     ret = subprocess.call(cmd)
@@ -78,10 +84,11 @@ def build():
                     shutil.copy2(s, d)
         print("    -> Carpeta bin (FFmpeg / Aria2c) copiada con éxito.")
 
-    # Copiar config.example.json
-    src_cfg = os.path.join(base_dir, "config.example.json")
-    if os.path.isfile(src_cfg):
-        shutil.copy2(src_cfg, os.path.join(output_app_dir, "config.example.json"))
+    # Copiar config.example.json y LICENSE
+    for f_name in ["config.example.json", "LICENSE"]:
+        src_f = os.path.join(base_dir, f_name)
+        if os.path.isfile(src_f):
+            shutil.copy2(src_f, os.path.join(output_app_dir, f_name))
 
     # Copiar carpeta assets (iconos y logos) a raíz y a _internal
     if os.path.isdir(assets_dir):

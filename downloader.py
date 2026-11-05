@@ -78,7 +78,8 @@ def _get_aria2c_path() -> Optional[str]:
         os.path.join(base_dir, "bin", "aria2c.exe"),
         os.path.join(base_dir, "aria2c.exe"),
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin", "aria2c.exe"),
-        r"C:\Users\georg\Documents\Software\aria2-1.37.0-win-64bit-build1\aria2-1.37.0-win-64bit-build1\aria2c.exe",
+        os.path.expanduser(r"~\scoop\shims\aria2c.exe"),
+        r"C:\ProgramData\chocolatey\bin\aria2c.exe",
     ]
     if hasattr(sys, '_MEIPASS'):
         candidates.insert(0, os.path.join(sys._MEIPASS, "bin", "aria2c.exe"))
@@ -103,6 +104,16 @@ def _get_aria2c_path() -> Optional[str]:
 def is_aria2c_available() -> bool:
     """Comprueba si el acelerador de red multihilo aria2c está disponible."""
     return bool(_get_aria2c_path())
+
+def is_curl_cffi_available() -> bool:
+    """Comprueba si curl_cffi está presente y disponible para impersonación TLS."""
+    try:
+        import curl_cffi
+        from yt_dlp.networking.impersonate import ImpersonateTarget
+        return True
+    except Exception:
+        return False
+
 
 _DETECTED_GPU_ACCEL: Optional[str] = None
 _GPU_ACCEL_CHECKED: bool = False
@@ -625,12 +636,13 @@ class DownloaderEngine:
                 'aria2c': ['-s', '8', '-x', '8', '-k', '1M', '-j', '4', '--file-allocation=none']
             }
 
-        # Soporte de impersonate si curl_cffi está presente
-        try:
-            from yt_dlp.networking.impersonate import ImpersonateTarget
-            opts['impersonate'] = ImpersonateTarget.from_str('chrome')
-        except Exception:
-            pass
+        # Soporte de impersonate solo si curl_cffi está realmente instalado y operativo
+        if is_curl_cffi_available():
+            try:
+                from yt_dlp.networking.impersonate import ImpersonateTarget
+                opts['impersonate'] = ImpersonateTarget.from_str('chrome')
+            except Exception:
+                opts.pop('impersonate', None)
 
         # Localización de FFmpeg
         ff = FFMPEG_DIR or shutil.which("ffmpeg")
@@ -665,7 +677,15 @@ class DownloaderEngine:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 data = ydl.extract_info(search_query, download=False)
         except Exception as e:
-            raise Exception(clean_error_text(str(e)))
+            if 'impersonate target' in str(e).lower() and 'impersonate' in ydl_opts:
+                ydl_opts.pop('impersonate', None)
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        data = ydl.extract_info(search_query, download=False)
+                except Exception as e2:
+                    raise Exception(clean_error_text(str(e2)))
+            else:
+                raise Exception(clean_error_text(str(e)))
 
         entries = data.get('entries', []) if data else []
         for e in entries:
@@ -731,6 +751,15 @@ class DownloaderEngine:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 res = ydl.extract_info(url, download=False)
         except Exception as e:
+            err = str(e).lower()
+            if 'impersonate target' in err and 'impersonate' in ydl_opts:
+                ydl_opts.pop('impersonate', None)
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        res = ydl.extract_info(url, download=False)
+                except Exception as retry_e:
+                    e = retry_e
+                    err = str(e).lower()
             err = str(e).lower()
             # Si TikTok falló en yt-dlp, reintentar con el motor directo
             if is_tiktok_url(url):
@@ -1192,6 +1221,15 @@ class DownloaderEngine:
                 with yt_dlp.YoutubeDL(ydl_opts_clean) as ydl:
                     info = ydl.extract_info(url, download=True)
             except Exception as e:
+                err = str(e).lower()
+                if 'impersonate target' in err and 'impersonate' in ydl_opts_clean:
+                    ydl_opts_clean.pop('impersonate', None)
+                    try:
+                        with yt_dlp.YoutubeDL(ydl_opts_clean) as ydl:
+                            info = ydl.extract_info(url, download=True)
+                    except Exception as retry_e:
+                        e = retry_e
+                        err = str(e).lower()
                 err = str(e).lower()
                 if "cancelada por el usuario" in err or self.is_cancelled(task_id):
                     raise Exception("Descarga cancelada por el usuario.")
