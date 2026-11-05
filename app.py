@@ -2887,7 +2887,7 @@ if __name__ == "__main__":
 
     def _show_update_modal(self, data):
         """Muestra un diálogo moderno informando la nueva versión con botón de 1 clic."""
-        remote_version = data.get("version", "2.0.0")
+        remote_version = data.get("version", "2.0.1")
         changelog = data.get("changelog", "Mejoras de rendimiento y estabilidad general.")
         windows_data = data.get("windows", {})
         setup_url = windows_data.get("setup_url", "")

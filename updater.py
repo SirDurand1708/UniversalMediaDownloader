@@ -12,7 +12,7 @@ import threading
 import subprocess
 from packaging import version
 
-CURRENT_VERSION = "2.0.0"
+CURRENT_VERSION = "2.0.1"
 VERSION_INFO_URL = "https://raw.githubusercontent.com/SirDurand1708/UniversalMediaDownloader/main/version.json"
 
 def is_newer_version(remote_str: str, local_str: str) -> bool:

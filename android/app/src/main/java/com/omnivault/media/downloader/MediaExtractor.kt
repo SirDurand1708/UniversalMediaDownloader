@@ -13,6 +13,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
+import java.util.regex.Matcher
 import java.util.regex.Pattern
 
 data class ExtractedMediaInfo(
@@ -44,6 +45,7 @@ object MediaExtractor {
     private const val YT_API_KEY = "AIzaSyAO_FJ2SlqAE4An4Ek78YsFubnuhRlzQ"
     private const val YT_USER_AGENT = "com.google.android.youtube/20.10.38 (Linux; U; Android 11)"
     private const val BROWSER_USER_AGENT = "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+    private const val DESKTOP_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     private const val BOT_USER_AGENT = "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"
 
     private val YT_VIDEO_ID_PATTERN = Pattern.compile(
@@ -57,7 +59,7 @@ object MediaExtractor {
         return try {
             val req = Request.Builder()
                 .url(url)
-                .header("User-Agent", BROWSER_USER_AGENT)
+                .header("User-Agent", DESKTOP_USER_AGENT)
                 .build()
             client.newCall(req).execute().use { resp ->
                 resp.request.url.toString()
@@ -65,6 +67,19 @@ object MediaExtractor {
         } catch (_: Exception) {
             url
         }
+    }
+
+    private fun cleanFbUrl(raw: String): String {
+        val clean = raw.replace("\\/", "/").replace("&amp;", "&")
+        val unicodePattern = Pattern.compile("\\\\u([0-9a-fA-F]{4})")
+        val matcher = unicodePattern.matcher(clean)
+        val sb = StringBuffer()
+        while (matcher.find()) {
+            val code = matcher.group(1).toInt(16)
+            matcher.appendReplacement(sb, Matcher.quoteReplacement(code.toChar().toString()))
+        }
+        matcher.appendTail(sb)
+        return sb.toString()
     }
 
     /**
@@ -79,7 +94,8 @@ object MediaExtractor {
         when (platform) {
             PlatformType.YOUTUBE -> analyzeYouTube(resolved)
             PlatformType.TIKTOK -> analyzeTikTok(resolved)
-            PlatformType.INSTAGRAM, PlatformType.FACEBOOK, PlatformType.TWITTER -> analyzeSocial(resolved, platform)
+            PlatformType.FACEBOOK -> analyzeFacebook(resolved)
+            PlatformType.INSTAGRAM, PlatformType.TWITTER -> analyzeSocial(resolved, platform)
             else -> analyzeGeneric(resolved, platform)
         }
     }
@@ -165,6 +181,73 @@ object MediaExtractor {
         )
     }
 
+    private fun analyzeFacebook(url: String): MediaPreview {
+        try {
+            val req = Request.Builder()
+                .url(url)
+                .header("User-Agent", DESKTOP_USER_AGENT)
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .header("Accept-Language", "es-ES,es;q=0.9,en;q=0.8")
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val html = resp.body?.string() ?: ""
+
+                    // 1. Título
+                    var title = "Video de Facebook"
+                    val titleMatcher = Pattern.compile("<meta\\s+(?:property|name)=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE).matcher(html)
+                    if (titleMatcher.find()) {
+                        title = titleMatcher.group(1)
+                            .replace("&amp;", "&")
+                            .replace("&#xb7;", "•")
+                            .replace("&#039;", "'")
+                            .replace("&quot;", "\"")
+                            .replace(" | Facebook", "")
+                            .trim()
+                    }
+
+                    // 2. Miniatura
+                    var thumbUrl = ""
+                    val imgMatcher = Pattern.compile("<meta\\s+(?:property|name)=[\"']og:image(?::url)?[\"']\\s+content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE).matcher(html)
+                    if (imgMatcher.find()) {
+                        thumbUrl = cleanFbUrl(imgMatcher.group(1))
+                    } else {
+                        val jsonThumb = Pattern.compile("\"(?:preferred_thumbnail|thumbnailImage)\":\\{\"image\":\\{\"uri\":\"([^\"]+)\"").matcher(html)
+                        if (jsonThumb.find()) {
+                            thumbUrl = cleanFbUrl(jsonThumb.group(1))
+                        }
+                    }
+
+                    // 3. Autor
+                    var author = "Facebook Video"
+                    val authorMatcher = Pattern.compile("\"video_owner\":\\{\"name\":\"([^\"]+)\"").matcher(html)
+                    if (authorMatcher.find()) {
+                        author = authorMatcher.group(1)
+                    }
+
+                    return MediaPreview(
+                        title = title,
+                        author = author,
+                        thumbnailUrl = thumbUrl,
+                        platform = PlatformType.FACEBOOK,
+                        originalUrl = url
+                    )
+                }
+            }
+        } catch (_: Exception) {}
+
+        // Fallback OpenGraph
+        val og = parseOpenGraph(url)
+        return MediaPreview(
+            title = og["title"] ?: "Video de Facebook",
+            author = "Facebook",
+            thumbnailUrl = og["image"] ?: "",
+            platform = PlatformType.FACEBOOK,
+            originalUrl = url
+        )
+    }
+
     private fun analyzeSocial(url: String, platform: PlatformType): MediaPreview {
         // TikWM también soporta Instagram y Twitter
         try {
@@ -224,7 +307,8 @@ object MediaExtractor {
         when {
             lower.contains("youtube.com") || lower.contains("youtu.be") -> extractYouTube(resolved, requestedFormat)
             lower.contains("tiktok.com") -> extractTikTok(resolved, requestedFormat)
-            lower.contains("twitter.com") || lower.contains("x.com") || lower.contains("instagram.com") || lower.contains("facebook.com") || lower.contains("fb.watch") -> extractSocial(resolved, requestedFormat)
+            lower.contains("facebook.com") || lower.contains("fb.watch") || lower.contains("fb.me") -> extractFacebook(resolved, requestedFormat)
+            lower.contains("twitter.com") || lower.contains("x.com") || lower.contains("instagram.com") -> extractSocial(resolved, requestedFormat)
             else -> extractGeneric(resolved, requestedFormat)
         }
     }
@@ -451,6 +535,139 @@ object MediaExtractor {
             author = author,
             thumbnailUrl = fullCoverUrl
         )
+    }
+
+    /**
+     * Extractor dedicado de alta fidelidad para videos y Reels de Facebook.
+     * Soporta enlaces de facebook.com, fb.watch, fb.me, reels y posts con video.
+     */
+    private fun extractFacebook(url: String, requestedFormat: MediaFormat): ExtractedMediaInfo {
+        try {
+            val req = Request.Builder()
+                .url(url)
+                .header("User-Agent", DESKTOP_USER_AGENT)
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .header("Accept-Language", "es-ES,es;q=0.9,en;q=0.8")
+                .header("Sec-Fetch-Mode", "navigate")
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val html = resp.body?.string() ?: ""
+
+                    var hdUrl: String? = null
+                    var sdUrl: String? = null
+
+                    val hdPatterns = listOf(
+                        "\"browser_native_hd_url\"\\s*:\\s*\"([^\"]+)\"",
+                        "\"playable_url_quality_hd\"\\s*:\\s*\"([^\"]+)\"",
+                        "\"hd_src\"\\s*:\\s*\"([^\"]+)\"",
+                        "\"hd_src_no_ratelimit\"\\s*:\\s*\"([^\"]+)\""
+                    )
+
+                    for (p in hdPatterns) {
+                        val m = Pattern.compile(p).matcher(html)
+                        if (m.find()) {
+                            hdUrl = cleanFbUrl(m.group(1))
+                            break
+                        }
+                    }
+
+                    val sdPatterns = listOf(
+                        "\"browser_native_sd_url\"\\s*:\\s*\"([^\"]+)\"",
+                        "\"playable_url\"\\s*:\\s*\"([^\"]+)\"",
+                        "\"sd_src\"\\s*:\\s*\"([^\"]+)\"",
+                        "\"sd_src_no_ratelimit\"\\s*:\\s*\"([^\"]+)\"",
+                        "\"progressive_url\"\\s*:\\s*\"([^\"]+)\"",
+                        "<meta\\s+(?:property|name)=[\"']og:video(?::url)?[\"']\\s+content=[\"']([^\"']+)[\"']"
+                    )
+
+                    for (p in sdPatterns) {
+                        val m = Pattern.compile(p, Pattern.CASE_INSENSITIVE).matcher(html)
+                        if (m.find()) {
+                            sdUrl = cleanFbUrl(m.group(1))
+                            break
+                        }
+                    }
+
+                    val streamUrl = if (requestedFormat == MediaFormat.MP4_720 && sdUrl != null) {
+                        sdUrl
+                    } else {
+                        hdUrl ?: sdUrl
+                    }
+
+                    if (!streamUrl.isNullOrBlank()) {
+                        var title = "Video de Facebook"
+                        val titleMatcher = Pattern.compile("<meta\\s+(?:property|name)=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE).matcher(html)
+                        if (titleMatcher.find()) {
+                            title = titleMatcher.group(1)
+                                .replace("&amp;", "&")
+                                .replace("&#xb7;", "•")
+                                .replace("&#039;", "'")
+                                .replace("&quot;", "\"")
+                                .replace(" | Facebook", "")
+                                .trim()
+                        }
+
+                        var thumbUrl = ""
+                        val imgMatcher = Pattern.compile("<meta\\s+(?:property|name)=[\"']og:image(?::url)?[\"']\\s+content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE).matcher(html)
+                        if (imgMatcher.find()) {
+                            thumbUrl = cleanFbUrl(imgMatcher.group(1))
+                        }
+
+                        var author = "Facebook Creator"
+                        val authorMatcher = Pattern.compile("\"video_owner\":\\{\"name\":\"([^\"]+)\"").matcher(html)
+                        if (authorMatcher.find()) {
+                            author = authorMatcher.group(1)
+                        }
+
+                        return ExtractedMediaInfo(
+                            title = title,
+                            directStreamUrl = streamUrl,
+                            format = requestedFormat,
+                            author = author,
+                            thumbnailUrl = thumbUrl,
+                            requestHeaders = mapOf(
+                                "User-Agent" to DESKTOP_USER_AGENT,
+                                "Referer" to "https://www.facebook.com/"
+                            )
+                        )
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // Fallback: versión móvil
+        try {
+            val mobileUrl = if (url.contains("facebook.com")) {
+                url.replace("www.facebook.com", "mbasic.facebook.com").replace("web.facebook.com", "mbasic.facebook.com")
+            } else url
+
+            val req = Request.Builder()
+                .url(mobileUrl)
+                .header("User-Agent", BROWSER_USER_AGENT)
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val html = resp.body?.string() ?: ""
+                    val videoMatcher = Pattern.compile("/video_redirect/\\?src=([^\"&]+)").matcher(html)
+                    if (videoMatcher.find()) {
+                        val encodedStream = videoMatcher.group(1)
+                        val stream = java.net.URLDecoder.decode(encodedStream, "UTF-8")
+                        return ExtractedMediaInfo(
+                            title = "Facebook Video",
+                            directStreamUrl = stream,
+                            format = requestedFormat,
+                            author = "Facebook",
+                            requestHeaders = mapOf("User-Agent" to BROWSER_USER_AGENT)
+                        )
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        throw Exception("No se pudo extraer el video de Facebook. Verifica que el enlace sea un video o Reel público.")
     }
 
     /**

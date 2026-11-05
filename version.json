@@ -1,19 +1,19 @@
 {
-  "version": "2.0.0",
-  "version_code": 200,
+  "version": "2.0.1",
+  "version_code": 201,
   "release_date": "2026-11-05",
-  "title": "OmniVault v2.0.0 Titanium Edition",
-  "changelog": "• Motor InnerTube de extracción directa sin pérdida para YouTube\n• Extracción de audio M4A/AAC pura de alta fidelidad sin errores 403\n• Vista previa y analizador de enlaces en tiempo real con carátula\n• Sistema de actualización automática con 1 toque en Android y PC\n• Nueva interfaz Titanium Glassmorphic optimizada para cualquier pantalla\n• Notificaciones inteligentes con barra de progreso y reproducción directa",
+  "title": "OmniVault v2.0.1 Facebook & Album Artwork Edition",
+  "changelog": "• Extractor nativo HD/SD para Facebook (fb.watch, reels, videos)\n• Carátula y metadatos de álbum completos para Lark Player y reproductores Android\n• Corrección de actualización automática en 1 toque",
   "android": {
-    "version": "2.0.0",
-    "version_code": 200,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.0/OmniVault-v2.0.0-Android.apk",
+    "version": "2.0.1",
+    "version_code": 201,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.1/OmniVault-v2.0.1-Android.apk",
     "min_version_code": 200
   },
   "windows": {
-    "version": "2.0.0",
-    "version_code": 200,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.0/OmniVault-v2.0.0-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.0/OmniVault-v2.0.0-Windows-x64-Portable.zip"
+    "version": "2.0.1",
+    "version_code": 201,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.1/OmniVault-v2.0.1-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.1/OmniVault-v2.0.1-Windows-x64-Portable.zip"
   }
 }

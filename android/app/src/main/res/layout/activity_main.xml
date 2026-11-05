@@ -115,7 +115,7 @@
                         android:layout_height="wrap_content"
                         android:background="?attr/selectableItemBackground"
                         android:fontFamily="sans-serif-medium"
-                        android:text="OmniVault v2.0.0 • Audio-First Edition"
+                        android:text="OmniVault v2.0.1 • Audio-First Edition"
                         android:textColor="@color/spotify_green"
                         android:textSize="11sp" />
                 </LinearLayout>
