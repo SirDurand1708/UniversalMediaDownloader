@@ -74,11 +74,28 @@ object CoverArtHelper {
             tpe1Body.write(cleanArtist.toByteArray(Charsets.UTF_16LE))
             val tpe1Frame = makeId3Frame("TPE1", tpe1Body.toByteArray())
 
-            // 4. Agrupar frames
+            // 4. Frame TALB (Álbum: evita que Android lo catalogue como 'Álbum desconocido')
+            val albumName = if (artist.isNotBlank()) "$artist - Single" else cleanTitle
+            val talbBody = ByteArrayOutputStream()
+            talbBody.write(0x01)
+            talbBody.write(byteArrayOf(0xFF.toByte(), 0xFE.toByte()))
+            talbBody.write(albumName.toByteArray(Charsets.UTF_16LE))
+            val talbFrame = makeId3Frame("TALB", talbBody.toByteArray())
+
+            // 5. Frame TPE2 (Artista del Álbum)
+            val tpe2Body = ByteArrayOutputStream()
+            tpe2Body.write(0x01)
+            tpe2Body.write(byteArrayOf(0xFF.toByte(), 0xFE.toByte()))
+            tpe2Body.write(cleanArtist.toByteArray(Charsets.UTF_16LE))
+            val tpe2Frame = makeId3Frame("TPE2", tpe2Body.toByteArray())
+
+            // 6. Agrupar frames
             val allFrames = ByteArrayOutputStream()
             allFrames.write(apicFrame)
             allFrames.write(tit2Frame)
             allFrames.write(tpe1Frame)
+            allFrames.write(talbFrame)
+            allFrames.write(tpe2Frame)
             val framesBytes = allFrames.toByteArray()
 
             // Header ID3v2.3 (10 bytes): "ID3", ver 3.0, flags 0, syncsafe size
@@ -262,7 +279,12 @@ object CoverArtHelper {
         if (artist.isNotBlank()) {
             val artistData = buildDataAtom(1, artist.toByteArray(Charsets.UTF_8))
             ilstBody.write(buildAtom("\u00a9ART", artistData))
+            ilstBody.write(buildAtom("aART", artistData))
         }
+
+        val albumName = if (artist.isNotBlank()) "$artist - Single" else if (title.isNotBlank()) title else "OmniVault Audio"
+        val albumData = buildDataAtom(1, albumName.toByteArray(Charsets.UTF_8))
+        ilstBody.write(buildAtom("\u00a9alb", albumData))
 
         if (coverBytes.isNotEmpty()) {
             val typeFlag = if (isPng) 14 else 13

@@ -165,59 +165,76 @@ class DownloadManager private constructor(private val context: Context) {
                 inputStream.close()
             }
 
-            // 4. Procesamiento final (Extracción de audio sin pérdida si aplica)
-            var finalOutputFile: File
-            var finalMimeType: String
+            // 4. Procesamiento y etiquetado en staging (caché interna antes de publicar)
+            val isMp3Stream = info.directStreamUrl.contains(".mp3", ignoreCase = true) || tempDownloadFile.name.endsWith(".mp3", ignoreCase = true)
+            val extension = if (item.format.isAudio) {
+                if (isMp3Stream) "mp3" else "m4a"
+            } else {
+                item.format.extension
+            }
 
+            val stagedFile = File(context.cacheDir, "staged_${item.id}.${extension}")
+            if (stagedFile.exists()) stagedFile.delete()
+
+            val finalMimeType: String
             if (item.format.isAudio) {
-                if (info.directStreamUrl.contains(".mp3") || tempDownloadFile.name.endsWith(".mp3")) {
-                    finalOutputFile = File(targetDir, "${cleanTitle}.mp3")
-                    tempDownloadFile.copyTo(finalOutputFile, overwrite = true)
+                if (isMp3Stream) {
+                    tempDownloadFile.copyTo(stagedFile, overwrite = true)
                     tempDownloadFile.delete()
                     finalMimeType = "audio/mpeg"
                 } else {
-                    // Flujo nativo AAC en contenedor MP4: extraer pista de audio pura en .m4a
                     item.speedText = "Extrayendo audio AAC..."
                     notifyUpdate(item)
-                    val m4aFile = File(targetDir, "${cleanTitle}.m4a")
-                    val extracted = AudioExtractor.extractAudio(tempDownloadFile, m4aFile)
+                    val extracted = AudioExtractor.extractAudio(tempDownloadFile, stagedFile)
                     tempDownloadFile.delete()
 
-                    if (extracted && m4aFile.exists() && m4aFile.length() > 0) {
-                        finalOutputFile = m4aFile
-                        finalMimeType = "audio/mp4"
-                    } else {
-                        // Fallback
-                        finalOutputFile = File(targetDir, "${cleanTitle}.${item.format.extension}")
-                        tempDownloadFile.copyTo(finalOutputFile, overwrite = true)
-                        finalMimeType = item.format.mimeType
+                    if (!extracted || !stagedFile.exists() || stagedFile.length() == 0L) {
+                        tempDownloadFile.copyTo(stagedFile, overwrite = true)
                     }
+                    finalMimeType = "audio/mp4"
                 }
             } else {
-                finalOutputFile = File(targetDir, "${cleanTitle}.${item.format.extension}")
-                tempDownloadFile.copyTo(finalOutputFile, overwrite = true)
+                tempDownloadFile.copyTo(stagedFile, overwrite = true)
                 tempDownloadFile.delete()
                 finalMimeType = item.format.mimeType
             }
 
-            // 5. Inyección y vinculación de carátula de alta definición
+            // 5. Inyección de carátula en alta resolución dentro de los átomos/tags del archivo
             val coverBytes = CoverArtHelper.downloadCoverBytes(info.thumbnailUrl)
             if (coverBytes != null && coverBytes.isNotEmpty()) {
-                if (finalOutputFile.name.endsWith(".mp3", ignoreCase = true)) {
-                    CoverArtHelper.embedCoverInMp3(finalOutputFile, coverBytes, info.title, info.author)
+                item.speedText = "Incrustando carátula HD..."
+                notifyUpdate(item)
+
+                if (stagedFile.name.endsWith(".mp3", ignoreCase = true)) {
+                    CoverArtHelper.embedCoverInMp3(stagedFile, coverBytes, info.title, info.author)
                 } else {
-                    CoverArtHelper.embedCoverInM4a(finalOutputFile, coverBytes, info.title, info.author)
+                    CoverArtHelper.embedCoverInM4a(stagedFile, coverBytes, info.title, info.author)
                 }
+
                 val cachedCover = CoverArtHelper.cacheCoverLocally(context, item.id, coverBytes)
                 if (cachedCover != null) {
                     item.thumbnailUrl = cachedCover.absolutePath
                 }
             }
 
-            // 6. Registro en el escáner del sistema Android (MediaStore)
+            // 6. Mover archivo 100% etiquetado a la carpeta pública de música/video
+            val finalOutputFile = File(targetDir, "${cleanTitle}.${extension}")
+            stagedFile.copyTo(finalOutputFile, overwrite = true)
+            stagedFile.delete()
+
+            // Guardar carátula complementaria .jpg en la misma carpeta para reproductores que la busquen
+            if (coverBytes != null && coverBytes.isNotEmpty()) {
+                try {
+                    val companionJpg = File(targetDir, "${cleanTitle}.jpg")
+                    companionJpg.writeBytes(coverBytes)
+                    StorageHelper.scanMediaFile(context, companionJpg, "image/jpeg")
+                } catch (_: Exception) {}
+            }
+
+            // 7. Indexación inmediata en el escáner del sistema Android (MediaStore)
             StorageHelper.scanMediaFile(context, finalOutputFile, finalMimeType)
 
-            // 7. Finalización con éxito
+            // 8. Finalización con éxito
             item.progress = 100
             item.status = DownloadStatus.COMPLETED
             item.localFilePath = finalOutputFile.absolutePath
