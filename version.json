@@ -1,19 +1,19 @@
 {
-  "version": "2.0.1",
-  "version_code": 201,
+  "version": "2.0.2",
+  "version_code": 202,
   "release_date": "2026-11-05",
-  "title": "OmniVault v2.0.1 Facebook & Album Artwork Edition",
-  "changelog": "• Extractor nativo HD/SD para Facebook (fb.watch, reels, videos)\n• Carátula y metadatos de álbum completos para Lark Player y reproductores Android\n• Corrección de actualización automática en 1 toque",
+  "title": "OmniVault v2.0.2 Native Player, Karaoke Lyrics & Universal +18 Edition",
+  "changelog": "• Reproductor nativo interactivo con vista completa, resplandor, scrubber y letras\n• Letras sincronizadas (.lrc) y karaoke automático integrados para Lark Player\n• Descarga por lotes de álbumes y playlists de YouTube\n• Extractor universal para sitios web, HTML5 y plataformas para adultos (+18)\n• Configuración de almacenamiento personalizado y tarjeta MicroSD",
   "android": {
-    "version": "2.0.1",
-    "version_code": 201,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.1/OmniVault-v2.0.1-Android.apk",
-    "min_version_code": 200
+    "version": "2.0.2",
+    "version_code": 202,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.2/OmniVault-v2.0.2-Android.apk",
+    "min_version_code": 201
   },
   "windows": {
-    "version": "2.0.1",
-    "version_code": 201,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.1/OmniVault-v2.0.1-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.1/OmniVault-v2.0.1-Windows-x64-Portable.zip"
+    "version": "2.0.2",
+    "version_code": 202,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.2/OmniVault-v2.0.2-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.2/OmniVault-v2.0.2-Windows-x64-Portable.zip"
   }
 }

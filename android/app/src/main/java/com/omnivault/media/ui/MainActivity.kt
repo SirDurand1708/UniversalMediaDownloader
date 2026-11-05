@@ -9,11 +9,19 @@ import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
+import android.widget.ImageButton
+import android.widget.SeekBar
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
+import androidx.core.widget.NestedScrollView
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.imageview.ShapeableImageView
 import com.omnivault.media.R
 import com.omnivault.media.databinding.ActivityMainBinding
 import com.omnivault.media.downloader.DownloadManager
@@ -22,9 +30,13 @@ import com.omnivault.media.downloader.MediaPreview
 import com.omnivault.media.model.DownloadItem
 import com.omnivault.media.model.MediaFormat
 import com.omnivault.media.model.PlatformType
+import com.omnivault.media.player.AudioPlayerManager
+import com.omnivault.media.player.NowPlayingTrack
 import com.omnivault.media.service.ClipboardMonitorService
 import com.omnivault.media.utils.CoverArtHelper
+import com.omnivault.media.utils.LyricsHelper
 import com.omnivault.media.utils.NotificationHelper
+import com.omnivault.media.utils.StorageHelper
 import com.omnivault.media.utils.UpdateInfo
 import com.omnivault.media.utils.UpdateManager
 import com.omnivault.media.utils.UrlUtils
@@ -208,13 +220,38 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Start Download Button
+        // Start Download Button (Soporta canciones individuales y Álbumes/Playlists completos de YouTube)
         binding.btnStartDownload.setOnClickListener {
             val url = binding.etUrlInput.text.toString().trim()
             val extracted = UrlUtils.extractUrlFromText(url) ?: url
 
             if (extracted.isBlank()) {
                 Toast.makeText(this, "Por favor ingresa o pega un enlace válido", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            if (MediaExtractor.isYouTubePlaylist(extracted)) {
+                Toast.makeText(this, "✦ OmniVault: Analizando álbum / lista de reproducción...", Toast.LENGTH_SHORT).show()
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val videoUrls = MediaExtractor.extractPlaylistVideoUrls(extracted)
+                    withContext(Dispatchers.Main) {
+                        if (videoUrls.isNotEmpty()) {
+                            for (vUrl in videoUrls) {
+                                downloadManager.enqueueDownload(vUrl, selectedFormat)
+                            }
+                            binding.etUrlInput.setText("")
+                            binding.cardPreview.visibility = View.GONE
+                            Toast.makeText(this@MainActivity, "✦ Álbum añadido: ${videoUrls.size} canciones en descarga (${selectedFormat.extension.uppercase()})", Toast.LENGTH_LONG).show()
+                            refreshLists()
+                        } else {
+                            downloadManager.enqueueDownload(extracted, selectedFormat)
+                            binding.etUrlInput.setText("")
+                            binding.cardPreview.visibility = View.GONE
+                            Toast.makeText(this@MainActivity, "✦ Descarga añadida a la cola", Toast.LENGTH_SHORT).show()
+                            refreshLists()
+                        }
+                    }
+                }
                 return@setOnClickListener
             }
 
@@ -229,6 +266,23 @@ class MainActivity : AppCompatActivity() {
         binding.tvClearHistory.setOnClickListener {
             downloadManager.clearAllHistory()
             refreshLists()
+        }
+
+        // Ubicación de Almacenamiento y MicroSD (Pestaña Ajustes)
+        binding.tvStorageLocationSummary.text = StorageHelper.getStorageSummary(this)
+        binding.btnToggleStorageLocation.setOnClickListener {
+            val currentCustom = StorageHelper.getCustomStoragePath(this)
+            if (currentCustom.isNullOrBlank()) {
+                val extAppDir = getExternalFilesDir(null)?.absolutePath
+                if (extAppDir != null) {
+                    StorageHelper.setCustomStoragePath(this, extAppDir)
+                    Toast.makeText(this, "💾 Carpeta de descargas cambiada a almacenamiento MicroSD / App", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                StorageHelper.setCustomStoragePath(this, null)
+                Toast.makeText(this, "💾 Ubicación restablecida a carpetas estándar de Música y Videos", Toast.LENGTH_SHORT).show()
+            }
+            binding.tvStorageLocationSummary.text = StorageHelper.getStorageSummary(this)
         }
 
         // Navegación Inferior (Pestañas Concept 3: Spotify Vault)
@@ -481,13 +535,36 @@ class MainActivity : AppCompatActivity() {
                 binding.imgMiniPlayerCover.setImageResource(R.mipmap.ic_launcher)
             }
 
-            binding.cardMiniPlayer.setOnClickListener { playMediaFile(latest) }
-            binding.btnMiniPlayerPlay.setOnClickListener { playMediaFile(latest) }
+            val isCurrentTrackPlaying = AudioPlayerManager.isPlaying() && AudioPlayerManager.getCurrentTrack()?.filePath == latest.localFilePath
+            binding.btnMiniPlayerPlay.setImageResource(
+                if (isCurrentTrackPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
+            )
+
+            binding.cardMiniPlayer.setOnClickListener {
+                if (latest.format.isAudio) {
+                    playAudioInApp(latest)
+                } else {
+                    playMediaFile(latest)
+                }
+            }
+            binding.btnMiniPlayerPlay.setOnClickListener {
+                if (latest.format.isAudio) {
+                    if (AudioPlayerManager.getCurrentTrack()?.filePath == latest.localFilePath) {
+                        AudioPlayerManager.togglePlayPause()
+                    } else {
+                        playAudioInApp(latest)
+                    }
+                } else {
+                    playMediaFile(latest)
+                }
+            }
             binding.btnMiniPlayerShare.setOnClickListener { shareMediaFile(latest) }
         } else {
             binding.cardMiniPlayer.visibility = View.GONE
         }
     }
+
+    private var activePlayerDialog: BottomSheetDialog? = null
 
     private fun playMediaFile(item: DownloadItem) {
         val path = item.localFilePath ?: return
@@ -497,18 +574,199 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val uri = FileProvider.getUriForFile(this, "${applicationContext.packageName}.fileprovider", file)
-        val mimeType = if (file.name.endsWith(".m4a")) "audio/mp4" else item.format.mimeType
+        if (item.format.isAudio) {
+            playAudioInApp(item)
+        } else {
+            val uri = FileProvider.getUriForFile(this, "${applicationContext.packageName}.fileprovider", file)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, item.format.mimeType)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            try {
+                startActivity(intent)
+            } catch (e: Exception) {
+                Toast.makeText(this, "No se encontró un reproductor de video compatible", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, mimeType)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    private fun playAudioInApp(item: DownloadItem) {
+        val path = item.localFilePath ?: return
+        val current = AudioPlayerManager.getCurrentTrack()
+        if (current?.filePath != path) {
+            val track = NowPlayingTrack(
+                filePath = path,
+                title = item.title,
+                artist = if (!item.artist.isNullOrBlank()) item.artist!! else "OmniVault",
+                coverPath = item.thumbnailUrl
+            )
+            AudioPlayerManager.playTrack(track)
+        } else if (!AudioPlayerManager.isPlaying()) {
+            AudioPlayerManager.togglePlayPause()
         }
-        try {
-            startActivity(intent)
-        } catch (e: Exception) {
-            Toast.makeText(this, "No se encontró un reproductor compatible", Toast.LENGTH_SHORT).show()
+        showFullPlayerBottomSheet(item)
+    }
+
+    private fun showFullPlayerBottomSheet(item: DownloadItem) {
+        val dialog = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.dialog_full_player, null)
+        dialog.setContentView(view)
+        activePlayerDialog = dialog
+
+        val imgCover = view.findViewById<ShapeableImageView>(R.id.imgFullPlayerCover)
+        val tvTitle = view.findViewById<TextView>(R.id.tvFullPlayerTitle)
+        val tvArtist = view.findViewById<TextView>(R.id.tvFullPlayerArtist)
+        val seekBar = view.findViewById<SeekBar>(R.id.seekBarPlayer)
+        val tvCurrentTime = view.findViewById<TextView>(R.id.tvCurrentTime)
+        val tvTotalDuration = view.findViewById<TextView>(R.id.tvTotalDuration)
+        val fabPlayPause = view.findViewById<FloatingActionButton>(R.id.fabPlayPause)
+        val btnPrev = view.findViewById<ImageButton>(R.id.btnPlayerPrev)
+        val btnNext = view.findViewById<ImageButton>(R.id.btnPlayerNext)
+        val btnToggleLyrics = view.findViewById<MaterialButton>(R.id.btnToggleLyrics)
+        val btnShare = view.findViewById<MaterialButton>(R.id.btnFullPlayerShare)
+        val scrollLyrics = view.findViewById<NestedScrollView>(R.id.scrollLyrics)
+        val tvLyrics = view.findViewById<TextView>(R.id.tvLyricsContent)
+
+        tvTitle.text = item.title
+        tvArtist.text = if (!item.artist.isNullOrBlank()) item.artist else "OmniVault Audio"
+
+        val coverBitmap = getCoverBitmapForItem(item)
+        if (coverBitmap != null) {
+            imgCover.setImageBitmap(coverBitmap)
+        } else {
+            imgCover.setImageResource(R.mipmap.ic_launcher)
         }
+
+        val durationMs = AudioPlayerManager.getDuration()
+        val posMs = AudioPlayerManager.getCurrentPosition()
+        seekBar.max = if (durationMs > 0) durationMs else 1000
+        seekBar.progress = posMs
+        tvTotalDuration.text = formatMs(durationMs)
+        tvCurrentTime.text = formatMs(posMs)
+
+        val updatePlayIcon = {
+            if (AudioPlayerManager.isPlaying()) {
+                fabPlayPause.setImageResource(android.R.drawable.ic_media_pause)
+                binding.btnMiniPlayerPlay.setImageResource(android.R.drawable.ic_media_pause)
+            } else {
+                fabPlayPause.setImageResource(android.R.drawable.ic_media_play)
+                binding.btnMiniPlayerPlay.setImageResource(android.R.drawable.ic_media_play)
+            }
+        }
+        updatePlayIcon()
+
+        fabPlayPause.setOnClickListener {
+            AudioPlayerManager.togglePlayPause()
+            updatePlayIcon()
+        }
+
+        btnPrev.setOnClickListener {
+            val cur = AudioPlayerManager.getCurrentPosition()
+            AudioPlayerManager.seekTo(maxOf(0, cur - 10000))
+        }
+
+        btnNext.setOnClickListener {
+            val cur = AudioPlayerManager.getCurrentPosition()
+            val total = AudioPlayerManager.getDuration()
+            AudioPlayerManager.seekTo(minOf(total, cur + 10000))
+        }
+
+        seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    AudioPlayerManager.seekTo(progress)
+                    tvCurrentTime.text = formatMs(progress)
+                }
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+
+        btnToggleLyrics.setOnClickListener {
+            if (scrollLyrics.visibility == View.VISIBLE) {
+                scrollLyrics.visibility = View.GONE
+                btnToggleLyrics.text = "🎤 Ver Letras"
+            } else {
+                scrollLyrics.visibility = View.VISIBLE
+                btnToggleLyrics.text = "🎤 Ocultar Letras"
+                loadLyricsForSong(item, tvLyrics)
+            }
+        }
+
+        btnShare.setOnClickListener {
+            shareMediaFile(item)
+        }
+
+        AudioPlayerManager.onProgressListener = { current, total ->
+            if (dialog.isShowing) {
+                seekBar.max = total
+                seekBar.progress = current
+                tvCurrentTime.text = formatMs(current)
+                tvTotalDuration.text = formatMs(total)
+            }
+        }
+
+        AudioPlayerManager.onStateChangedListener = { _, _ ->
+            updatePlayIcon()
+        }
+
+        dialog.setOnDismissListener {
+            activePlayerDialog = null
+        }
+
+        dialog.show()
+    }
+
+    private fun loadLyricsForSong(item: DownloadItem, tvLyrics: TextView) {
+        val path = item.localFilePath ?: return
+        val audioFile = File(path)
+        val lrcFile = File(audioFile.parentFile, "${audioFile.nameWithoutExtension}.lrc")
+        if (lrcFile.exists()) {
+            try {
+                tvLyrics.text = lrcFile.readText(Charsets.UTF_8)
+                return
+            } catch (_: Exception) {}
+        }
+
+        tvLyrics.text = "Buscando letras en línea..."
+        lifecycleScope.launch(Dispatchers.IO) {
+            val lyrics = LyricsHelper.fetchLyrics(item.title, item.artist ?: "")
+            withContext(Dispatchers.Main) {
+                if (!lyrics.isNullOrBlank()) {
+                    tvLyrics.text = lyrics
+                } else {
+                    tvLyrics.text = "No se encontraron letras disponibles para esta canción."
+                }
+            }
+        }
+    }
+
+    private fun getCoverBitmapForItem(item: DownloadItem): android.graphics.Bitmap? {
+        val thumb = item.thumbnailUrl
+        if (!thumb.isNullOrBlank()) {
+            val f = File(thumb)
+            if (f.exists()) {
+                try {
+                    val bm = BitmapFactory.decodeFile(f.absolutePath)
+                    if (bm != null) return bm
+                } catch (_: Exception) {}
+            }
+        }
+        val cached = item.id.let { CoverArtHelper.getCachedCoverFile(this, it) }
+        if (cached != null && cached.exists()) {
+            try {
+                val bm = BitmapFactory.decodeFile(cached.absolutePath)
+                if (bm != null) return bm
+            } catch (_: Exception) {}
+        }
+        return null
+    }
+
+    private fun formatMs(ms: Int): String {
+        val totalSec = ms / 1000
+        val min = totalSec / 60
+        val sec = totalSec % 60
+        return String.format("%02d:%02d", min, sec)
     }
 
     private fun shareMediaFile(item: DownloadItem) {

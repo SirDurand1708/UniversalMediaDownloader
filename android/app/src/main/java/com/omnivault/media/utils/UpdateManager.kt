@@ -32,8 +32,8 @@ data class UpdateInfo(
 
 object UpdateManager {
     private const val TAG = "UpdateManager"
-    const val CURRENT_VERSION_NAME = "2.0.1"
-    const val CURRENT_VERSION_CODE = 201
+    const val CURRENT_VERSION_NAME = "2.0.2"
+    const val CURRENT_VERSION_CODE = 202
     private const val UPDATE_URL = "https://raw.githubusercontent.com/SirDurand1708/UniversalMediaDownloader/main/version.json"
 
     private val client = OkHttpClient.Builder()

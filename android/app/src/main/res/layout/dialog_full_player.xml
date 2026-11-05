@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/spotify_black"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <!-- Indicador de arrastre superior -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="16dp"
+        android:background="@drawable/bg_input_box" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:fontFamily="sans-serif-bold"
+        android:text="REPRODUCIENDO DESDE TU BÓVEDA"
+        android:textColor="@color/spotify_green"
+        android:textSize="11sp"
+        android:letterSpacing="0.05" />
+
+    <!-- Gran Carátula con Resplandor -->
+    <com.google.android.material.imageview.ShapeableImageView
+        android:id="@+id/imgFullPlayerCover"
+        android:layout_width="220dp"
+        android:layout_height="220dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="16dp"
+        android:background="@color/spotify_card_elevated"
+        android:scaleType="centerCrop"
+        android:src="@mipmap/ic_launcher"
+        app:shapeAppearanceOverlay="@style/Rounded12"
+        app:strokeColor="@color/ambient_purple"
+        app:strokeWidth="2dp" />
+
+    <TextView
+        android:id="@+id/tvFullPlayerTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:ellipsize="marquee"
+        android:fontFamily="sans-serif-black"
+        android:gravity="center"
+        android:marqueeRepeatLimit="marquee_forever"
+        android:singleLine="true"
+        android:text="Título de la Canción"
+        android:textColor="@color/text_primary"
+        android:textSize="18sp" />
+
+    <TextView
+        android:id="@+id/tvFullPlayerArtist"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center"
+        android:text="Artista de la Canción"
+        android:textColor="@color/text_secondary"
+        android:textSize="13sp" />
+
+    <!-- Barra de Tiempo y Progreso -->
+    <SeekBar
+        android:id="@+id/seekBarPlayer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:progressTint="@color/spotify_green"
+        android:thumbTint="@color/spotify_green" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="8dp">
+
+        <TextView
+            android:id="@+id/tvCurrentTime"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="sans-serif"
+            android:text="00:00"
+            android:textColor="@color/text_muted"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/tvTotalDuration"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif"
+            android:text="00:00"
+            android:textColor="@color/text_muted"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <!-- Controles de Reproducción -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <ImageButton
+            android:id="@+id/btnPlayerPrev"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Anterior"
+            android:src="@android:drawable/ic_media_previous"
+            app:tint="@color/text_primary" />
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/fabPlayPause"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="24dp"
+            android:contentDescription="Reproducir o pausar"
+            android:src="@android:drawable/ic_media_play"
+            app:backgroundTint="@color/spotify_green"
+            app:elevation="4dp"
+            app:tint="#0A0B0D" />
+
+        <ImageButton
+            android:id="@+id/btnPlayerNext"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Siguiente"
+            android:src="@android:drawable/ic_media_next"
+            app:tint="@color/text_primary" />
+    </LinearLayout>
+
+    <!-- Botones de Acción Extra: Letras y Compartir -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnToggleLyrics"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:fontFamily="sans-serif-bold"
+            android:text="🎤 Ver Letras"
+            android:textColor="@color/spotify_green"
+            android:textSize="11sp"
+            app:backgroundTint="@color/spotify_card_elevated"
+            app:cornerRadius="20dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnFullPlayerShare"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:fontFamily="sans-serif-medium"
+            android:text="↗ Compartir"
+            android:textColor="@color/text_primary"
+            android:textSize="11sp"
+            app:backgroundTint="@color/spotify_card_elevated"
+            app:cornerRadius="20dp" />
+    </LinearLayout>
+
+    <!-- Vista Desplegable de Letras Karaoke -->
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/scrollLyrics"
+        android:layout_width="match_parent"
+        android:layout_height="160dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_spotify_card"
+        android:padding="12dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tvLyricsContent"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:lineSpacingExtra="4dp"
+            android:text="Buscando letras..."
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
+    </androidx.core.widget.NestedScrollView>
+
+</LinearLayout>

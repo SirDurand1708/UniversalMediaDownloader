@@ -40,9 +40,9 @@ object CoverArtHelper {
     }
 
     /**
-     * Incrusta la carátula e información ID3v2.3 en un archivo de audio MP3.
+     * Incrusta la carátula, letras e información ID3v2.3 en un archivo de audio MP3.
      */
-    fun embedCoverInMp3(mp3File: File, coverBytes: ByteArray, title: String, artist: String): Boolean {
+    fun embedCoverInMp3(mp3File: File, coverBytes: ByteArray, title: String, artist: String, lyrics: String? = null): Boolean {
         if (!mp3File.exists() || coverBytes.isEmpty()) return false
         return try {
             val isPng = coverBytes.size > 8 && coverBytes[0] == 0x89.toByte() && coverBytes[1] == 0x50.toByte()
@@ -89,13 +89,29 @@ object CoverArtHelper {
             tpe2Body.write(cleanArtist.toByteArray(Charsets.UTF_16LE))
             val tpe2Frame = makeId3Frame("TPE2", tpe2Body.toByteArray())
 
-            // 6. Agrupar frames
+            // 6. Frame USLT (Letras sincronizadas / texto para Karaoke)
+            var usltFrame: ByteArray? = null
+            if (!lyrics.isNullOrBlank()) {
+                val usltBody = ByteArrayOutputStream()
+                usltBody.write(0x01) // UTF-16 con BOM
+                usltBody.write("eng".toByteArray(Charsets.ISO_8859_1))
+                usltBody.write(byteArrayOf(0xFF.toByte(), 0xFE.toByte()))
+                usltBody.write(byteArrayOf(0x00, 0x00)) // Descriptor nulo
+                usltBody.write(byteArrayOf(0xFF.toByte(), 0xFE.toByte()))
+                usltBody.write(lyrics.toByteArray(Charsets.UTF_16LE))
+                usltFrame = makeId3Frame("USLT", usltBody.toByteArray())
+            }
+
+            // 7. Agrupar frames
             val allFrames = ByteArrayOutputStream()
             allFrames.write(apicFrame)
             allFrames.write(tit2Frame)
             allFrames.write(tpe1Frame)
             allFrames.write(talbFrame)
             allFrames.write(tpe2Frame)
+            if (usltFrame != null) {
+                allFrames.write(usltFrame)
+            }
             val framesBytes = allFrames.toByteArray()
 
             // Header ID3v2.3 (10 bytes): "ID3", ver 3.0, flags 0, syncsafe size
@@ -142,17 +158,17 @@ object CoverArtHelper {
     }
 
     /**
-     * Incrusta la carátula y metadatos en contenedores M4A / MP4 utilizando el átomo QuickTime estándar 'covr'.
+     * Incrusta la carátula, letras y metadatos en contenedores M4A / MP4 utilizando el átomo QuickTime estándar 'covr'.
      * Compatible al 100% con reproductores de música de Android, pantalla de bloqueo y Android MediaStore.
      */
-    fun embedCoverInM4a(mediaFile: File, coverBytes: ByteArray, title: String, artist: String): Boolean {
+    fun embedCoverInM4a(mediaFile: File, coverBytes: ByteArray, title: String, artist: String, lyrics: String? = null): Boolean {
         if (!mediaFile.exists() || coverBytes.isEmpty()) return false
         return try {
             val isPng = coverBytes.size > 8 && coverBytes[0] == 0x89.toByte() && coverBytes[1] == 0x50.toByte()
             val fileBytes = mediaFile.readBytes()
 
-            // 1. Construir caja 'udta' con 'ilst' conteniendo 'covr', '©nam' y '©ART'
-            val udtaBox = buildUdtaBox(title, artist, coverBytes, isPng)
+            // 1. Construir caja 'udta' con 'ilst' conteniendo 'covr', '©nam', '©ART', '©alb' y '©lyr'
+            val udtaBox = buildUdtaBox(title, artist, coverBytes, isPng, lyrics)
 
             // 2. Localizar cajas 'moov' y 'mdat'
             var idx = 0
@@ -268,7 +284,7 @@ object CoverArtHelper {
         }
     }
 
-    private fun buildUdtaBox(title: String, artist: String, coverBytes: ByteArray, isPng: Boolean): ByteArray {
+    private fun buildUdtaBox(title: String, artist: String, coverBytes: ByteArray, isPng: Boolean, lyrics: String? = null): ByteArray {
         val ilstBody = ByteArrayOutputStream()
 
         if (title.isNotBlank()) {
@@ -285,6 +301,11 @@ object CoverArtHelper {
         val albumName = if (artist.isNotBlank()) "$artist - Single" else if (title.isNotBlank()) title else "OmniVault Audio"
         val albumData = buildDataAtom(1, albumName.toByteArray(Charsets.UTF_8))
         ilstBody.write(buildAtom("\u00a9alb", albumData))
+
+        if (!lyrics.isNullOrBlank()) {
+            val lyricsData = buildDataAtom(1, lyrics.toByteArray(Charsets.UTF_8))
+            ilstBody.write(buildAtom("\u00a9lyr", lyricsData))
+        }
 
         if (coverBytes.isNotEmpty()) {
             val typeFlag = if (isPng) 14 else 13

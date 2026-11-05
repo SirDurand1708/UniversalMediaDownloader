@@ -115,7 +115,7 @@
                         android:layout_height="wrap_content"
                         android:background="?attr/selectableItemBackground"
                         android:fontFamily="sans-serif-medium"
-                        android:text="OmniVault v2.0.1 • Audio-First Edition"
+                        android:text="OmniVault v2.0.2 • Audio-First Edition"
                         android:textColor="@color/spotify_green"
                         android:textSize="11sp" />
                 </LinearLayout>
@@ -603,6 +603,46 @@
                         android:checked="true"
                         app:thumbTint="@color/spotify_green"
                         app:trackTint="@color/spotify_card_elevated" />
+                </LinearLayout>
+
+                <!-- Card Ubicación de Descargas y MicroSD -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_spotify_card"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-bold"
+                        android:text="📁 Almacenamiento y MicroSD"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/tvStorageLocationSummary"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:text="Almacenamiento Interno (Música/OmniVault y Películas/OmniVault)"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnToggleStorageLocation"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="38dp"
+                        android:layout_marginTop="8dp"
+                        android:fontFamily="sans-serif-bold"
+                        android:text="💾 Alternar Almacenamiento Interno / MicroSD"
+                        android:textColor="@color/spotify_green"
+                        android:textSize="11sp"
+                        app:backgroundTint="@color/spotify_card_elevated"
+                        app:cornerRadius="10dp" />
                 </LinearLayout>
 
                 <!-- Card Comprobador de Actualizaciones -->

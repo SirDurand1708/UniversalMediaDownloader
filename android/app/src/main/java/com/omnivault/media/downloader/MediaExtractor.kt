@@ -69,7 +69,9 @@ object MediaExtractor {
         }
     }
 
-    private fun cleanFbUrl(raw: String): String {
+    private fun cleanFbUrl(raw: String): String = cleanStreamUrl(raw)
+
+    private fun cleanStreamUrl(raw: String): String {
         val clean = raw.replace("\\/", "/").replace("&amp;", "&")
         val unicodePattern = Pattern.compile("\\\\u([0-9a-fA-F]{4})")
         val matcher = unicodePattern.matcher(clean)
@@ -79,7 +81,65 @@ object MediaExtractor {
             matcher.appendReplacement(sb, Matcher.quoteReplacement(code.toChar().toString()))
         }
         matcher.appendTail(sb)
-        return sb.toString()
+        return sb.toString().trim()
+    }
+
+    /**
+     * Detecta si una URL corresponde a una lista de reproducción o álbum de YouTube.
+     */
+    fun isYouTubePlaylist(url: String): Boolean {
+        val lower = url.lowercase()
+        return (lower.contains("youtube.com") || lower.contains("youtu.be")) && lower.contains("list=")
+    }
+
+    /**
+     * Extrae todos los identificadores de video de un álbum o lista de reproducción de YouTube.
+     */
+    fun extractPlaylistVideoUrls(playlistUrl: String): List<String> {
+        val listMatcher = Pattern.compile("[?&]list=([a-zA-Z0-9_-]+)").matcher(playlistUrl)
+        val listId = if (listMatcher.find()) listMatcher.group(1) else return emptyList()
+
+        try {
+            val endpoint = "https://www.youtube.com/youtubei/v1/browse?key=$YT_API_KEY"
+            val payload = """
+                {
+                    "context": {
+                        "client": {
+                            "clientName": "ANDROID",
+                            "clientVersion": "20.10.38",
+                            "hl": "es",
+                            "gl": "US"
+                        }
+                    },
+                    "browseId": "VL$listId"
+                }
+            """.trimIndent()
+
+            val req = Request.Builder()
+                .url(endpoint)
+                .post(payload.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .header("User-Agent", YT_USER_AGENT)
+                .header("Content-Type", "application/json")
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val body = resp.body?.string() ?: ""
+                    val videoIdMatcher = Pattern.compile("\"videoId\":\\s*\"([a-zA-Z0-9_-]{11})\"").matcher(body)
+                    val ids = mutableListOf<String>()
+                    val seen = mutableSetOf<String>()
+                    while (videoIdMatcher.find()) {
+                        val vid = videoIdMatcher.group(1)
+                        if (seen.add(vid)) {
+                            ids.add("https://youtu.be/$vid")
+                        }
+                    }
+                    if (ids.isNotEmpty()) return ids
+                }
+            }
+        } catch (_: Exception) {}
+
+        return emptyList()
     }
 
     /**
@@ -96,14 +156,47 @@ object MediaExtractor {
             PlatformType.TIKTOK -> analyzeTikTok(resolved)
             PlatformType.FACEBOOK -> analyzeFacebook(resolved)
             PlatformType.INSTAGRAM, PlatformType.TWITTER -> analyzeSocial(resolved, platform)
-            else -> analyzeGeneric(resolved, platform)
+            else -> analyzeUniversal(resolved, platform)
         }
     }
 
     private fun analyzeYouTube(url: String): MediaPreview {
+        val isPlaylist = isYouTubePlaylist(url)
         val matcher = YT_VIDEO_ID_PATTERN.matcher(url)
         val videoId = if (matcher.find()) matcher.group(1) else ""
         val thumb = if (videoId.isNotBlank()) "https://i.ytimg.com/vi/$videoId/hqdefault.jpg" else ""
+
+        if (isPlaylist && videoId.isBlank()) {
+            val listMatcher = Pattern.compile("[?&]list=([a-zA-Z0-9_-]+)").matcher(url)
+            val listId = if (listMatcher.find()) listMatcher.group(1) else ""
+            try {
+                val oembedUrl = "https://www.youtube.com/oembed?url=https://www.youtube.com/playlist?list=$listId&format=json"
+                val req = Request.Builder().url(oembedUrl).header("User-Agent", BROWSER_USER_AGENT).build()
+                client.newCall(req).execute().use { resp ->
+                    if (resp.isSuccessful) {
+                        val body = resp.body?.string() ?: ""
+                        val root = JsonParser.parseString(body).asJsonObject
+                        val title = root.get("title")?.asString ?: "Álbum / Lista de Reproducción"
+                        val author = root.get("author_name")?.asString ?: "YouTube Music"
+                        return MediaPreview(
+                            title = "📀 Álbum: $title",
+                            author = author,
+                            thumbnailUrl = "https://www.gstatic.com/youtube/media/ytm/images/channel/default_channel_art.png",
+                            platform = PlatformType.YOUTUBE,
+                            originalUrl = url
+                        )
+                    }
+                }
+            } catch (_: Exception) {}
+
+            return MediaPreview(
+                title = "📀 Álbum / Lista de YouTube ($listId)",
+                author = "YouTube Playlist",
+                thumbnailUrl = "",
+                platform = PlatformType.YOUTUBE,
+                originalUrl = url
+            )
+        }
 
         try {
             val oembedUrl = "https://www.youtube.com/oembed?url=https://youtu.be/$videoId&format=json"
@@ -116,7 +209,8 @@ object MediaExtractor {
                 if (resp.isSuccessful) {
                     val body = resp.body?.string() ?: ""
                     val root = JsonParser.parseString(body).asJsonObject
-                    val title = root.get("title")?.asString ?: "YouTube Video"
+                    val rawTitle = root.get("title")?.asString ?: "YouTube Video"
+                    val title = if (isPlaylist) "📀 Álbum/Video: $rawTitle" else rawTitle
                     val author = root.get("author_name")?.asString ?: "YouTube Creator"
                     val thumbUrl = root.get("thumbnail_url")?.asString ?: thumb
                     return MediaPreview(
@@ -287,15 +381,111 @@ object MediaExtractor {
         )
     }
 
-    private fun analyzeGeneric(url: String, platform: PlatformType): MediaPreview {
-        val og = parseOpenGraph(url)
-        val cleanName = og["title"] ?: url.substringAfterLast("/").substringBefore("?").ifBlank { platform.displayName }
+    private fun analyzeUniversal(url: String, platform: PlatformType): MediaPreview {
+        val cleanUrl = url.trim()
+        val lower = cleanUrl.lowercase()
+
+        // 1. Enlace directo a archivo multimedia
+        val directExtensions = listOf(".mp4", ".mp3", ".m4a", ".webm", ".m3u8", ".wav", ".aac", ".flv", ".mov", ".ogg")
+        if (directExtensions.any { lower.contains(it) }) {
+            val fileName = cleanUrl.substringAfterLast("/").substringBefore("?").ifBlank { "Archivo Multimedia" }
+            return MediaPreview(
+                title = fileName,
+                author = "Enlace Directo",
+                thumbnailUrl = "",
+                platform = platform,
+                originalUrl = cleanUrl
+            )
+        }
+
+        // 2. Rastreo profundo de la página con bypass para adultos (+18) y web players
+        try {
+            val req = Request.Builder()
+                .url(cleanUrl)
+                .header("User-Agent", DESKTOP_USER_AGENT)
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .header("Accept-Language", "es-ES,es;q=0.9,en;q=0.8")
+                .header("Cookie", "age_verified=1; has_age_verified=1; accessAgeDisclaimerPH=1; platform=pc; consent=1; mature_content=1; over18=1; il=es")
+                .header("Referer", cleanUrl)
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val html = resp.body?.string() ?: ""
+
+                    // Título (XVideos, Pornhub, OpenGraph, <title>)
+                    var title: String? = null
+                    val xvTitle = Pattern.compile("setVideoTitle\\s*\\(\\s*['\"]([^'\"]+)['\"]").matcher(html)
+                    if (xvTitle.find()) {
+                        title = xvTitle.group(1)
+                    }
+
+                    if (title.isNullOrBlank()) {
+                        val ogTitle = Pattern.compile("<meta\\s+(?:property|name)=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE).matcher(html)
+                        if (ogTitle.find()) {
+                            title = ogTitle.group(1)
+                        }
+                    }
+
+                    if (title.isNullOrBlank()) {
+                        val pageTitle = Pattern.compile("<title>([^<]+)</title>", Pattern.CASE_INSENSITIVE).matcher(html)
+                        if (pageTitle.find()) {
+                            title = pageTitle.group(1)
+                        }
+                    }
+
+                    val cleanTitle = (title ?: "Video Web")
+                        .replace("&amp;", "&")
+                        .replace("&#039;", "'")
+                        .replace("&quot;", "\"")
+                        .replace(Regex("(?i)\\s*-\\s*(?:XVIDEOS\\.COM|Pornhub\\.com|SpankBang|RedTube|YouPorn)"), "")
+                        .trim()
+
+                    // Miniatura
+                    var thumbUrl: String? = null
+                    val xvThumb = Pattern.compile("setThumbUrl169\\s*\\(\\s*['\"]([^'\"]+)['\"]").matcher(html)
+                    if (xvThumb.find()) {
+                        thumbUrl = xvThumb.group(1)
+                    }
+                    if (thumbUrl.isNullOrBlank()) {
+                        val xvThumb2 = Pattern.compile("setThumbUrl\\s*\\(\\s*['\"]([^'\"]+)['\"]").matcher(html)
+                        if (xvThumb2.find()) {
+                            thumbUrl = xvThumb2.group(1)
+                        }
+                    }
+                    if (thumbUrl.isNullOrBlank()) {
+                        val ogImg = Pattern.compile("<meta\\s+(?:property|name)=[\"']og:image(?::url)?[\"']\\s+content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE).matcher(html)
+                        if (ogImg.find()) {
+                            thumbUrl = ogImg.group(1)
+                        }
+                    }
+
+                    // Autor / Sitio
+                    val domain = try {
+                        java.net.URI(cleanUrl).host.removePrefix("www.")
+                    } catch (_: Exception) {
+                        platform.displayName
+                    }
+
+                    return MediaPreview(
+                        title = cleanTitle,
+                        author = domain,
+                        thumbnailUrl = thumbUrl?.let { cleanStreamUrl(it) } ?: "",
+                        platform = platform,
+                        originalUrl = cleanUrl
+                    )
+                }
+            }
+        } catch (_: Exception) {}
+
+        val og = parseOpenGraph(cleanUrl)
+        val defaultName = og["title"] ?: cleanUrl.substringAfterLast("/").substringBefore("?").ifBlank { platform.displayName }
         return MediaPreview(
-            title = cleanName,
+            title = defaultName,
             author = platform.displayName,
             thumbnailUrl = og["image"] ?: "",
             platform = platform,
-            originalUrl = url
+            originalUrl = cleanUrl
         )
     }
 
@@ -309,7 +499,7 @@ object MediaExtractor {
             lower.contains("tiktok.com") -> extractTikTok(resolved, requestedFormat)
             lower.contains("facebook.com") || lower.contains("fb.watch") || lower.contains("fb.me") -> extractFacebook(resolved, requestedFormat)
             lower.contains("twitter.com") || lower.contains("x.com") || lower.contains("instagram.com") -> extractSocial(resolved, requestedFormat)
-            else -> extractGeneric(resolved, requestedFormat)
+            else -> extractUniversal(resolved, requestedFormat)
         }
     }
 
@@ -704,18 +894,185 @@ object MediaExtractor {
             )
         }
 
-        return extractGeneric(url, requestedFormat)
+        return extractUniversal(url, requestedFormat)
     }
 
-    private fun extractGeneric(url: String, requestedFormat: MediaFormat): ExtractedMediaInfo {
-        val og = parseOpenGraph(url)
-        val defaultName = og["title"] ?: url.substringAfterLast("/").substringBefore("?").ifBlank { "Media_Download" }
-        val streamUrl = og["video"] ?: url
+    /**
+     * Extractor profundo universal para sitios web, reproductores HTML5 y plataformas de contenido para adultos (+18).
+     * Bypassa barreras de edad e inspecciona etiquetas de video progresivo y variables de reproductores.
+     */
+    private fun extractUniversal(url: String, requestedFormat: MediaFormat): ExtractedMediaInfo {
+        val cleanUrl = url.trim()
+        val lower = cleanUrl.lowercase()
+
+        // 1. Si la URL ya apunta directamente a un archivo de video/audio
+        val directExts = listOf(".mp4", ".mp3", ".m4a", ".webm", ".wav", ".aac", ".flv", ".mov", ".ogg", ".m3u8")
+        if (directExts.any { lower.contains(it) }) {
+            val fileName = cleanUrl.substringAfterLast("/").substringBefore("?").ifBlank { "Media_Download" }
+            return ExtractedMediaInfo(
+                title = fileName,
+                directStreamUrl = cleanUrl,
+                format = requestedFormat,
+                author = "Direct Stream"
+            )
+        }
+
+        // 2. Rastreo profundo de HTML con cookies para adultos (+18) y emulando navegador de escritorio
+        try {
+            val req = Request.Builder()
+                .url(cleanUrl)
+                .header("User-Agent", DESKTOP_USER_AGENT)
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,video/*,*/*;q=0.8")
+                .header("Accept-Language", "es-ES,es;q=0.9,en;q=0.8")
+                .header("Cookie", "age_verified=1; has_age_verified=1; accessAgeDisclaimerPH=1; platform=pc; consent=1; mature_content=1; over18=1; il=es")
+                .header("Referer", cleanUrl)
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val html = resp.body?.string() ?: ""
+
+                    // a. XVideos / XNXX (html5player.setVideoUrlHigh / Low)
+                    var streamUrl: String? = null
+                    val highMatcher = Pattern.compile("setVideoUrlHigh\\s*\\(\\s*['\"]([^'\"]+)['\"]").matcher(html)
+                    if (highMatcher.find()) {
+                        streamUrl = highMatcher.group(1)
+                    }
+
+                    if (streamUrl.isNullOrBlank()) {
+                        val lowMatcher = Pattern.compile("setVideoUrlLow\\s*\\(\\s*['\"]([^'\"]+)['\"]").matcher(html)
+                        if (lowMatcher.find()) {
+                            streamUrl = lowMatcher.group(1)
+                        }
+                    }
+
+                    // b. Pornhub / MindGeek / SpankBang (mediaDefinitions, videoUrl, video_url)
+                    if (streamUrl.isNullOrBlank()) {
+                        val videoUrlMatcher = Pattern.compile("['\"]videoUrl['\"]\\s*:\\s*['\"]([^'\"]+)['\"]").matcher(html)
+                        if (videoUrlMatcher.find()) {
+                            streamUrl = cleanStreamUrl(videoUrlMatcher.group(1))
+                        }
+                    }
+
+                    if (streamUrl.isNullOrBlank()) {
+                        val videoUrlMatcher2 = Pattern.compile("['\"]video_url['\"]\\s*:\\s*['\"]([^'\"]+)['\"]").matcher(html)
+                        if (videoUrlMatcher2.find()) {
+                            streamUrl = cleanStreamUrl(videoUrlMatcher2.group(1))
+                        }
+                    }
+
+                    if (streamUrl.isNullOrBlank()) {
+                        val streamUrlMatcher = Pattern.compile("['\"]stream_url['\"]\\s*:\\s*['\"]([^'\"]+)['\"]").matcher(html)
+                        if (streamUrlMatcher.find()) {
+                            streamUrl = cleanStreamUrl(streamUrlMatcher.group(1))
+                        }
+                    }
+
+                    if (streamUrl.isNullOrBlank()) {
+                        val qualityMatcher = Pattern.compile("['\"]quality_(?:1080p|720p|480p|best)['\"]\\s*:\\s*['\"]([^'\"]+)['\"]").matcher(html)
+                        if (qualityMatcher.find()) {
+                            streamUrl = cleanStreamUrl(qualityMatcher.group(1))
+                        }
+                    }
+
+                    // c. Etiquetas HTML5 <video src="..."> o <source src="...">
+                    if (streamUrl.isNullOrBlank()) {
+                        val sourceMatcher = Pattern.compile("<source\\s+[^>]*src=['\"]([^'\"]+)['\"]", Pattern.CASE_INSENSITIVE).matcher(html)
+                        if (sourceMatcher.find()) {
+                            streamUrl = sourceMatcher.group(1)
+                        }
+                    }
+
+                    if (streamUrl.isNullOrBlank()) {
+                        val videoTagMatcher = Pattern.compile("<video\\s+[^>]*src=['\"]([^'\"]+)['\"]", Pattern.CASE_INSENSITIVE).matcher(html)
+                        if (videoTagMatcher.find()) {
+                            streamUrl = videoTagMatcher.group(1)
+                        }
+                    }
+
+                    // d. Búsqueda de cualquier URL de video progresivo .mp4 incrustada en scripts
+                    if (streamUrl.isNullOrBlank()) {
+                        val progressiveMatcher = Pattern.compile("(https?:[/\\\\]{2}[a-zA-Z0-9_.-]+(?:[/\\\\][a-zA-Z0-9_.-]+)*\\.(?:mp4|webm)(?:\\?[^\"'\\s<>]*)?)").matcher(html)
+                        while (progressiveMatcher.find()) {
+                            val candidate = cleanStreamUrl(progressiveMatcher.group(1))
+                            if (!candidate.contains("doubleclick") && !candidate.contains("googleads") && !candidate.contains("pixel")) {
+                                streamUrl = candidate
+                                break
+                            }
+                        }
+                    }
+
+                    // Si se encontró un flujo directo
+                    if (!streamUrl.isNullOrBlank()) {
+                        val cleanFinalStream = cleanStreamUrl(streamUrl)
+
+                        // Título
+                        var title: String? = null
+                        val xvTitle = Pattern.compile("setVideoTitle\\s*\\(\\s*['\"]([^'\"]+)['\"]").matcher(html)
+                        if (xvTitle.find()) title = xvTitle.group(1)
+
+                        if (title.isNullOrBlank()) {
+                            val ogTitle = Pattern.compile("<meta\\s+(?:property|name)=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE).matcher(html)
+                            if (ogTitle.find()) title = ogTitle.group(1)
+                        }
+
+                        if (title.isNullOrBlank()) {
+                            val pageTitle = Pattern.compile("<title>([^<]+)</title>", Pattern.CASE_INSENSITIVE).matcher(html)
+                            if (pageTitle.find()) title = pageTitle.group(1)
+                        }
+
+                        val cleanTitle = (title ?: "Video Descargado")
+                            .replace("&amp;", "&")
+                            .replace("&#039;", "'")
+                            .replace("&quot;", "\"")
+                            .replace(Regex("(?i)\\s*-\\s*(?:XVIDEOS\\.COM|Pornhub\\.com|SpankBang|RedTube|YouPorn)"), "")
+                            .trim()
+
+                        // Miniatura
+                        var thumbUrl: String? = null
+                        val xvThumb = Pattern.compile("setThumbUrl169\\s*\\(\\s*['\"]([^'\"]+)['\"]").matcher(html)
+                        if (xvThumb.find()) thumbUrl = xvThumb.group(1)
+                        if (thumbUrl.isNullOrBlank()) {
+                            val ogImg = Pattern.compile("<meta\\s+(?:property|name)=[\"']og:image(?::url)?[\"']\\s+content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE).matcher(html)
+                            if (ogImg.find()) thumbUrl = ogImg.group(1)
+                        }
+
+                        val domain = try {
+                            java.net.URI(cleanUrl).host.removePrefix("www.")
+                        } catch (_: Exception) {
+                            "Web"
+                        }
+
+                        return ExtractedMediaInfo(
+                            title = cleanTitle,
+                            directStreamUrl = cleanFinalStream,
+                            format = requestedFormat,
+                            author = domain,
+                            thumbnailUrl = thumbUrl?.let { cleanStreamUrl(it) } ?: "",
+                            requestHeaders = mapOf(
+                                "User-Agent" to DESKTOP_USER_AGENT,
+                                "Referer" to cleanUrl,
+                                "Cookie" to "age_verified=1; platform=pc"
+                            )
+                        )
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // Fallback OpenGraph
+        val og = parseOpenGraph(cleanUrl)
+        val defaultName = og["title"] ?: cleanUrl.substringAfterLast("/").substringBefore("?").ifBlank { "Media_Download" }
+        val stream = og["video"] ?: cleanUrl
         return ExtractedMediaInfo(
             title = defaultName,
-            directStreamUrl = streamUrl,
+            directStreamUrl = stream,
             format = requestedFormat,
-            thumbnailUrl = og["image"] ?: ""
+            thumbnailUrl = og["image"] ?: "",
+            requestHeaders = mapOf(
+                "User-Agent" to DESKTOP_USER_AGENT,
+                "Referer" to cleanUrl
+            )
         )
     }
 

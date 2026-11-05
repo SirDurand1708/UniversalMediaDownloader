@@ -7,8 +7,20 @@ import java.io.File
 
 object StorageHelper {
     private const val FOLDER_NAME = "OmniVault"
+    private const val PREFS_NAME = "omnivault_prefs"
+    private const val KEY_CUSTOM_STORAGE_PATH = "custom_storage_path"
 
-    fun getOutputDirectory(isAudio: Boolean): File {
+    fun getOutputDirectory(isAudio: Boolean, context: Context? = null): File {
+        if (context != null) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val custom = prefs.getString(KEY_CUSTOM_STORAGE_PATH, null)
+            if (!custom.isNullOrBlank()) {
+                val folder = File(custom, if (isAudio) "Music" else "Movies")
+                if (folder.exists() || folder.mkdirs()) {
+                    return folder
+                }
+            }
+        }
         val baseDir = if (isAudio) {
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
         } else {
@@ -19,6 +31,25 @@ object StorageHelper {
             targetFolder.mkdirs()
         }
         return targetFolder
+    }
+
+    fun setCustomStoragePath(context: Context, path: String?) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_CUSTOM_STORAGE_PATH, path).apply()
+    }
+
+    fun getCustomStoragePath(context: Context): String? {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_CUSTOM_STORAGE_PATH, null)
+    }
+
+    fun getStorageSummary(context: Context): String {
+        val custom = getCustomStoragePath(context)
+        return if (!custom.isNullOrBlank()) {
+            "Personalizado / MicroSD: $custom"
+        } else {
+            "Almacenamiento Interno (Música/OmniVault y Películas/OmniVault)"
+        }
     }
 
     fun sanitizeFilename(name: String): String {

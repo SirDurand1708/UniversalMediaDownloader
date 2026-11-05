@@ -12,12 +12,13 @@ object UrlUtils {
         "tiktok.com",
         "instagram.com",
         "twitter.com", "x.com",
-        "facebook.com", "fb.watch",
+        "facebook.com", "fb.watch", "fb.me",
         "soundcloud.com",
         "spotify.com",
         "vimeo.com",
         "reddit.com",
-        "twitch.tv"
+        "twitch.tv",
+        "xvideos.com", "xnxx.com", "pornhub.com", "spankbang.com", "redtube.com", "youporn.com"
     )
 
     /**
@@ -33,12 +34,14 @@ object UrlUtils {
     }
 
     /**
-     * Verifica si una URL pertenece a una plataforma soportada.
+     * Verifica si una URL pertenece a una plataforma soportada o es un flujo multimedia reproducible.
      */
     fun isSupportedMediaUrl(url: String?): Boolean {
         if (url.isNullOrBlank()) return false
         val lower = url.lowercase()
-        return SUPPORTED_HOSTS.any { lower.contains(it) }
+        if (SUPPORTED_HOSTS.any { lower.contains(it) }) return true
+        if (lower.endsWith(".mp4") || lower.endsWith(".mp3") || lower.endsWith(".m4a") || lower.endsWith(".webm") || lower.endsWith(".m3u8")) return true
+        return lower.startsWith("http://") || lower.startsWith("https://")
     }
 
     /**

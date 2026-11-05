@@ -10,6 +10,7 @@ import com.omnivault.media.model.DownloadStatus
 import com.omnivault.media.model.MediaFormat
 import com.omnivault.media.utils.AudioExtractor
 import com.omnivault.media.utils.CoverArtHelper
+import com.omnivault.media.utils.LyricsHelper
 import com.omnivault.media.utils.NotificationHelper
 import com.omnivault.media.utils.StorageHelper
 import kotlinx.coroutines.*
@@ -92,8 +93,8 @@ class DownloadManager private constructor(private val context: Context) {
             item.status = DownloadStatus.DOWNLOADING
             notifyUpdate(item)
 
-            // 2. Preparar archivo temporal y destino final
-            val targetDir = StorageHelper.getOutputDirectory(item.format.isAudio)
+            // 2. Preparar archivo temporal y destino final (honra carpeta personalizada o MicroSD)
+            val targetDir = StorageHelper.getOutputDirectory(item.format.isAudio, context)
             val cleanTitle = StorageHelper.sanitizeFilename(info.title)
 
             val tempDownloadFile = File(context.cacheDir, "temp_stream_${item.id}.tmp")
@@ -199,16 +200,18 @@ class DownloadManager private constructor(private val context: Context) {
                 finalMimeType = item.format.mimeType
             }
 
-            // 5. Inyección de carátula en alta resolución dentro de los átomos/tags del archivo
+            // 5. Inyección de carátula en alta resolución y letras sincronizadas (Karaoke)
+            val lyricsContent = if (item.format.isAudio) LyricsHelper.fetchLyrics(info.title, info.author) else null
             val coverBytes = CoverArtHelper.downloadCoverBytes(info.thumbnailUrl)
+
             if (coverBytes != null && coverBytes.isNotEmpty()) {
-                item.speedText = "Incrustando carátula HD..."
+                item.speedText = "Incrustando carátula y metadatos..."
                 notifyUpdate(item)
 
                 if (stagedFile.name.endsWith(".mp3", ignoreCase = true)) {
-                    CoverArtHelper.embedCoverInMp3(stagedFile, coverBytes, info.title, info.author)
+                    CoverArtHelper.embedCoverInMp3(stagedFile, coverBytes, info.title, info.author, lyricsContent)
                 } else {
-                    CoverArtHelper.embedCoverInM4a(stagedFile, coverBytes, info.title, info.author)
+                    CoverArtHelper.embedCoverInM4a(stagedFile, coverBytes, info.title, info.author, lyricsContent)
                 }
 
                 val cachedCover = CoverArtHelper.cacheCoverLocally(context, item.id, coverBytes)
@@ -222,13 +225,20 @@ class DownloadManager private constructor(private val context: Context) {
             stagedFile.copyTo(finalOutputFile, overwrite = true)
             stagedFile.delete()
 
-            // Guardar carátula complementaria .jpg en la misma carpeta para reproductores que la busquen
+            // Guardar carátula complementaria .jpg y archivo de letras .lrc para Lark Player y reproductores
             if (coverBytes != null && coverBytes.isNotEmpty()) {
                 try {
                     val companionJpg = File(targetDir, "${cleanTitle}.jpg")
                     companionJpg.writeBytes(coverBytes)
                     StorageHelper.scanMediaFile(context, companionJpg, "image/jpeg")
                 } catch (_: Exception) {}
+            }
+
+            if (!lyricsContent.isNullOrBlank()) {
+                val lrcFile = LyricsHelper.saveLrcFile(targetDir, cleanTitle, lyricsContent)
+                if (lrcFile != null) {
+                    StorageHelper.scanMediaFile(context, lrcFile, "text/plain")
+                }
             }
 
             // 7. Indexación inmediata en el escáner del sistema Android (MediaStore)
