@@ -11,8 +11,8 @@ android {
         applicationId "com.omnivault.media"
         minSdk 26
         targetSdk 34
-        versionCode 203
-        versionName "2.0.3"
+        versionCode 204
+        versionName "2.0.4"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -22,23 +22,29 @@ android {
 
     // Firma del APK de Release: usa debug.keystore para distribución directa (sideload).
     // En CI: KEYSTORE_PATH se establece como env var apuntando al keystore generado.
-    // En local: si no existe la var, usa el debug.keystore estándar del SDK de Android.
-    // Para Google Play: reemplaza por tu keystore de producción real.
+    // En local: usa el debug.keystore estándar del SDK si existe.
     signingConfigs {
         release {
             def ksPath = System.getenv("KEYSTORE_PATH") ?:
                 "${System.getProperty('user.home')}/.android/debug.keystore"
-            storeFile file(ksPath)
-            storePassword (System.getenv("KEYSTORE_PASSWORD") ?: "android")
-            keyAlias (System.getenv("KEY_ALIAS") ?: "androiddebugkey")
-            keyPassword (System.getenv("KEY_PASSWORD") ?: "android")
+            def ksFile = file(ksPath)
+            if (ksFile.exists()) {
+                storeFile ksFile
+                storePassword (System.getenv("KEYSTORE_PASSWORD") ?: "android")
+                keyAlias (System.getenv("KEY_ALIAS") ?: "androiddebugkey")
+                keyPassword (System.getenv("KEY_PASSWORD") ?: "android")
+            }
         }
     }
 
     buildTypes {
         release {
             minifyEnabled false
-            signingConfig signingConfigs.release
+            def ksPath = System.getenv("KEYSTORE_PATH") ?:
+                "${System.getProperty('user.home')}/.android/debug.keystore"
+            if (file(ksPath).exists()) {
+                signingConfig signingConfigs.release
+            }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {

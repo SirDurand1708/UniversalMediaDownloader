@@ -36,8 +36,17 @@ class DownloadManager private constructor(private val context: Context) {
     private val activeJobs = ConcurrentHashMap<String, Job>()
     private val historyList = mutableListOf<DownloadItem>()
 
+    private val downloadListeners = java.util.concurrent.CopyOnWriteArraySet<(DownloadItem) -> Unit>()
     var onDownloadUpdatedListener: ((DownloadItem) -> Unit)? = null
     var onHistoryUpdatedListener: ((List<DownloadItem>) -> Unit)? = null
+
+    fun addDownloadListener(listener: (DownloadItem) -> Unit) {
+        downloadListeners.add(listener)
+    }
+
+    fun removeDownloadListener(listener: (DownloadItem) -> Unit) {
+        downloadListeners.remove(listener)
+    }
 
     init {
         loadHistory()
@@ -184,7 +193,8 @@ class DownloadManager private constructor(private val context: Context) {
                     tempDownloadFile.delete()
                     finalMimeType = "audio/mpeg"
                 } else {
-                    item.speedText = "Extrayendo audio AAC..."
+                    item.status = DownloadStatus.PROCESSING
+                    item.speedText = "Extrayendo audio…"
                     notifyUpdate(item)
                     val extracted = AudioExtractor.extractAudio(tempDownloadFile, stagedFile)
                     tempDownloadFile.delete()
@@ -200,7 +210,11 @@ class DownloadManager private constructor(private val context: Context) {
                 finalMimeType = item.format.mimeType
             }
 
-            // 5. Inyección de carátula en alta resolución y letras sincronizadas (Karaoke)
+            // 5. Post-procesamiento: carátula en alta resolución y letras sincronizadas (Karaoke)
+            item.status = DownloadStatus.PROCESSING
+            item.speedText = "Procesando…"
+            notifyUpdate(item)
+
             val lyricsContent = if (item.format.isAudio) LyricsHelper.fetchLyrics(info.title, info.author) else null
             val coverBytes = CoverArtHelper.downloadCoverBytes(info.thumbnailUrl)
 
@@ -267,31 +281,15 @@ class DownloadManager private constructor(private val context: Context) {
     }
 
     private fun notifyUpdate(item: DownloadItem) {
-        // Notificaciones nativas en vivo de progreso y finalización
-        val notifId = NotificationHelper.NOTIFICATION_ID_BASE + Math.abs(item.id.hashCode() % 1000)
-        try {
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            when (item.status) {
-                DownloadStatus.DOWNLOADING, DownloadStatus.FETCHING_METADATA, DownloadStatus.QUEUED -> {
-                    val progressNotification = NotificationHelper.buildProgressNotification(context, item).build()
-                    notificationManager.notify(notifId, progressNotification)
-                }
-                DownloadStatus.COMPLETED -> {
-                    NotificationHelper.cancelNotification(context, notifId)
-                    NotificationHelper.showCompletedNotification(context, item)
-                }
-                DownloadStatus.ERROR -> {
-                    NotificationHelper.cancelNotification(context, notifId)
-                    NotificationHelper.showErrorNotification(context, item)
-                }
-                DownloadStatus.CANCELLED -> {
-                    NotificationHelper.cancelNotification(context, notifId)
-                }
-                else -> {}
-            }
-        } catch (_: Exception) {}
-
+        // Notificar a oyente principal
         onDownloadUpdatedListener?.invoke(item)
+
+        // Notificar a todos los observadores registrados (MediaDownloadService, etc.)
+        for (listener in downloadListeners) {
+            try {
+                listener.invoke(item)
+            } catch (_: Exception) {}
+        }
     }
 
     private fun addToHistory(item: DownloadItem) {

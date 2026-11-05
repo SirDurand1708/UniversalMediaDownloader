@@ -88,13 +88,8 @@ class QuickShareActivity : AppCompatActivity() {
 
     private fun startDownloadAndFinish(format: MediaFormat) {
         val url = targetUrl ?: return
-        val serviceIntent = Intent(this, MediaDownloadService::class.java).apply {
-            action = MediaDownloadService.ACTION_START_DOWNLOAD
-            putExtra(MediaDownloadService.EXTRA_URL, url)
-            putExtra(MediaDownloadService.EXTRA_FORMAT, format.name)
-        }
-        startService(serviceIntent)
-        Toast.makeText(this, "✦ OmniVault: Descarga iniciada (${format.extension.uppercase()})", Toast.LENGTH_LONG).show()
+        MediaDownloadService.startDownload(this, url, format)
+        Toast.makeText(this, "✦ OmniVault: Descarga iniciada en segundo plano (${format.extension.uppercase()})", Toast.LENGTH_LONG).show()
         finish()
     }
 }

@@ -37,6 +37,12 @@ import com.omnivault.media.utils.CoverArtHelper
 import com.omnivault.media.utils.LyricsHelper
 import com.omnivault.media.utils.NotificationHelper
 import com.omnivault.media.utils.StorageHelper
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
+import androidx.activity.result.contract.ActivityResultContracts
+import com.omnivault.media.service.MediaDownloadService
 import com.omnivault.media.utils.UpdateInfo
 import com.omnivault.media.utils.UpdateManager
 import com.omnivault.media.utils.UrlUtils
@@ -48,6 +54,14 @@ import okhttp3.Request
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
+
+    private val requestNotificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            Toast.makeText(this, "🔔 Notificaciones activadas: verás la barra de carga en tiempo real", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var downloadManager: DownloadManager
@@ -64,6 +78,7 @@ class MainActivity : AppCompatActivity() {
 
         downloadManager = DownloadManager.getInstance(this)
         NotificationHelper.createNotificationChannels(this)
+        checkNotificationPermission()
 
         setupRecyclerViews()
         setupListeners()
@@ -86,6 +101,14 @@ class MainActivity : AppCompatActivity() {
         setIntent(intent)
         handlePreloadedUrl(intent)
         handleUpdateIntent(intent)
+    }
+
+    private fun checkNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
     }
 
     private fun handleUpdateIntent(intent: Intent?) {
@@ -237,14 +260,14 @@ class MainActivity : AppCompatActivity() {
                     withContext(Dispatchers.Main) {
                         if (videoUrls.isNotEmpty()) {
                             for (vUrl in videoUrls) {
-                                downloadManager.enqueueDownload(vUrl, selectedFormat)
+                                MediaDownloadService.startDownload(this@MainActivity, vUrl, selectedFormat)
                             }
                             binding.etUrlInput.setText("")
                             binding.cardPreview.visibility = View.GONE
                             Toast.makeText(this@MainActivity, "✦ Álbum añadido: ${videoUrls.size} canciones en descarga (${selectedFormat.extension.uppercase()})", Toast.LENGTH_LONG).show()
                             refreshLists()
                         } else {
-                            downloadManager.enqueueDownload(extracted, selectedFormat)
+                            MediaDownloadService.startDownload(this@MainActivity, extracted, selectedFormat)
                             binding.etUrlInput.setText("")
                             binding.cardPreview.visibility = View.GONE
                             Toast.makeText(this@MainActivity, "✦ Descarga añadida a la cola", Toast.LENGTH_SHORT).show()
@@ -255,7 +278,7 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            downloadManager.enqueueDownload(extracted, selectedFormat)
+            MediaDownloadService.startDownload(this, extracted, selectedFormat)
             binding.etUrlInput.setText("")
             binding.cardPreview.visibility = View.GONE
             Toast.makeText(this, "✦ OmniVault: Descarga añadida a la cola (${selectedFormat.extension.uppercase()})", Toast.LENGTH_SHORT).show()

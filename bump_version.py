@@ -3,7 +3,7 @@
 bump_version.py — Script de incremento automático de versión para OmniVault.
 
 Uso:
-    python bump_version.py           # incrementa el patch (2.0.1 -> 2.0.2)
+    python bump_version.py           # incrementa el patch (2.0.3 -> 2.0.4)
     python bump_version.py --minor   # incrementa el minor (2.0.x -> 2.1.0)
     python bump_version.py --major   # incrementa el major (2.x.x -> 3.0.0)
     python bump_version.py --set 2.1.5  # establece una versión específica
@@ -20,7 +20,14 @@ import re
 import sys
 import os
 import datetime
-import subprocess
+
+# Soporte UTF-8 en consolas Windows (evita UnicodeEncodeError con cp1252)
+if sys.platform == "win32":
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
@@ -32,7 +39,7 @@ def parse_version(v: str) -> tuple[int, int, int]:
 
 
 def version_to_code(major: int, minor: int, patch: int) -> int:
-    """Convierte versión semver a versionCode entero (ej. 2.0.3 -> 203)."""
+    """Convierte versión semver a versionCode entero (ej. 2.0.4 -> 204)."""
     return major * 100 + minor * 10 + patch
 
 
@@ -55,6 +62,14 @@ def update_version_json(new_version: str, version_code: int):
     data["version"] = new_version
     data["version_code"] = version_code
     data["release_date"] = today
+    data["title"] = f"OmniVault v{new_version} — Background Downloads & Live Notification Bar"
+    data["changelog"] = (
+        "⚡ Descargas activas 100% en segundo plano con pantalla apagada (WakeLock)\n"
+        "📊 Barra de progreso interactiva en tiempo real en la barra de notificaciones del celular\n"
+        "🔔 Notificación automática al completar la descarga con opciones de Reproducir y Compartir\n"
+        "🛡️ Permiso dinámico de notificaciones para Android 13 y 14+\n"
+        "🔄 Corrección de enlaces y actualización fluida oficial"
+    )
 
     for platform in ["android", "windows"]:
         if platform in data:
@@ -77,7 +92,7 @@ def update_version_json(new_version: str, version_code: int):
 
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
-    print(f"  ✓ version.json actualizado → {new_version}")
+    print(f"  [OK] version.json actualizado -> {new_version}")
 
 
 def update_build_gradle(new_version: str, version_code: int):
@@ -90,7 +105,7 @@ def update_build_gradle(new_version: str, version_code: int):
 
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
-    print(f"  ✓ android/app/build.gradle actualizado → {new_version} ({version_code})")
+    print(f"  [OK] android/app/build.gradle actualizado -> {new_version} ({version_code})")
 
 
 def update_manager_kt(new_version: str, version_code: int):
@@ -115,7 +130,7 @@ def update_manager_kt(new_version: str, version_code: int):
 
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
-    print(f"  ✓ UpdateManager.kt actualizado → {new_version} ({version_code})")
+    print(f"  [OK] UpdateManager.kt actualizado -> {new_version} ({version_code})")
 
 
 def update_updater_py(new_version: str):
@@ -131,7 +146,7 @@ def update_updater_py(new_version: str):
 
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
-    print(f"  ✓ updater.py actualizado → {new_version}")
+    print(f"  [OK] updater.py actualizado -> {new_version}")
 
 
 def main():
@@ -157,21 +172,21 @@ def main():
     major, minor, patch = parse_version(new_version)
     version_code = version_to_code(major, minor, patch)
 
-    print(f"\n🚀 OmniVault Version Bump")
-    print(f"   {current}  →  {new_version}  (code: {version_code})\n")
+    print(f"\n[*] OmniVault Version Bump")
+    print(f"    {current}  ->  {new_version}  (code: {version_code})\n")
 
     update_version_json(new_version, version_code)
     update_build_gradle(new_version, version_code)
     update_manager_kt(new_version, version_code)
     update_updater_py(new_version)
 
-    print(f"\n✅ Todos los archivos actualizados a v{new_version}")
-    print(f"\nPróximos pasos:")
+    print(f"\n[OK] Todos los archivos actualizados exitosamente a v{new_version}")
+    print(f"\nProximos pasos:")
     print(f"  git add -A")
     print(f"  git commit -m \"chore: bump version to v{new_version}\"")
     print(f"  git tag v{new_version}")
     print(f"  git push origin main --tags")
-    print(f"\nEl CI/CD de GitHub Actions compilará y publicará la release automáticamente.\n")
+    print(f"\nEl CI/CD de GitHub Actions compilara y publicara la release automaticamente.\n")
 
 
 if __name__ == "__main__":

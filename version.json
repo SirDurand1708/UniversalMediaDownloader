@@ -1,19 +1,19 @@
 {
-  "version": "2.0.3",
-  "version_code": 203,
+  "version": "2.0.4",
+  "version_code": 204,
   "release_date": "2026-11-05",
-  "title": "OmniVault v2.0.3 — Hotfix: APK Update & Auto-Versioning",
-  "changelog": "🔧 Corregido error 404 al descargar actualizaciones del APK\n🔧 El APK ahora se compila en modo Release (firmado) en lugar de Debug\n🔖 Sistema de auto-incremento de versión implementado\n✅ URLs del APK ahora se sincronizan automáticamente con cada release\n📋 Body de las releases ahora usa el tag dinámico en lugar de versiones hardcodeadas",
+  "title": "OmniVault v2.0.4 — Background Downloads & Live Notification Bar",
+  "changelog": "⚡ Descargas activas 100% en segundo plano con pantalla apagada (WakeLock)\n📊 Barra de progreso interactiva en tiempo real en la barra de notificaciones del celular\n🔔 Notificación automática al completar la descarga con opciones de Reproducir y Compartir\n🛡️ Permiso dinámico de notificaciones para Android 13 y 14+\n🔄 Corrección de enlaces y actualización fluida oficial",
   "android": {
-    "version": "2.0.3",
-    "version_code": 203,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.3/OmniVault-v2.0.3-Android.apk",
+    "version": "2.0.4",
+    "version_code": 204,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.4/OmniVault-v2.0.4-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.0.3",
-    "version_code": 203,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.3/OmniVault-v2.0.3-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.3/OmniVault-v2.0.3-Windows-x64-Portable.zip"
+    "version": "2.0.4",
+    "version_code": 204,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.4/OmniVault-v2.0.4-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.4/OmniVault-v2.0.4-Windows-x64-Portable.zip"
   }
 }
