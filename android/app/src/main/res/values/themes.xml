@@ -29,4 +29,9 @@
         <item name="android:backgroundDimAmount">0.65</item>
         <item name="colorPrimary">@color/accent_cyan</item>
     </style>
+    <!-- Estilo para Carátulas con Esquinas Redondeadas -->
+    <style name="Rounded12">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">12dp</item>
+    </style>
 </resources>

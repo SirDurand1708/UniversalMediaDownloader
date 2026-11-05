@@ -31,4 +31,13 @@
     <color name="badge_facebook">#3B82F6</color>
     <color name="badge_audio">#818CF8</color>
     <color name="badge_video">#10B981</color>
+
+    <!-- Paleta Spotify Vault (Concepto 3 Audio-First) -->
+    <color name="spotify_black">#121212</color>
+    <color name="spotify_card">#1E1E1E</color>
+    <color name="spotify_card_elevated">#282828</color>
+    <color name="spotify_green">#1DB954</color>
+    <color name="spotify_green_hover">#1ED760</color>
+    <color name="ambient_purple">#A855F7</color>
+    <color name="ambient_purple_glow">#4C1D95</color>
 </resources>

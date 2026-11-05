@@ -1,14 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/obsidian_base">
+    android:background="@color/spotify_black">
 
+    <!-- Contenido Scrollable Principal -->
     <androidx.core.widget.NestedScrollView
+        android:id="@+id/mainScrollView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:layout_above="@+id/layoutBottomSection"
         android:fillViewport="true">
 
         <LinearLayout
@@ -16,7 +19,8 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:paddingHorizontal="16dp"
-            android:paddingVertical="14dp">
+            android:paddingTop="12dp"
+            android:paddingBottom="24dp">
 
             <!-- Banner de Actualización Oficial (1 Toque) -->
             <LinearLayout
@@ -57,7 +61,7 @@
                         android:id="@+id/tvUpdateSubtitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Actualizar automáticamente con 1 toque"
+                        android:text="Toca para actualizar con 1 toque"
                         android:textColor="@color/accent_cyan"
                         android:textSize="11sp" />
                 </LinearLayout>
@@ -75,18 +79,18 @@
                     app:cornerRadius="8dp" />
             </LinearLayout>
 
-            <!-- Cabecera Superior OmniVault -->
+            <!-- Cabecera Superior Estilo Spotify Vault -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingVertical="6dp">
+                android:paddingVertical="4dp">
 
                 <ImageView
                     android:id="@+id/imgAppLogo"
-                    android:layout_width="42dp"
-                    android:layout_height="42dp"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
                     android:src="@mipmap/ic_launcher" />
 
                 <LinearLayout
@@ -100,10 +104,10 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:fontFamily="sans-serif-black"
-                        android:text="OMNIVAULT"
+                        android:text="TU BÓVEDA"
                         android:textColor="@color/text_primary"
-                        android:textSize="20sp"
-                        android:letterSpacing="0.05" />
+                        android:textSize="19sp"
+                        android:letterSpacing="0.04" />
 
                     <TextView
                         android:id="@+id/tvAppSubtitle"
@@ -111,186 +115,200 @@
                         android:layout_height="wrap_content"
                         android:background="?attr/selectableItemBackground"
                         android:fontFamily="sans-serif-medium"
-                        android:text="Bóveda Multimedia • v2.0.0 (Toca para buscar updates)"
-                        android:textColor="@color/accent_cyan"
+                        android:text="OmniVault v2.0.0 • Audio-First Edition"
+                        android:textColor="@color/spotify_green"
                         android:textSize="11sp" />
                 </LinearLayout>
 
-                <!-- Switch Auto-Clipboard -->
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switchAutoClipboard"
+                <TextView
+                    android:id="@+id/badgeAutoSync"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="true"
-                    app:thumbTint="@color/accent_cyan"
-                    app:trackTint="@color/titanium_elevated" />
+                    android:background="@drawable/bg_input_box"
+                    android:fontFamily="sans-serif-bold"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="4dp"
+                    android:text="⚡ Auto-Sync"
+                    android:textColor="@color/spotify_green"
+                    android:textSize="11sp" />
             </LinearLayout>
 
-            <!-- Banner Auto-Captura Snaptube Info -->
+            <!-- ======================================================== -->
+            <!-- PESTAÑA 1: DESCARGAR (Hero Card, Entrada y Analizador)   -->
+            <!-- ======================================================== -->
             <LinearLayout
-                android:id="@+id/cardClipboardBanner"
+                android:id="@+id/layoutTabDownload"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/bg_titanium_card"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="12dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="⚡"
-                    android:textSize="18sp" />
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="10dp"
-                    android:layout_weight="1"
-                    android:fontFamily="sans-serif"
-                    android:lineSpacingExtra="2dp"
-                    android:text="Auto-captura activa: Al copiar o compartir cualquier enlace, OmniVault te sugerirá descargarlo al instante."
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp" />
-            </LinearLayout>
-
-            <!-- Card Principal de Entrada y Análisis de Enlace -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:background="@drawable/bg_titanium_card"
                 android:orientation="vertical"
-                android:padding="16dp">
+                android:visibility="visible">
 
+                <!-- Banner Snaptube Info -->
                 <LinearLayout
+                    android:id="@+id/cardClipboardBanner"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_spotify_card"
                     android:gravity="center_vertical"
-                    android:orientation="horizontal">
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="10dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="⚡"
+                        android:textSize="16sp" />
 
                     <TextView
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
                         android:layout_weight="1"
-                        android:fontFamily="sans-serif-bold"
-                        android:text="ENLACE MULTIMEDIA"
-                        android:textColor="@color/accent_cyan"
-                        android:textSize="12sp"
-                        android:letterSpacing="0.05" />
-
-                    <TextView
-                        android:id="@+id/tvDetectedPlatform"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:background="@drawable/bg_input_box"
-                        android:paddingHorizontal="8dp"
-                        android:paddingVertical="2dp"
-                        android:text="Listo para pegar"
+                        android:fontFamily="sans-serif"
+                        android:lineSpacingExtra="2dp"
+                        android:text="Detección activa: Copia un enlace de YouTube, TikTok, IG, FB o X para descargarlo al instante."
                         android:textColor="@color/text_secondary"
                         android:textSize="11sp" />
                 </LinearLayout>
 
-                <!-- Input Box -->
+                <!-- Caja de Entrada con Detección -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:background="@drawable/bg_input_box"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:paddingHorizontal="12dp"
-                    android:paddingVertical="2dp">
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_spotify_card"
+                    android:orientation="vertical"
+                    android:padding="14dp">
 
-                    <TextView
-                        android:layout_width="wrap_content"
+                    <LinearLayout
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="🔗"
-                        android:textSize="15sp" />
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
 
-                    <EditText
-                        android:id="@+id/etUrlInput"
-                        android:layout_width="0dp"
-                        android:layout_height="48dp"
-                        android:layout_marginStart="8dp"
-                        android:layout_weight="1"
-                        android:background="@android:color/transparent"
-                        android:fontFamily="sans-serif"
-                        android:hint="Pega aquí el enlace del video o canción..."
-                        android:inputType="textUri"
-                        android:maxLines="1"
-                        android:textColor="@color/text_primary"
-                        android:textColorHint="@color/text_muted"
-                        android:textSize="13sp" />
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:fontFamily="sans-serif-bold"
+                            android:text="ENLACE MULTIMEDIA"
+                            android:textColor="@color/spotify_green"
+                            android:textSize="11sp"
+                            android:letterSpacing="0.05" />
 
-                    <ImageButton
-                        android:id="@+id/btnClearUrl"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="Limpiar enlace"
-                        android:src="@android:drawable/ic_menu_close_clear_cancel"
-                        android:visibility="gone"
-                        app:tint="@color/text_muted" />
+                        <TextView
+                            android:id="@+id/tvDetectedPlatform"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_input_box"
+                            android:paddingHorizontal="8dp"
+                            android:paddingVertical="2dp"
+                            android:text="Listo para pegar"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="10sp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/bg_input_box"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="2dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🔍"
+                            android:textSize="14sp" />
+
+                        <EditText
+                            android:id="@+id/etUrlInput"
+                            android:layout_width="0dp"
+                            android:layout_height="44dp"
+                            android:layout_marginStart="8dp"
+                            android:layout_weight="1"
+                            android:background="@android:color/transparent"
+                            android:fontFamily="sans-serif"
+                            android:hint="Pega enlace de YouTube, TikTok, IG, FB, X..."
+                            android:inputType="textUri"
+                            android:maxLines="1"
+                            android:textColor="@color/text_primary"
+                            android:textColorHint="@color/text_muted"
+                            android:textSize="12sp" />
+
+                        <ImageButton
+                            android:id="@+id/btnClearUrl"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:contentDescription="Limpiar enlace"
+                            android:src="@android:drawable/ic_menu_close_clear_cancel"
+                            android:visibility="gone"
+                            app:tint="@color/text_muted" />
+                    </LinearLayout>
+
+                    <!-- Botones de Acción: Pegar y Analizar -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnPasteUrl"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="0dp"
+                            android:layout_height="38dp"
+                            android:layout_weight="1"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="📋 Pegar"
+                            android:textColor="@color/spotify_green"
+                            android:textSize="11sp"
+                            app:backgroundTint="@color/spotify_card_elevated"
+                            app:cornerRadius="8dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnAnalyzeUrl"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="0dp"
+                            android:layout_height="38dp"
+                            android:layout_marginStart="8dp"
+                            android:layout_weight="1"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="🔍 Analizar Enlace"
+                            android:textColor="@color/text_primary"
+                            android:textSize="11sp"
+                            app:backgroundTint="@color/spotify_card_elevated"
+                            app:strokeColor="@color/spotify_green"
+                            app:strokeWidth="1dp"
+                            app:cornerRadius="8dp" />
+
+                        <ProgressBar
+                            android:id="@+id/pbAnalyzing"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:layout_marginStart="8dp"
+                            android:indeterminateTint="@color/spotify_green"
+                            android:visibility="gone" />
+                    </LinearLayout>
                 </LinearLayout>
 
-                <!-- Fila de Acciones Rápidas (Pegar + Analizar) -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnPasteUrl"
-                        style="@style/Widget.Material3.Button.TonalButton"
-                        android:layout_width="0dp"
-                        android:layout_height="40dp"
-                        android:layout_weight="1"
-                        android:fontFamily="sans-serif-medium"
-                        android:text="📋 Pegar"
-                        android:textColor="@color/accent_cyan"
-                        android:textSize="12sp"
-                        app:backgroundTint="@color/titanium_elevated"
-                        app:cornerRadius="8dp" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnAnalyzeUrl"
-                        style="@style/Widget.Material3.Button.TonalButton"
-                        android:layout_width="0dp"
-                        android:layout_height="40dp"
-                        android:layout_marginStart="8dp"
-                        android:layout_weight="1"
-                        android:fontFamily="sans-serif-medium"
-                        android:text="🔍 Analizar Enlace"
-                        android:textColor="@color/text_primary"
-                        android:textSize="12sp"
-                        app:backgroundTint="@color/titanium_elevated"
-                        app:strokeColor="@color/accent_cyan"
-                        app:strokeWidth="1dp"
-                        app:cornerRadius="8dp" />
-
-                    <ProgressBar
-                        android:id="@+id/pbAnalyzing"
-                        android:layout_width="26dp"
-                        android:layout_height="26dp"
-                        android:layout_marginStart="8dp"
-                        android:indeterminateTint="@color/accent_cyan"
-                        android:visibility="gone" />
-                </LinearLayout>
-
-                <!-- Card de Vista Previa / Analizador de Enlace (Enriquecido) -->
+                <!-- Tarjeta Hero estilo Spotify 'Now Downloading / Preview' -->
                 <LinearLayout
                     android:id="@+id/cardPreview"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:background="@drawable/bg_preview_card"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/bg_spotify_hero"
+                    android:gravity="center_horizontal"
                     android:orientation="vertical"
-                    android:padding="12dp"
+                    android:padding="16dp"
                     android:visibility="gone">
 
                     <LinearLayout
@@ -308,72 +326,63 @@
                             android:paddingHorizontal="8dp"
                             android:paddingVertical="3dp"
                             android:text="YouTube"
-                            android:textColor="@color/accent_cyan"
-                            android:textSize="11sp" />
+                            android:textColor="@color/spotify_green"
+                            android:textSize="10sp" />
 
                         <TextView
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
                             android:layout_weight="1"
-                            android:fontFamily="sans-serif-medium"
-                            android:text="✓ Contenido verificado"
-                            android:textColor="@color/accent_emerald"
+                            android:fontFamily="sans-serif-bold"
+                            android:text="✓ Carátula en HD Lista"
+                            android:textColor="@color/spotify_green"
                             android:textSize="11sp" />
 
                         <TextView
                             android:id="@+id/tvPreviewDuration"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="03:45"
+                            android:text="02:14"
                             android:textColor="@color/text_secondary"
-                            android:textSize="11sp"
-                            android:visibility="gone" />
+                            android:textSize="11sp" />
                     </LinearLayout>
 
-                    <LinearLayout
+                    <!-- Gran Carátula Cuadrada con Relieve -->
+                    <com.google.android.material.imageview.ShapeableImageView
+                        android:id="@+id/imgPreviewThumbnail"
+                        android:layout_width="140dp"
+                        android:layout_height="140dp"
+                        android:layout_marginTop="12dp"
+                        android:background="@color/spotify_card"
+                        android:scaleType="centerCrop"
+                        android:src="@mipmap/ic_launcher"
+                        app:shapeAppearanceOverlay="@style/Rounded12"
+                        app:strokeColor="@color/ambient_purple"
+                        app:strokeWidth="1.5dp" />
+
+                    <TextView
+                        android:id="@+id/tvPreviewTitle"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:orientation="horizontal">
+                        android:ellipsize="end"
+                        android:fontFamily="sans-serif-black"
+                        android:gravity="center"
+                        android:maxLines="2"
+                        android:text="Título de la Canción o Video"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp" />
 
-                        <ImageView
-                            android:id="@+id/imgPreviewThumbnail"
-                            android:layout_width="100dp"
-                            android:layout_height="64dp"
-                            android:background="@drawable/bg_input_box"
-                            android:scaleType="centerCrop"
-                            android:src="@drawable/bg_titanium_card" />
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="10dp"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:id="@+id/tvPreviewTitle"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:ellipsize="end"
-                                android:fontFamily="sans-serif-bold"
-                                android:maxLines="2"
-                                android:text="Título del contenido multimedia..."
-                                android:textColor="@color/text_primary"
-                                android:textSize="13sp" />
-
-                            <TextView
-                                android:id="@+id/tvPreviewAuthor"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:fontFamily="sans-serif"
-                                android:text="👤 Creador / Canal"
-                                android:textColor="@color/text_secondary"
-                                android:textSize="11sp" />
-                        </LinearLayout>
-                    </LinearLayout>
+                    <TextView
+                        android:id="@+id/tvPreviewAuthor"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="👤 Creador / Canal"
+                        android:textColor="@color/ambient_purple"
+                        android:textSize="12sp" />
                 </LinearLayout>
 
                 <!-- Selección de Formato -->
@@ -382,16 +391,16 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
                     android:fontFamily="sans-serif-bold"
-                    android:text="FORMATO DE DESCARGA"
-                    android:textColor="@color/accent_cyan"
-                    android:textSize="12sp"
+                    android:text="SELECCIONA FORMATO:"
+                    android:textColor="@color/spotify_green"
+                    android:textSize="11sp"
                     android:letterSpacing="0.05" />
 
                 <com.google.android.material.chip.ChipGroup
                     android:id="@+id/chipGroupFormats"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginTop="6dp"
                     app:singleLine="false"
                     app:singleSelection="true">
 
@@ -404,7 +413,7 @@
                         android:fontFamily="sans-serif-medium"
                         android:text="🎵 Audio M4A (Original HQ)"
                         android:textColor="@color/text_primary"
-                        app:chipBackgroundColor="@color/titanium_elevated" />
+                        app:chipBackgroundColor="@color/spotify_card_elevated" />
 
                     <com.google.android.material.chip.Chip
                         android:id="@+id/chipMp3"
@@ -414,7 +423,7 @@
                         android:fontFamily="sans-serif-medium"
                         android:text="🎵 Audio MP3 (320k)"
                         android:textColor="@color/text_primary"
-                        app:chipBackgroundColor="@color/titanium_elevated" />
+                        app:chipBackgroundColor="@color/spotify_card_elevated" />
 
                     <com.google.android.material.chip.Chip
                         android:id="@+id/chipMp4Full"
@@ -424,7 +433,7 @@
                         android:fontFamily="sans-serif-medium"
                         android:text="🎬 Video FHD (1080p)"
                         android:textColor="@color/text_primary"
-                        app:chipBackgroundColor="@color/titanium_elevated" />
+                        app:chipBackgroundColor="@color/spotify_card_elevated" />
 
                     <com.google.android.material.chip.Chip
                         android:id="@+id/chipMp4Hd"
@@ -434,97 +443,385 @@
                         android:fontFamily="sans-serif-medium"
                         android:text="🎬 Video HD (720p)"
                         android:textColor="@color/text_primary"
-                        app:chipBackgroundColor="@color/titanium_elevated" />
+                        app:chipBackgroundColor="@color/spotify_card_elevated" />
                 </com.google.android.material.chip.ChipGroup>
 
-                <!-- Botón de Descarga Principal -->
+                <!-- Botón Principal Spotify-Style de Descarga -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnStartDownload"
                     android:layout_width="match_parent"
                     android:layout_height="54dp"
-                    android:layout_marginTop="16dp"
+                    android:layout_marginTop="14dp"
                     android:fontFamily="sans-serif-black"
-                    android:text="📥 DESCARGAR AHORA"
+                    android:text="DESCARGAR EN MI CELULAR (CON CARÁTULA)"
                     android:textAllCaps="false"
-                    android:textColor="@color/obsidian_darker"
-                    android:textSize="15sp"
-                    android:letterSpacing="0.05"
-                    app:backgroundTint="@color/accent_cyan"
-                    app:cornerRadius="12dp" />
-            </LinearLayout>
+                    android:textColor="#090A0C"
+                    android:textSize="13sp"
+                    android:letterSpacing="0.04"
+                    app:backgroundTint="@color/spotify_green"
+                    app:cornerRadius="27dp" />
 
-            <!-- Sección: Descargas Activas -->
-            <TextView
-                android:id="@+id/tvActiveDownloadsHeader"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:fontFamily="sans-serif-black"
-                android:text="DESCARGAS EN CURSO"
-                android:textColor="@color/text_primary"
-                android:textSize="14sp"
-                android:letterSpacing="0.05"
-                android:visibility="gone" />
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvActiveDownloads"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:nestedScrollingEnabled="false"
-                android:visibility="gone" />
-
-            <!-- Sección: Biblioteca / Historial de Descargas -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="22dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
+                <!-- Descargas en Curso -->
                 <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:fontFamily="sans-serif-black"
-                    android:text="ARCHIVOS DESCARGADOS"
-                    android:textColor="@color/text_primary"
-                    android:textSize="14sp"
-                    android:letterSpacing="0.05" />
-
-                <TextView
-                    android:id="@+id/tvClearHistory"
+                    android:id="@+id/tvActiveDownloadsHeader"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:background="?attr/selectableItemBackground"
-                    android:fontFamily="sans-serif-bold"
-                    android:padding="6dp"
-                    android:text="Limpiar"
-                    android:textColor="@color/accent_cyan"
-                    android:textSize="12sp" />
+                    android:layout_marginTop="18dp"
+                    android:fontFamily="sans-serif-black"
+                    android:text="DESCARGAS EN CURSO"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvActiveDownloads"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:nestedScrollingEnabled="false"
+                    android:visibility="gone" />
+
             </LinearLayout>
 
-            <!-- Lista de Historial -->
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvDownloadHistory"
+            <!-- ======================================================== -->
+            <!-- PESTAÑA 2: MI BÓVEDA (Biblioteca de Audios y Videos)     -->
+            <!-- ======================================================== -->
+            <LinearLayout
+                android:id="@+id/layoutTabLibrary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:nestedScrollingEnabled="false" />
+                android:orientation="vertical"
+                android:visibility="gone">
 
-            <TextView
-                android:id="@+id/tvEmptyHistory"
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:fontFamily="sans-serif-black"
+                        android:text="ARCHIVOS EN TU BÓVEDA"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:letterSpacing="0.04" />
+
+                    <TextView
+                        android:id="@+id/tvClearHistory"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:fontFamily="sans-serif-bold"
+                        android:padding="6dp"
+                        android:text="Limpiar"
+                        android:textColor="@color/spotify_green"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <!-- Lista de Historial -->
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvDownloadHistory"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:nestedScrollingEnabled="false" />
+
+                <TextView
+                    android:id="@+id/tvEmptyHistory"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="30dp"
+                    android:layout_marginBottom="30dp"
+                    android:fontFamily="sans-serif"
+                    android:gravity="center"
+                    android:text="Aún no tienes descargas registradas.\nCopia o pega un enlace para guardar tu primera canción."
+                    android:textColor="@color/text_muted"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <!-- ======================================================== -->
+            <!-- PESTAÑA 3: AJUSTES (Auto-Clipboard, Actualizaciones, etc)-->
+            <!-- ======================================================== -->
+            <LinearLayout
+                android:id="@+id/layoutTabSettings"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:layout_marginBottom="30dp"
-                android:fontFamily="sans-serif"
-                android:gravity="center"
-                android:text="Aún no tienes descargas registradas.\nCopia o pega un enlace para comenzar."
-                android:textColor="@color/text_muted"
-                android:textSize="13sp" />
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:fontFamily="sans-serif-black"
+                    android:text="AJUSTES DE OMNIVAULT"
+                    android:textColor="@color/text_primary"
+                    android:textSize="15sp"
+                    android:letterSpacing="0.04" />
+
+                <!-- Card Auto-Clipboard -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_spotify_card"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="14dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-bold"
+                            android:text="⚡ Auto-Captura de Portapapeles"
+                            android:textColor="@color/text_primary"
+                            android:textSize="13sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Sugiere descargar cuando copias un enlace"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchAutoClipboard"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        app:thumbTint="@color/spotify_green"
+                        app:trackTint="@color/spotify_card_elevated" />
+                </LinearLayout>
+
+                <!-- Card Comprobador de Actualizaciones -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_spotify_card"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-bold"
+                        android:text="🚀 Actualizaciones Oficiales (1 Toque)"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Comprueba si existe un parche o nueva versión en GitHub."
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnCheckUpdatesManual"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="42dp"
+                        android:layout_marginTop="10dp"
+                        android:fontFamily="sans-serif-bold"
+                        android:text="🔄 Buscar Actualizaciones Ahora"
+                        android:textColor="@color/spotify_green"
+                        android:textSize="12sp"
+                        app:backgroundTint="@color/spotify_card_elevated"
+                        app:cornerRadius="10dp" />
+                </LinearLayout>
+
+            </LinearLayout>
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+    <!-- ============================================================ -->
+    <!-- SECCIÓN INFERIOR FIJA: MINI-REPRODUCTOR + BOTTOM BAR         -->
+    <!-- ============================================================ -->
+    <LinearLayout
+        android:id="@+id/layoutBottomSection"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:orientation="vertical">
+
+        <!-- Mini-Reproductor Flotante Persistente -->
+        <LinearLayout
+            android:id="@+id/cardMiniPlayer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="10dp"
+            android:layout_marginBottom="6dp"
+            android:background="@drawable/bg_spotify_card"
+            android:elevation="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="8dp"
+            android:visibility="gone">
+
+            <com.google.android.material.imageview.ShapeableImageView
+                android:id="@+id/imgMiniPlayerCover"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:background="@color/spotify_card_elevated"
+                android:scaleType="centerCrop"
+                android:src="@mipmap/ic_launcher"
+                app:shapeAppearanceOverlay="@style/Rounded12" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvMiniPlayerTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif-bold"
+                    android:maxLines="1"
+                    android:text="Canción Descargada"
+                    android:textColor="@color/text_primary"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/tvMiniPlayerSubtitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif"
+                    android:text="Toca para reproducir con carátula"
+                    android:textColor="@color/spotify_green"
+                    android:textSize="10sp" />
+            </LinearLayout>
+
+            <ImageButton
+                android:id="@+id/btnMiniPlayerPlay"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Reproducir"
+                android:src="@android:drawable/ic_media_play"
+                app:tint="@color/spotify_green" />
+
+            <ImageButton
+                android:id="@+id/btnMiniPlayerShare"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="2dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Compartir"
+                android:src="@android:drawable/ic_menu_share"
+                app:tint="@color/text_secondary" />
+        </LinearLayout>
+
+        <!-- Barra de Navegación Inferior (Bottom Bar) -->
+        <LinearLayout
+            android:id="@+id/bottomNavBar"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="#0A0B0D"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="16dp">
+
+            <!-- Pestaña 1: Descargar -->
+            <LinearLayout
+                android:id="@+id/tabBtnDownload"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackground"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/iconNavDownload"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📥"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:id="@+id/labelNavDownload"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-bold"
+                    android:text="Descargar"
+                    android:textColor="@color/spotify_green"
+                    android:textSize="10sp" />
+            </LinearLayout>
+
+            <!-- Pestaña 2: Mi Bóveda -->
+            <LinearLayout
+                android:id="@+id/tabBtnLibrary"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackground"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/iconNavLibrary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🎵"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:id="@+id/labelNavLibrary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="Mi Bóveda"
+                    android:textColor="@color/text_muted"
+                    android:textSize="10sp" />
+            </LinearLayout>
+
+            <!-- Pestaña 3: Ajustes -->
+            <LinearLayout
+                android:id="@+id/tabBtnSettings"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackground"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/iconNavSettings"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="⚙️"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:id="@+id/labelNavSettings"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="Ajustes"
+                    android:textColor="@color/text_muted"
+                    android:textSize="10sp" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </LinearLayout>
+
+</RelativeLayout>

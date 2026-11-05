@@ -1,5 +1,6 @@
 package com.omnivault.media.downloader
 
+import android.app.NotificationManager
 import android.content.Context
 import android.content.SharedPreferences
 import com.google.gson.Gson
@@ -8,6 +9,8 @@ import com.omnivault.media.model.DownloadItem
 import com.omnivault.media.model.DownloadStatus
 import com.omnivault.media.model.MediaFormat
 import com.omnivault.media.utils.AudioExtractor
+import com.omnivault.media.utils.CoverArtHelper
+import com.omnivault.media.utils.NotificationHelper
 import com.omnivault.media.utils.StorageHelper
 import kotlinx.coroutines.*
 import okhttp3.OkHttpClient
@@ -84,6 +87,8 @@ class DownloadManager private constructor(private val context: Context) {
 
             val info = MediaExtractor.extract(item.url, item.format)
             item.title = info.title
+            item.thumbnailUrl = info.thumbnailUrl
+            item.artist = info.author
             item.status = DownloadStatus.DOWNLOADING
             notifyUpdate(item)
 
@@ -195,10 +200,24 @@ class DownloadManager private constructor(private val context: Context) {
                 finalMimeType = item.format.mimeType
             }
 
-            // 5. Registro en el escáner del sistema Android (MediaStore)
+            // 5. Inyección y vinculación de carátula de alta definición
+            val coverBytes = CoverArtHelper.downloadCoverBytes(info.thumbnailUrl)
+            if (coverBytes != null && coverBytes.isNotEmpty()) {
+                if (finalOutputFile.name.endsWith(".mp3", ignoreCase = true)) {
+                    CoverArtHelper.embedCoverInMp3(finalOutputFile, coverBytes, info.title, info.author)
+                } else {
+                    CoverArtHelper.embedCoverInM4a(finalOutputFile, coverBytes)
+                }
+                val cachedCover = CoverArtHelper.cacheCoverLocally(context, item.id, coverBytes)
+                if (cachedCover != null) {
+                    item.thumbnailUrl = cachedCover.absolutePath
+                }
+            }
+
+            // 6. Registro en el escáner del sistema Android (MediaStore)
             StorageHelper.scanMediaFile(context, finalOutputFile, finalMimeType)
 
-            // 6. Finalización con éxito
+            // 7. Finalización con éxito
             item.progress = 100
             item.status = DownloadStatus.COMPLETED
             item.localFilePath = finalOutputFile.absolutePath
@@ -221,6 +240,30 @@ class DownloadManager private constructor(private val context: Context) {
     }
 
     private fun notifyUpdate(item: DownloadItem) {
+        // Notificaciones nativas en vivo de progreso y finalización
+        val notifId = NotificationHelper.NOTIFICATION_ID_BASE + Math.abs(item.id.hashCode() % 1000)
+        try {
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            when (item.status) {
+                DownloadStatus.DOWNLOADING, DownloadStatus.FETCHING_METADATA, DownloadStatus.QUEUED -> {
+                    val progressNotification = NotificationHelper.buildProgressNotification(context, item).build()
+                    notificationManager.notify(notifId, progressNotification)
+                }
+                DownloadStatus.COMPLETED -> {
+                    NotificationHelper.cancelNotification(context, notifId)
+                    NotificationHelper.showCompletedNotification(context, item)
+                }
+                DownloadStatus.ERROR -> {
+                    NotificationHelper.cancelNotification(context, notifId)
+                    NotificationHelper.showErrorNotification(context, item)
+                }
+                DownloadStatus.CANCELLED -> {
+                    NotificationHelper.cancelNotification(context, notifId)
+                }
+                else -> {}
+            }
+        } catch (_: Exception) {}
+
         onDownloadUpdatedListener?.invoke(item)
     }
 

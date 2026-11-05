@@ -23,6 +23,8 @@ import com.omnivault.media.model.DownloadItem
 import com.omnivault.media.model.MediaFormat
 import com.omnivault.media.model.PlatformType
 import com.omnivault.media.service.ClipboardMonitorService
+import com.omnivault.media.utils.CoverArtHelper
+import com.omnivault.media.utils.NotificationHelper
 import com.omnivault.media.utils.UpdateInfo
 import com.omnivault.media.utils.UpdateManager
 import com.omnivault.media.utils.UrlUtils
@@ -49,6 +51,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         downloadManager = DownloadManager.getInstance(this)
+        NotificationHelper.createNotificationChannels(this)
 
         setupRecyclerViews()
         setupListeners()
@@ -227,6 +230,57 @@ class MainActivity : AppCompatActivity() {
             downloadManager.clearAllHistory()
             refreshLists()
         }
+
+        // Navegación Inferior (Pestañas Concept 3: Spotify Vault)
+        setupBottomNavigation()
+
+        // Botón Manual de Actualizaciones (Pestaña Ajustes)
+        binding.btnCheckUpdatesManual.setOnClickListener {
+            Toast.makeText(this, "Buscando actualizaciones de OmniVault...", Toast.LENGTH_SHORT).show()
+            checkForUpdates(silent = false)
+        }
+    }
+
+    private fun setupBottomNavigation() {
+        binding.tabBtnDownload.setOnClickListener { switchTab(0) }
+        binding.tabBtnLibrary.setOnClickListener { switchTab(1) }
+        binding.tabBtnSettings.setOnClickListener { switchTab(2) }
+    }
+
+    private fun switchTab(index: Int) {
+        val colorActive = getColor(R.color.spotify_green)
+        val colorMuted = getColor(R.color.text_muted)
+
+        when (index) {
+            0 -> {
+                binding.layoutTabDownload.visibility = View.VISIBLE
+                binding.layoutTabLibrary.visibility = View.GONE
+                binding.layoutTabSettings.visibility = View.GONE
+
+                binding.labelNavDownload.setTextColor(colorActive)
+                binding.labelNavLibrary.setTextColor(colorMuted)
+                binding.labelNavSettings.setTextColor(colorMuted)
+            }
+            1 -> {
+                binding.layoutTabDownload.visibility = View.GONE
+                binding.layoutTabLibrary.visibility = View.VISIBLE
+                binding.layoutTabSettings.visibility = View.GONE
+
+                binding.labelNavDownload.setTextColor(colorMuted)
+                binding.labelNavLibrary.setTextColor(colorActive)
+                binding.labelNavSettings.setTextColor(colorMuted)
+                refreshLists()
+            }
+            2 -> {
+                binding.layoutTabDownload.visibility = View.GONE
+                binding.layoutTabLibrary.visibility = View.GONE
+                binding.layoutTabSettings.visibility = View.VISIBLE
+
+                binding.labelNavDownload.setTextColor(colorMuted)
+                binding.labelNavLibrary.setTextColor(colorMuted)
+                binding.labelNavSettings.setTextColor(colorActive)
+            }
+        }
     }
 
     private fun analyzeUrl(url: String) {
@@ -386,6 +440,52 @@ class MainActivity : AppCompatActivity() {
         } else {
             binding.rvDownloadHistory.visibility = View.GONE
             binding.tvEmptyHistory.visibility = View.VISIBLE
+        }
+
+        // Mini-reproductor flotante persistente estilo Spotify Vault
+        val latest = history.firstOrNull()
+        if (latest != null && !latest.localFilePath.isNullOrBlank()) {
+            binding.cardMiniPlayer.visibility = View.VISIBLE
+            binding.tvMiniPlayerTitle.text = latest.title
+            val artistOrPlatform = if (!latest.artist.isNullOrBlank()) latest.artist else latest.platform.displayName
+            binding.tvMiniPlayerSubtitle.text = "$artistOrPlatform • Toca para reproducir con carátula"
+
+            // Carátula del mini-reproductor
+            var coverSet = false
+            val thumb = latest.thumbnailUrl
+            if (!thumb.isNullOrBlank()) {
+                val f = File(thumb)
+                if (f.exists()) {
+                    try {
+                        val bm = BitmapFactory.decodeFile(f.absolutePath)
+                        if (bm != null) {
+                            binding.imgMiniPlayerCover.setImageBitmap(bm)
+                            coverSet = true
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
+            if (!coverSet) {
+                val cached = latest.id?.let { CoverArtHelper.getCachedCoverFile(this, it) }
+                if (cached != null && cached.exists()) {
+                    try {
+                        val bm = BitmapFactory.decodeFile(cached.absolutePath)
+                        if (bm != null) {
+                            binding.imgMiniPlayerCover.setImageBitmap(bm)
+                            coverSet = true
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
+            if (!coverSet) {
+                binding.imgMiniPlayerCover.setImageResource(R.mipmap.ic_launcher)
+            }
+
+            binding.cardMiniPlayer.setOnClickListener { playMediaFile(latest) }
+            binding.btnMiniPlayerPlay.setOnClickListener { playMediaFile(latest) }
+            binding.btnMiniPlayerShare.setOnClickListener { shareMediaFile(latest) }
+        } else {
+            binding.cardMiniPlayer.visibility = View.GONE
         }
     }
 

@@ -6,6 +6,7 @@ import com.omnivault.media.model.PlatformType
 import com.omnivault.media.utils.UrlUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -43,10 +44,28 @@ object MediaExtractor {
     private const val YT_API_KEY = "AIzaSyAO_FJ2SlqAE4An4Ek78YsFubnuhRlzQ"
     private const val YT_USER_AGENT = "com.google.android.youtube/20.10.38 (Linux; U; Android 11)"
     private const val BROWSER_USER_AGENT = "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+    private const val BOT_USER_AGENT = "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"
 
     private val YT_VIDEO_ID_PATTERN = Pattern.compile(
         "(?:youtu\\.be/|youtube\\.com/(?:embed/|v/|shorts/|watch\\?v=|watch\\?.+&v=))([\\w-]{11})"
     )
+
+    /**
+     * Resuelve redirecciones para enlaces acortados (vm.tiktok.com, vt.tiktok.com, fb.watch, ig.me, t.co).
+     */
+    private fun resolveRedirect(url: String): String {
+        return try {
+            val req = Request.Builder()
+                .url(url)
+                .header("User-Agent", BROWSER_USER_AGENT)
+                .build()
+            client.newCall(req).execute().use { resp ->
+                resp.request.url.toString()
+            }
+        } catch (_: Exception) {
+            url
+        }
+    }
 
     /**
      * Analiza el enlace y devuelve metadatos enriquecidos (Título, Autor, Miniatura)
@@ -54,12 +73,14 @@ object MediaExtractor {
      */
     suspend fun analyze(url: String): MediaPreview = withContext(Dispatchers.IO) {
         val clean = UrlUtils.extractUrlFromText(url) ?: url
-        val platform = PlatformType.fromUrl(clean)
+        val resolved = resolveRedirect(clean)
+        val platform = PlatformType.fromUrl(resolved)
 
         when (platform) {
-            PlatformType.YOUTUBE -> analyzeYouTube(clean)
-            PlatformType.TIKTOK -> analyzeTikTok(clean)
-            else -> analyzeGeneric(clean, platform)
+            PlatformType.YOUTUBE -> analyzeYouTube(resolved)
+            PlatformType.TIKTOK -> analyzeTikTok(resolved)
+            PlatformType.INSTAGRAM, PlatformType.FACEBOOK, PlatformType.TWITTER -> analyzeSocial(resolved, platform)
+            else -> analyzeGeneric(resolved, platform)
         }
     }
 
@@ -104,11 +125,9 @@ object MediaExtractor {
 
     private fun analyzeTikTok(url: String): MediaPreview {
         try {
+            // Intentar GET TikWM
             val apiUrl = "https://www.tikwm.com/api/?url=${URLEncoder.encode(url, "UTF-8")}"
-            val req = Request.Builder()
-                .url(apiUrl)
-                .header("User-Agent", BROWSER_USER_AGENT)
-                .build()
+            val req = Request.Builder().url(apiUrl).header("User-Agent", BROWSER_USER_AGENT).build()
 
             client.newCall(req).execute().use { resp ->
                 if (resp.isSuccessful) {
@@ -135,34 +154,78 @@ object MediaExtractor {
             }
         } catch (_: Exception) {}
 
+        // Fallback OpenGraph
+        val og = parseOpenGraph(url)
         return MediaPreview(
-            title = "Contenido de TikTok",
+            title = og["title"] ?: "Contenido de TikTok",
             author = "TikTok",
-            thumbnailUrl = "",
+            thumbnailUrl = og["image"] ?: "",
             platform = PlatformType.TIKTOK,
             originalUrl = url
         )
     }
 
+    private fun analyzeSocial(url: String, platform: PlatformType): MediaPreview {
+        // TikWM también soporta Instagram y Twitter
+        try {
+            val apiUrl = "https://www.tikwm.com/api/?url=${URLEncoder.encode(url, "UTF-8")}"
+            val req = Request.Builder().url(apiUrl).header("User-Agent", BROWSER_USER_AGENT).build()
+
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val body = resp.body?.string() ?: ""
+                    val json = JsonParser.parseString(body).asJsonObject
+                    if (json.get("code")?.asInt == 0) {
+                        val data = json.getAsJsonObject("data")
+                        val title = data?.get("title")?.asString?.ifBlank { platform.displayName } ?: platform.displayName
+                        val author = data?.getAsJsonObject("author")?.get("nickname")?.asString ?: platform.displayName
+                        val cover = data?.get("cover")?.asString ?: ""
+
+                        return MediaPreview(
+                            title = title,
+                            author = author,
+                            thumbnailUrl = cover,
+                            platform = platform,
+                            originalUrl = url
+                        )
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // Fallback OpenGraph
+        val og = parseOpenGraph(url)
+        return MediaPreview(
+            title = og["title"] ?: "${platform.displayName} Media",
+            author = platform.displayName,
+            thumbnailUrl = og["image"] ?: "",
+            platform = platform,
+            originalUrl = url
+        )
+    }
+
     private fun analyzeGeneric(url: String, platform: PlatformType): MediaPreview {
-        val cleanName = url.substringAfterLast("/").substringBefore("?").ifBlank { platform.displayName }
+        val og = parseOpenGraph(url)
+        val cleanName = og["title"] ?: url.substringAfterLast("/").substringBefore("?").ifBlank { platform.displayName }
         return MediaPreview(
             title = cleanName,
             author = platform.displayName,
-            thumbnailUrl = "",
+            thumbnailUrl = og["image"] ?: "",
             platform = platform,
             originalUrl = url
         )
     }
 
     suspend fun extract(url: String, requestedFormat: MediaFormat): ExtractedMediaInfo = withContext(Dispatchers.IO) {
-        val lower = url.lowercase()
+        val clean = UrlUtils.extractUrlFromText(url) ?: url
+        val resolved = resolveRedirect(clean)
+        val lower = resolved.lowercase()
 
         when {
-            lower.contains("youtube.com") || lower.contains("youtu.be") -> extractYouTube(url, requestedFormat)
-            lower.contains("tiktok.com") -> extractTikTok(url, requestedFormat)
-            lower.contains("twitter.com") || lower.contains("x.com") || lower.contains("instagram.com") -> extractSocial(url, requestedFormat)
-            else -> extractGeneric(url, requestedFormat)
+            lower.contains("youtube.com") || lower.contains("youtu.be") -> extractYouTube(resolved, requestedFormat)
+            lower.contains("tiktok.com") -> extractTikTok(resolved, requestedFormat)
+            lower.contains("twitter.com") || lower.contains("x.com") || lower.contains("instagram.com") || lower.contains("facebook.com") || lower.contains("fb.watch") -> extractSocial(resolved, requestedFormat)
+            else -> extractGeneric(resolved, requestedFormat)
         }
     }
 
@@ -308,64 +371,32 @@ object MediaExtractor {
     }
 
     /**
-     * Extractor de TikTok sin marcas de agua mediante la API TikWM.
-     * Retorna video MP4 directo y audio MP3 directo.
+     * Extractor universal de TikTok sin marcas de agua mediante la API TikWM con fallback OpenGraph.
+     * Resuelve URLs acortadas (vm.tiktok.com, vt.tiktok.com) y entrega MP4 y MP3 genuinos con carátula.
      */
     private fun extractTikTok(url: String, requestedFormat: MediaFormat): ExtractedMediaInfo {
-        val apiUrl = "https://www.tikwm.com/api/?url=${URLEncoder.encode(url, "UTF-8")}"
-        val req = Request.Builder()
-            .url(apiUrl)
-            .header("User-Agent", BROWSER_USER_AGENT)
-            .build()
-
-        client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) {
-                throw Exception("Error de respuesta al procesar TikTok (HTTP ${resp.code})")
-            }
-
-            val body = resp.body?.string() ?: ""
-            val json = JsonParser.parseString(body).asJsonObject
-
-            if (json.get("code")?.asInt != 0) {
-                val msg = json.get("msg")?.asString ?: "Error al procesar el enlace de TikTok"
-                throw Exception(msg)
-            }
-
-            val data = json.getAsJsonObject("data") ?: throw Exception("Respuesta de TikTok inválida")
-            val title = data.get("title")?.asString?.ifBlank { "TikTok Video" } ?: "TikTok Video"
-            val author = data.getAsJsonObject("author")?.get("nickname")?.asString ?: "TikTok Creator"
-            val cover = data.get("cover")?.asString ?: ""
-
-            val streamUrl = if (requestedFormat.isAudio) {
-                var music = data.get("music")?.asString
-                if (music.isNullOrBlank()) {
-                    music = data.get("play")?.asString
-                }
-                music ?: throw Exception("No se encontró audio disponible en este TikTok")
-            } else {
-                data.get("play")?.asString ?: throw Exception("No se encontró video disponible en este TikTok")
-            }
-
-            val fullStreamUrl = if (streamUrl.startsWith("http")) streamUrl else "https://www.tikwm.com$streamUrl"
-
-            return ExtractedMediaInfo(
-                title = title,
-                directStreamUrl = fullStreamUrl,
-                format = requestedFormat,
-                author = author,
-                thumbnailUrl = cover
-            )
-        }
-    }
-
-    /**
-     * Extractor para Twitter / X e Instagram mediante TikWM / OpenGraph.
-     */
-    private fun extractSocial(url: String, requestedFormat: MediaFormat): ExtractedMediaInfo {
+        // 1. Intentar TikWM vía GET
         try {
             val apiUrl = "https://www.tikwm.com/api/?url=${URLEncoder.encode(url, "UTF-8")}"
+            val req = Request.Builder().url(apiUrl).header("User-Agent", BROWSER_USER_AGENT).build()
+
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val body = resp.body?.string() ?: ""
+                    val json = JsonParser.parseString(body).asJsonObject
+                    if (json.get("code")?.asInt == 0) {
+                        return parseTikWMResponse(json, requestedFormat)
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // 2. Intentar TikWM vía POST
+        try {
+            val form = FormBody.Builder().add("url", url).add("hd", "1").build()
             val req = Request.Builder()
-                .url(apiUrl)
+                .url("https://www.tikwm.com/api/")
+                .post(form)
                 .header("User-Agent", BROWSER_USER_AGENT)
                 .build()
 
@@ -374,35 +405,132 @@ object MediaExtractor {
                     val body = resp.body?.string() ?: ""
                     val json = JsonParser.parseString(body).asJsonObject
                     if (json.get("code")?.asInt == 0) {
-                        val data = json.getAsJsonObject("data")
-                        val stream = if (requestedFormat.isAudio) {
-                            data?.get("music")?.asString ?: data?.get("play")?.asString
-                        } else {
-                            data?.get("play")?.asString
-                        }
-                        if (!stream.isNullOrBlank()) {
-                            val title = data?.get("title")?.asString?.ifBlank { "Social Media Video" } ?: "Social Media Video"
-                            val fullUrl = if (stream.startsWith("http")) stream else "https://www.tikwm.com$stream"
-                            return ExtractedMediaInfo(
-                                title = title,
-                                directStreamUrl = fullUrl,
-                                format = requestedFormat
-                            )
-                        }
+                        return parseTikWMResponse(json, requestedFormat)
                     }
                 }
             }
         } catch (_: Exception) {}
 
+        // 3. Fallback a OpenGraph
+        val og = parseOpenGraph(url)
+        val videoUrl = og["video"] ?: og["stream"]
+        if (!videoUrl.isNullOrBlank()) {
+            return ExtractedMediaInfo(
+                title = og["title"] ?: "TikTok Video",
+                directStreamUrl = videoUrl,
+                format = requestedFormat,
+                author = "TikTok",
+                thumbnailUrl = og["image"] ?: ""
+            )
+        }
+
+        throw Exception("No se pudo procesar el enlace de TikTok. Asegúrate de que el video sea público.")
+    }
+
+    private fun parseTikWMResponse(json: com.google.gson.JsonObject, requestedFormat: MediaFormat): ExtractedMediaInfo {
+        val data = json.getAsJsonObject("data") ?: throw Exception("Respuesta de TikTok inválida")
+        val title = data.get("title")?.asString?.ifBlank { "TikTok Video" } ?: "TikTok Video"
+        val author = data.getAsJsonObject("author")?.get("nickname")?.asString ?: "TikTok Creator"
+        val cover = data.get("cover")?.asString ?: ""
+
+        val streamUrl = if (requestedFormat.isAudio) {
+            var music = data.get("music")?.asString
+            if (music.isNullOrBlank()) music = data.get("play")?.asString
+            music ?: throw Exception("No se encontró audio disponible en este video")
+        } else {
+            data.get("play")?.asString ?: throw Exception("No se encontró video disponible en este enlace")
+        }
+
+        val fullStreamUrl = if (streamUrl.startsWith("http")) streamUrl else "https://www.tikwm.com$streamUrl"
+        val fullCoverUrl = if (cover.isNotBlank() && !cover.startsWith("http")) "https://www.tikwm.com$cover" else cover
+
+        return ExtractedMediaInfo(
+            title = title,
+            directStreamUrl = fullStreamUrl,
+            format = requestedFormat,
+            author = author,
+            thumbnailUrl = fullCoverUrl
+        )
+    }
+
+    /**
+     * Extractor para Instagram, Facebook, Twitter / X y otras redes sociales.
+     */
+    private fun extractSocial(url: String, requestedFormat: MediaFormat): ExtractedMediaInfo {
+        // 1. Probar TikWM (soporta Reels, TikTok, Twitter)
+        try {
+            val apiUrl = "https://www.tikwm.com/api/?url=${URLEncoder.encode(url, "UTF-8")}"
+            val req = Request.Builder().url(apiUrl).header("User-Agent", BROWSER_USER_AGENT).build()
+
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val body = resp.body?.string() ?: ""
+                    val json = JsonParser.parseString(body).asJsonObject
+                    if (json.get("code")?.asInt == 0) {
+                        return parseTikWMResponse(json, requestedFormat)
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // 2. Extractor OpenGraph con User-Agent de rastreador oficial (Facebook / Twitter)
+        val og = parseOpenGraph(url)
+        val stream = og["video"] ?: og["stream"]
+        if (!stream.isNullOrBlank()) {
+            val cleanTitle = og["title"] ?: "Social Media Video"
+            return ExtractedMediaInfo(
+                title = cleanTitle,
+                directStreamUrl = stream,
+                format = requestedFormat,
+                author = "Social",
+                thumbnailUrl = og["image"] ?: ""
+            )
+        }
+
         return extractGeneric(url, requestedFormat)
     }
 
     private fun extractGeneric(url: String, requestedFormat: MediaFormat): ExtractedMediaInfo {
-        val defaultName = url.substringAfterLast("/").substringBefore("?").ifBlank { "Media_Download" }
+        val og = parseOpenGraph(url)
+        val defaultName = og["title"] ?: url.substringAfterLast("/").substringBefore("?").ifBlank { "Media_Download" }
+        val streamUrl = og["video"] ?: url
         return ExtractedMediaInfo(
             title = defaultName,
-            directStreamUrl = url,
-            format = requestedFormat
+            directStreamUrl = streamUrl,
+            format = requestedFormat,
+            thumbnailUrl = og["image"] ?: ""
         )
+    }
+
+    /**
+     * Rastrea metadatos OpenGraph estándar (og:video, og:image, og:title) de cualquier página web.
+     */
+    private fun parseOpenGraph(url: String): Map<String, String> {
+        val result = mutableMapOf<String, String>()
+        try {
+            val req = Request.Builder()
+                .url(url)
+                .header("User-Agent", BOT_USER_AGENT)
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val html = resp.body?.string() ?: ""
+
+                    // Regex para og:video
+                    val videoMatcher = Pattern.compile("<meta\\s+(?:property|name)=[\"']og:video[\"']\\s+content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE).matcher(html)
+                    if (videoMatcher.find()) result["video"] = videoMatcher.group(1).replace("&amp;", "&")
+
+                    // Regex para og:image
+                    val imageMatcher = Pattern.compile("<meta\\s+(?:property|name)=[\"']og:image[\"']\\s+content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE).matcher(html)
+                    if (imageMatcher.find()) result["image"] = imageMatcher.group(1).replace("&amp;", "&")
+
+                    // Regex para og:title
+                    val titleMatcher = Pattern.compile("<meta\\s+(?:property|name)=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE).matcher(html)
+                    if (titleMatcher.find()) result["title"] = titleMatcher.group(1).replace("&amp;", "&")
+                }
+            }
+        } catch (_: Exception) {}
+        return result
     }
 }
