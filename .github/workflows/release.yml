@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Nombre de la versión / Etiqueta (ej. v2.0.5)'
+        description: 'Nombre de la versión / Etiqueta (ej. v2.0.6)'
         required: false
-        default: 'v2.0.5'
+        default: 'v2.0.6'
 
 permissions:
   contents: write
@@ -91,7 +91,7 @@ jobs:
             TAG_VAL="${{ inputs.tag_name }}"
           fi
           if [ -z "$TAG_VAL" ]; then
-            TAG_VAL="v2.0.5"
+            TAG_VAL="v2.0.6"
           fi
           find app/build/outputs/apk/release/ -name "*.apk" -exec cp {} ../dist/Releases/OmniVault-${TAG_VAL}-Android.apk \;
 

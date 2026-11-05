@@ -1,19 +1,19 @@
 {
-  "version": "2.0.5",
-  "version_code": 205,
+  "version": "2.0.6",
+  "version_code": 206,
   "release_date": "2026-11-05",
-  "title": "OmniVault v2.0.5 — Background Downloads & Live Notification Bar",
-  "changelog": "⚡ Descargas activas 100% en segundo plano con pantalla apagada (WakeLock)\n📊 Barra de progreso interactiva en tiempo real en la barra de notificaciones del celular\n🔔 Notificación automática al completar la descarga con opciones de Reproducir y Compartir\n🛡️ Permiso dinámico de notificaciones para Android 13 y 14+\n🔄 Corrección de enlaces y actualización fluida oficial",
+  "title": "OmniVault v2.0.6 — Separación de Videos vs Canciones para Lark Player",
+  "changelog": "🎬 Corrección: Los videos MP4 ya no reciben metadatos de álbum ('Single') ni archivos .lrc, apareciendo exclusivamente en la sección de Videos de Lark Player y galerías\n🎵 Los audios (MP3 / M4A) mantienen carátula HD completa, letras sincronizadas (.lrc) y compatibilidad karaoke\n⚡ Descargas 100% en segundo plano con pantalla apagada (WakeLock)\n📊 Barra de progreso en vivo en las notificaciones del teléfono con opción de cancelar\n🔔 Notificación interactiva al completar con opciones de Reproducir y Compartir",
   "android": {
-    "version": "2.0.5",
-    "version_code": 205,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.5/OmniVault-v2.0.5-Android.apk",
+    "version": "2.0.6",
+    "version_code": 206,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.6/OmniVault-v2.0.6-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.0.5",
-    "version_code": 205,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.5/OmniVault-v2.0.5-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.5/OmniVault-v2.0.5-Windows-x64-Portable.zip"
+    "version": "2.0.6",
+    "version_code": 206,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.6/OmniVault-v2.0.6-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.6/OmniVault-v2.0.6-Windows-x64-Portable.zip"
   }
 }

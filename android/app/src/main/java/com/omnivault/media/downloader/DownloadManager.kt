@@ -210,48 +210,75 @@ class DownloadManager private constructor(private val context: Context) {
                 finalMimeType = item.format.mimeType
             }
 
-            // 5. Post-procesamiento: carátula en alta resolución y letras sincronizadas (Karaoke)
+            // 5. Post-procesamiento diferenciado: Audio vs Video
             item.status = DownloadStatus.PROCESSING
             item.speedText = "Procesando…"
             notifyUpdate(item)
 
-            val lyricsContent = if (item.format.isAudio) LyricsHelper.fetchLyrics(info.title, info.author) else null
-            val coverBytes = CoverArtHelper.downloadCoverBytes(info.thumbnailUrl)
+            var coverBytes: ByteArray? = null
 
-            if (coverBytes != null && coverBytes.isNotEmpty()) {
-                item.speedText = "Incrustando carátula y metadatos..."
-                notifyUpdate(item)
+            if (item.format.isAudio) {
+                // =========================================================================
+                // SOLO PARA AUDIOS (Canciones MP3 / M4A):
+                // Inyectar carátula, metadatos de artista/álbum y letras sincronizadas (.lrc)
+                // =========================================================================
+                val lyricsContent = LyricsHelper.fetchLyrics(info.title, info.author)
+                coverBytes = CoverArtHelper.downloadCoverBytes(info.thumbnailUrl)
 
-                if (stagedFile.name.endsWith(".mp3", ignoreCase = true)) {
-                    CoverArtHelper.embedCoverInMp3(stagedFile, coverBytes, info.title, info.author, lyricsContent)
-                } else {
-                    CoverArtHelper.embedCoverInM4a(stagedFile, coverBytes, info.title, info.author, lyricsContent)
+                if (coverBytes != null && coverBytes.isNotEmpty()) {
+                    item.speedText = "Incrustando carátula y metadatos..."
+                    notifyUpdate(item)
+
+                    if (stagedFile.name.endsWith(".mp3", ignoreCase = true)) {
+                        CoverArtHelper.embedCoverInMp3(stagedFile, coverBytes, info.title, info.author, lyricsContent)
+                    } else {
+                        CoverArtHelper.embedCoverInM4a(stagedFile, coverBytes, info.title, info.author, lyricsContent)
+                    }
+
+                    val cachedCover = CoverArtHelper.cacheCoverLocally(context, item.id, coverBytes)
+                    if (cachedCover != null) {
+                        item.thumbnailUrl = cachedCover.absolutePath
+                    }
                 }
-
-                val cachedCover = CoverArtHelper.cacheCoverLocally(context, item.id, coverBytes)
-                if (cachedCover != null) {
-                    item.thumbnailUrl = cachedCover.absolutePath
+            } else {
+                // =========================================================================
+                // PARA VIDEOS (MP4):
+                // Conservar el archivo de video puro sin etiquetas de álbum de música
+                // (evita que Lark Player u otros reproductores lo clasifiquen como canción/MV).
+                // Solo guardamos la miniatura en caché interna para la interfaz de OmniVault.
+                // =========================================================================
+                coverBytes = CoverArtHelper.downloadCoverBytes(info.thumbnailUrl)
+                if (coverBytes != null && coverBytes.isNotEmpty()) {
+                    val cachedCover = CoverArtHelper.cacheCoverLocally(context, item.id, coverBytes)
+                    if (cachedCover != null) {
+                        item.thumbnailUrl = cachedCover.absolutePath
+                    }
                 }
             }
 
-            // 6. Mover archivo 100% etiquetado a la carpeta pública de música/video
+            // 6. Mover archivo a la carpeta pública correspondiente (Music o Movies)
             val finalOutputFile = File(targetDir, "${cleanTitle}.${extension}")
             stagedFile.copyTo(finalOutputFile, overwrite = true)
             stagedFile.delete()
 
-            // Guardar carátula complementaria .jpg y archivo de letras .lrc para Lark Player y reproductores
-            if (coverBytes != null && coverBytes.isNotEmpty()) {
-                try {
-                    val companionJpg = File(targetDir, "${cleanTitle}.jpg")
-                    companionJpg.writeBytes(coverBytes)
-                    StorageHelper.scanMediaFile(context, companionJpg, "image/jpeg")
-                } catch (_: Exception) {}
-            }
+            // Guardar carátula complementaria .jpg y archivo de letras .lrc ÚNICAMENTE para audios.
+            // Para videos NUNCA se guardan .jpg ni .lrc en la carpeta de películas,
+            // ya que Lark Player los detecta como álbum de música.
+            if (item.format.isAudio) {
+                if (coverBytes != null && coverBytes.isNotEmpty()) {
+                    try {
+                        val companionJpg = File(targetDir, "${cleanTitle}.jpg")
+                        companionJpg.writeBytes(coverBytes)
+                        StorageHelper.scanMediaFile(context, companionJpg, "image/jpeg")
+                    } catch (_: Exception) {}
+                }
 
-            if (!lyricsContent.isNullOrBlank()) {
-                val lrcFile = LyricsHelper.saveLrcFile(targetDir, cleanTitle, lyricsContent)
-                if (lrcFile != null) {
-                    StorageHelper.scanMediaFile(context, lrcFile, "text/plain")
+                val lyricsContent = LyricsHelper.fetchLyrics(info.title, info.author)
+                if (!lyricsContent.isNullOrBlank()) {
+                    val lrcFile = LyricsHelper.saveLrcFile(targetDir, cleanTitle, lyricsContent)
+                    if (lrcFile != null) {
+                        StorageHelper.scanMediaFile(context, lrcFile, "text/plain")
+                    }
                 }
             }
 
