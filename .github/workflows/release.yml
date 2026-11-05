@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Nombre de la versión / Etiqueta (ej. v2.0.0)'
+        description: 'Nombre de la versión / Etiqueta (ej. v2.0.3)'
         required: false
-        default: 'v2.0.0'
+        default: 'v2.0.3'
 
 permissions:
   contents: write
@@ -64,7 +64,7 @@ jobs:
             dist/Releases/OmniVault-*-Windows-x64-Portable.zip
 
   # =========================================================================
-  # 2. Compilación de Distribución Android (APK Oficial)
+  # 2. Compilación de Distribución Android (APK Oficial - Release Build)
   # =========================================================================
   build-android:
     name: Build Android APK
@@ -80,14 +80,36 @@ jobs:
           distribution: 'temurin'
           java-version: 17
 
-      - name: 🐘 Compilar APK de OmniVault con Gradle
+      - name: 🔑 Generar debug.keystore para firma del APK de release
+        run: |
+          keytool -genkey -v \
+            -keystore ${{ github.workspace }}/debug.keystore \
+            -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 \
+            -validity 10000 \
+            -storepass android \
+            -keypass android \
+            -dname "CN=OmniVault,O=OmniVault,C=US"
+
+      - name: 🐘 Compilar APK de OmniVault con Gradle (Release firmado)
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/debug.keystore
+          KEYSTORE_PASSWORD: android
+          KEY_ALIAS: androiddebugkey
+          KEY_PASSWORD: android
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleRelease
           mkdir -p ../dist/Releases
-          TAG_VAL="${{ github.ref_name || inputs.tag_name || 'v2.0.1' }}"
-          find app/build/outputs/apk/ -name "*.apk" -exec cp {} ../dist/Releases/OmniVault-${TAG_VAL}-Android.apk \;
+          TAG_VAL="${{ github.ref_name }}"
+          if [ -z "$TAG_VAL" ] || [ "$TAG_VAL" = "refs/heads/main" ]; then
+            TAG_VAL="${{ inputs.tag_name }}"
+          fi
+          if [ -z "$TAG_VAL" ]; then
+            TAG_VAL="v2.0.3"
+          fi
+          find app/build/outputs/apk/release/ -name "*.apk" -exec cp {} ../dist/Releases/OmniVault-${TAG_VAL}-Android.apk \;
 
       - name: 📤 Subir artefacto de Android
         uses: actions/upload-artifact@v4
@@ -126,11 +148,20 @@ jobs:
           sha256sum * > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
+      - name: 🔖 Resolver nombre de tag efectivo
+        id: resolve_tag
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ inputs.tag_name }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: 🚀 Publicar en GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.tag_name || 'v2.0.1' }}
-          name: "✦ OmniVault ${{ github.ref_name || inputs.tag_name || 'v2.0.1' }} — Windows PC & Android"
+          tag_name: ${{ steps.resolve_tag.outputs.tag }}
+          name: "✦ OmniVault ${{ steps.resolve_tag.outputs.tag }} — Windows PC & Android"
           draft: false
           prerelease: false
           generate_release_notes: false
@@ -140,7 +171,7 @@ jobs:
             dist/Releases/OmniVault-*-Android.apk
             dist/Releases/SHA256SUMS.txt
           body: |
-            ## ✦ OmniVault ${{ github.ref_name || inputs.tag_name }} — Obsidian & Titanium Release
+            ## ✦ OmniVault ${{ steps.resolve_tag.outputs.tag }} — Obsidian & Titanium Release
 
             > **Bóveda Multimedia Universal • Suite Creativa Multiplataforma para PC y Teléfonos Android**
 
@@ -166,7 +197,7 @@ jobs:
 
             | Plataforma | Paquete | Archivo | Descripción |
             | :--- | :--- | :--- | :--- |
-            | 📱 **Android** | **APK Instalable** | `OmniVault-v2.0.0-Android.apk` | Compatible con Android 8.0 a 14+. Descarga estilo Snaptube con menú compartir. |
-            | 💻 **Windows** | **Instalador Setup** | `OmniVault-v2.0.0-Windows-x64-Setup.exe` | Instalación guiada clásica para Windows 10 y 11 (64 bits). |
-            | 💻 **Windows** | **Versión Portátil** | `OmniVault-v2.0.0-Windows-x64-Portable.zip` | No requiere instalación. Extraer y ejecutar. Ideal para memorias USB. |
+            | 📱 **Android** | **APK Instalable** | `OmniVault-${{ steps.resolve_tag.outputs.tag }}-Android.apk` | Compatible con Android 8.0 a 14+. Descarga estilo Snaptube con menú compartir. |
+            | 💻 **Windows** | **Instalador Setup** | `OmniVault-${{ steps.resolve_tag.outputs.tag }}-Windows-x64-Setup.exe` | Instalación guiada clásica para Windows 10 y 11 (64 bits). |
+            | 💻 **Windows** | **Versión Portátil** | `OmniVault-${{ steps.resolve_tag.outputs.tag }}-Windows-x64-Portable.zip` | No requiere instalación. Extraer y ejecutar. Ideal para memorias USB. |
             | 🛡️ **Seguridad** | **Sumas de Integridad** | `SHA256SUMS.txt` | Hashes criptográficos SHA-256 para validar la autenticidad de los archivos. |
