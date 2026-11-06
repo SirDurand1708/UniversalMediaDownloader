@@ -163,9 +163,11 @@ class OmniVaultApp(ctk.CTk):
         self.search_check_vars = []
         self.selected_format = ctk.StringVar(value=self.config.get("default_format", "mp3_320"))
 
-        # Detección inteligente de portapapeles
+        # Detección inteligente de portapapeles y actualizaciones
         self._last_detected_clipboard = ""
         self._clipboard_banner_visible = False
+        self._update_banner_visible = False
+        self._latest_update_data = None
 
         self._build_layout()
         self._select_tab("explore")
@@ -339,6 +341,21 @@ class OmniVaultApp(ctk.CTk):
         )
         self.hud_btn.pack(fill="x", pady=(8, 2))
 
+        # Botón dinámico de Actualizaciones en la barra lateral
+        self.update_nav_btn = ctk.CTkButton(
+            self.nav_frame,
+            text=f"🚀  Buscar Actualización",
+            anchor="w",
+            height=34,
+            corner_radius=theme.CORNER_RADIUS,
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            fg_color=theme.BG_INPUT,
+            text_color=theme.ACCENT_CYAN,
+            hover_color=theme.BG_CARD_HOVER,
+            command=self._check_updates_manual
+        )
+        self.update_nav_btn.pack(fill="x", pady=(4, 2))
+
         self.sidebar_spacer = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         self.sidebar_spacer.pack(fill="both", expand=True)
 
@@ -423,9 +440,55 @@ class OmniVaultApp(ctk.CTk):
         view.grid_rowconfigure(3, weight=1)
         view.grid_columnconfigure(0, weight=1)
 
+        # Contenedor dinámico para banners superiores (Actualizaciones y Portapapeles)
+        self.banner_container = ctk.CTkFrame(view, fg_color="transparent")
+        self.banner_container.grid(row=0, column=0, sticky="ew")
+        self.banner_container.grid_columnconfigure(0, weight=1)
+
+        # Banner de Actualización Disponible (Estilo Cyberpunk Neon)
+        self.update_banner = ctk.CTkFrame(
+            self.banner_container,
+            fg_color=theme.BG_CARD,
+            corner_radius=theme.CORNER_RADIUS_SM,
+            border_width=1,
+            border_color=theme.BORDER_ACTIVE
+        )
+        self.update_banner_lbl = ctk.CTkLabel(
+            self.update_banner,
+            text="",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color=theme.TEXT_PRIMARY,
+            anchor="w"
+        )
+        self.update_banner_lbl.pack(side="left", padx=10, pady=6, fill="x", expand=True)
+
+        self.update_banner_btn = ctk.CTkButton(
+            self.update_banner,
+            text="⚡ Actualizar Ahora",
+            width=150,
+            height=28,
+            fg_color=theme.BTN_PRIMARY_BG,
+            hover_color=theme.BTN_PRIMARY_HOVER,
+            text_color=theme.BTN_PRIMARY_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=self._on_update_banner_clicked
+        )
+        self.update_banner_btn.pack(side="left", padx=(0, 6))
+
+        ctk.CTkButton(
+            self.update_banner,
+            text="✖",
+            width=28,
+            height=28,
+            fg_color=theme.BTN_SECONDARY_BG,
+            hover_color=theme.BTN_SECONDARY_HOVER,
+            text_color=theme.BTN_SECONDARY_TEXT,
+            command=self._dismiss_update_banner
+        ).pack(side="left", padx=(0, 8))
+
         # Banner de Detección Automática de Portapapeles (Smart Auto-Paste)
         self.clipboard_banner = ctk.CTkFrame(
-            view,
+            self.banner_container,
             fg_color=theme.BG_CARD,
             corner_radius=theme.CORNER_RADIUS_SM,
             border_width=1,
@@ -525,7 +588,7 @@ class OmniVaultApp(ctk.CTk):
                     self._last_detected_clipboard = clip
                     short_display = clip if len(clip) <= 45 else clip[:42] + "..."
                     self.clipboard_lbl.configure(text=f"📋 Enlace detectado: {short_display}")
-                    self.clipboard_banner.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+                    self.clipboard_banner.pack(fill="x", pady=(0, 8))
                     self._clipboard_banner_visible = True
         except Exception:
             pass
@@ -540,8 +603,26 @@ class OmniVaultApp(ctk.CTk):
             self._on_search_submit()
 
     def _dismiss_clipboard_banner(self):
-        self.clipboard_banner.grid_forget()
+        self.clipboard_banner.pack_forget()
         self._clipboard_banner_visible = False
+
+    def _show_update_banner(self, data: dict):
+        """Muestra el banner superior notificando que hay una nueva versión."""
+        self._latest_update_data = data
+        remote_v = data.get("version", "2.0.7")
+        self.update_banner_lbl.configure(text=f"🚀 ¡Nueva versión OmniVault v{remote_v} disponible! Optimizaciones y nuevas funciones listas.")
+        self.update_banner.pack(fill="x", pady=(0, 8))
+        self._update_banner_visible = True
+
+    def _dismiss_update_banner(self):
+        self.update_banner.pack_forget()
+        self._update_banner_visible = False
+
+    def _on_update_banner_clicked(self):
+        if hasattr(self, "_latest_update_data") and self._latest_update_data:
+            self._show_update_modal(self._latest_update_data)
+        else:
+            self._check_updates_manual()
 
     def _show_explore_welcome(self):
         for widget in self.explore_scroll.winfo_children():
@@ -2862,32 +2943,54 @@ class OmniVaultApp(ctk.CTk):
             self._hide_player()
 
 
-if __name__ == "__main__":
-    app = OmniVaultApp()
-    app.mainloop()
-
-
     def _check_updates_startup(self):
         """Verifica en segundo plano si hay una nueva versión oficial de OmniVault."""
         def _on_result(has_update, data, err):
             if has_update and data:
-                self.after(0, lambda: self._show_update_modal(data))
+                self.after(0, lambda: self._on_update_available(data))
         updater.check_for_updates_async(_on_result)
 
+    def _on_update_available(self, data: dict):
+        """Activa el botón de la barra lateral y el banner superior cuando hay actualización."""
+        self._latest_update_data = data
+        remote_v = data.get("version", "")
+        if hasattr(self, "update_nav_btn") and self.update_nav_btn.winfo_exists():
+            self.update_nav_btn.configure(
+                text=f"✦ ¡Actualizar a v{remote_v}!",
+                fg_color=theme.BTN_PRIMARY_BG,
+                text_color=theme.BTN_PRIMARY_TEXT,
+                hover_color=theme.BTN_PRIMARY_HOVER,
+                command=lambda: self._show_update_modal(data)
+            )
+        self._show_update_banner(data)
+
     def _check_updates_manual(self):
-        """Verificación manual invocada desde los ajustes."""
+        """Verificación manual invocada desde la barra lateral o ajustes."""
+        if hasattr(self, "update_nav_btn") and self.update_nav_btn.winfo_exists():
+            self.update_nav_btn.configure(text="🔄  Buscando...", state="disabled")
+
         def _on_result(has_update, data, err):
-            if err:
-                self.after(0, lambda: messagebox.showerror("Comprobación de Actualizaciones", f"No se pudo conectar al servidor:\n{err}"))
-            elif has_update and data:
-                self.after(0, lambda: self._show_update_modal(data))
-            else:
-                self.after(0, lambda: messagebox.showinfo("OmniVault al día", f"✓ Ya estás utilizando la versión oficial más reciente (v{updater.CURRENT_VERSION})."))
+            def _gui():
+                if hasattr(self, "update_nav_btn") and self.update_nav_btn.winfo_exists():
+                    self.update_nav_btn.configure(state="normal")
+                if err:
+                    if hasattr(self, "update_nav_btn") and self.update_nav_btn.winfo_exists():
+                        self.update_nav_btn.configure(text="🚀  Buscar Actualización")
+                    messagebox.showerror("Comprobación de Actualizaciones", f"No se pudo conectar al servidor:\n{err}")
+                elif has_update and data:
+                    self._on_update_available(data)
+                    self._show_update_modal(data)
+                else:
+                    if hasattr(self, "update_nav_btn") and self.update_nav_btn.winfo_exists():
+                        self.update_nav_btn.configure(text=f"✓ Al día (v{updater.CURRENT_VERSION})")
+                    messagebox.showinfo("OmniVault al día", f"✓ Ya estás utilizando la versión oficial más reciente (v{updater.CURRENT_VERSION}).")
+            self.after(0, _gui)
+
         updater.check_for_updates_async(_on_result)
 
     def _show_update_modal(self, data):
-        """Muestra un diálogo moderno informando la nueva versión con botón de 1 clic."""
-        remote_version = data.get("version", "2.0.2")
+        """Muestra un diálogo moderno estilo Cyberpunk informando la nueva versión con botón de 1 clic."""
+        remote_version = data.get("version", updater.CURRENT_VERSION)
         changelog = data.get("changelog", "Mejoras de rendimiento y estabilidad general.")
         windows_data = data.get("windows", {})
         setup_url = windows_data.get("setup_url", "")
@@ -2899,17 +3002,17 @@ if __name__ == "__main__":
 
         dialog = ctk.CTkToplevel(self)
         dialog.title("🚀 Actualización Disponible - OmniVault")
-        dialog.geometry("500x380")
+        dialog.geometry("520x400")
         dialog.resizable(False, False)
         dialog.transient(self)
         dialog.grab_set()
 
         dialog.update_idletasks()
-        x = self.winfo_x() + (self.winfo_width() - 500) // 2
-        y = self.winfo_y() + (self.winfo_height() - 380) // 2
+        x = self.winfo_x() + (self.winfo_width() - 520) // 2
+        y = self.winfo_y() + (self.winfo_height() - 400) // 2
         dialog.geometry(f"+{max(0, x)}+{max(0, y)}")
 
-        frame = ctk.CTkFrame(dialog, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
+        frame = ctk.CTkFrame(dialog, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_ACTIVE)
         frame.pack(fill="both", expand=True, padx=14, pady=14)
 
         ctk.CTkLabel(
@@ -2921,12 +3024,12 @@ if __name__ == "__main__":
 
         ctk.CTkLabel(
             frame,
-            text="Una nueva versión oficial con mejoras está lista para instalar:",
+            text="Una nueva versión oficial con mejoras está lista para instalar con 1 solo clic:",
             font=ctk.CTkFont(size=11),
             text_color=theme.TEXT_SECONDARY
         ).pack(pady=(0, 8))
 
-        log_box = ctk.CTkTextbox(frame, height=110, fg_color=theme.BG_INPUT, corner_radius=6)
+        log_box = ctk.CTkTextbox(frame, height=120, fg_color=theme.BG_INPUT, corner_radius=6)
         log_box.pack(fill="x", padx=14, pady=4)
         log_box.insert("1.0", changelog)
         log_box.configure(state="disabled")
@@ -2945,7 +3048,9 @@ if __name__ == "__main__":
 
             def _progress(pct, downloaded, total):
                 self.after(0, lambda: progress_bar.set(pct / 100.0))
-                self.after(0, lambda: progress_lbl.configure(text=f"Descargando: {pct}% ({downloaded // (1024*1024)} MB / {total // (1024*1024)} MB)"))
+                mb_down = downloaded // (1024 * 1024)
+                mb_tot = total // (1024 * 1024) if total > 0 else 0
+                self.after(0, lambda: progress_lbl.configure(text=f"Descargando: {pct}% ({mb_down} MB / {mb_tot} MB)"))
 
             def _finish(dest):
                 self.after(0, lambda: progress_lbl.configure(text="¡Descarga completada! Iniciando actualización..."))
@@ -2982,3 +3087,8 @@ if __name__ == "__main__":
             text_color=theme.BTN_SECONDARY_TEXT,
             command=dialog.destroy
         ).pack(side="right", padx=(6, 0))
+
+
+if __name__ == "__main__":
+    app = OmniVaultApp()
+    app.mainloop()

@@ -1,24 +1,25 @@
 """
-Paleta de colores y estilos: 'Obsidian & Titanium'
-Estética sofisticada, minimalista y prémium en tonos negros, grafito y plata titanio.
+Paleta de colores y estilos: 'Cyberpunk Neon Vault'
+Estética de vanguardia: carbón profundo (OLED), contrastes extremos,
+acentos en esmeralda neón (#10B981) y cian eléctrico (#00E5FF).
 """
 
-# Fondos principales
-BG_MAIN = "#0F1012"          # Negro Obsidiana Profundo
-BG_SIDEBAR = "#14161A"       # Obsidiana para barra lateral
-BG_CARD = "#1A1D22"          # Grafito oscuro para tarjetas y contenedores
-BG_CARD_HOVER = "#23272E"    # Grafito interactivo al pasar el mouse
-BG_INPUT = "#16181C"         # Fondo para campos de texto
-BORDER_COLOR = "#2A2E36"     # Borde sutil grafito
-BORDER_ACTIVE = "#4B5563"    # Borde activo plateado
+# Fondos principales (OLED Dark & Cyberpunk)
+BG_MAIN = "#070A0F"          # Negro Carbón Profundo (OLED)
+BG_SIDEBAR = "#0D111A"       # Pizarra oscura para barra lateral
+BG_CARD = "#121824"          # Grafito azulado para tarjetas y contenedores
+BG_CARD_HOVER = "#1A2233"    # Interactividad luminosa al pasar el mouse
+BG_INPUT = "#0A0E17"         # Fondo para campos de texto y búsqueda
+BORDER_COLOR = "#1F293D"     # Borde cian sutil
+BORDER_ACTIVE = "#10B981"    # Borde activo Esmeralda Neón
 
-# Botones y acentos Titanio
-BTN_PRIMARY_BG = "#E2E8F0"   # Plateado Titanio
-BTN_PRIMARY_HOVER = "#FFFFFF"# Plata brillante al pasar mouse
-BTN_PRIMARY_TEXT = "#0F1012" # Texto negro obsidiana sobre botón plateado
+# Botones y acentos Cyberpunk
+BTN_PRIMARY_BG = "#10B981"   # Verde Esmeralda Neón
+BTN_PRIMARY_HOVER = "#059669"# Esmeralda brillante
+BTN_PRIMARY_TEXT = "#051610" # Texto oscuro de alto contraste sobre esmeralda
 
-BTN_SECONDARY_BG = "#242830"
-BTN_SECONDARY_HOVER = "#323742"
+BTN_SECONDARY_BG = "#1A2333"
+BTN_SECONDARY_HOVER = "#243047"
 BTN_SECONDARY_TEXT = "#E2E8F0"
 
 BTN_DANGER_BG = "#3E1E22"
@@ -29,14 +30,14 @@ BTN_DANGER_TEXT = "#F87171"
 TEXT_PRIMARY = "#F8FAFC"     # Blanco Platino puro
 TEXT_SECONDARY = "#94A3B8"   # Gris Humo / Slate
 TEXT_MUTED = "#64748B"       # Gris atenuado
-TEXT_ACCENT = "#CBD5E1"      # Plata suave
+TEXT_ACCENT = "#34D399"      # Verde Esmeralda Neón suave
 
 # Indicadores de estado
-ACCENT_CYAN = "#38BDF8"      # Plata hielo / azul cian para barras de progreso
-ACCENT_CYAN_HOVER = "#0EA5E9"# Azul cian brillante al pasar el mouse
-STATUS_SUCCESS = "#10B981"   # Verde Esmeralda sutil para completado
-STATUS_WARNING = "#F59E0B"   # Ámbar suave
-STATUS_ERROR = "#EF4444"     # Carmesí para errores
+ACCENT_CYAN = "#00E5FF"      # Cian Eléctrico puro
+ACCENT_CYAN_HOVER = "#00B4D8"# Cian profundo
+STATUS_SUCCESS = "#10B981"   # Verde Esmeralda Neón
+STATUS_WARNING = "#F59E0B"   # Ámbar neón
+STATUS_ERROR = "#EF4444"     # Carmesí neón
 
 # Radios y fuentes
 CORNER_RADIUS_SM = 6

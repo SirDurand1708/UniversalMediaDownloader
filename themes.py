@@ -6,6 +6,16 @@ Permite personalizar la apariencia de la interfaz con distintos colores de acent
 from typing import Dict, Any
 
 THEMES: Dict[str, Dict[str, Any]] = {
+    "cyberpunk": {
+        "id": "cyberpunk",
+        "name": "Cyberpunk Neon",
+        "primary": "#10B981",
+        "hover": "#059669",
+        "badge": "#064E3B",
+        "gradient": ("#10B981", "#00E5FF"),
+        "text_accent": "#34D399",
+        "emoji": "⚡"
+    },
     "violet": {
         "id": "violet",
         "name": "Cyberpunk Violet",
@@ -58,7 +68,7 @@ THEMES: Dict[str, Dict[str, Any]] = {
     }
 }
 
-DEFAULT_THEME = "violet"
+DEFAULT_THEME = "cyberpunk"
 
 def get_theme(theme_name: str) -> Dict[str, Any]:
     """Retorna la configuración de color para el tema indicado o el predeterminado."""

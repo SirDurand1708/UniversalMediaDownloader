@@ -62,13 +62,13 @@ def update_version_json(new_version: str, version_code: int):
     data["version"] = new_version
     data["version_code"] = version_code
     data["release_date"] = today
-    data["title"] = f"OmniVault v{new_version} — Background Downloads & Live Notification Bar"
+    data["title"] = f"OmniVault v{new_version} — Cyberpunk Neon Desktop & 1-Click Auto-Updater"
     data["changelog"] = (
-        "⚡ Descargas activas 100% en segundo plano con pantalla apagada (WakeLock)\n"
-        "📊 Barra de progreso interactiva en tiempo real en la barra de notificaciones del celular\n"
-        "🔔 Notificación automática al completar la descarga con opciones de Reproducir y Compartir\n"
-        "🛡️ Permiso dinámico de notificaciones para Android 13 y 14+\n"
-        "🔄 Corrección de enlaces y actualización fluida oficial"
+        "⚡ Interfaz rediseñada 'Cyberpunk Neon Vault' de alto contraste para Desktop y Portable\n"
+        "🚀 Botón de actualización en la barra lateral con detector de versión en tiempo real\n"
+        "📢 Banner superior interactivo en la vista de búsqueda con actualización a 1 solo clic\n"
+        "📦 Soporte transparente para auto-instalación en Windows Setup y apertura directa en Portable\n"
+        "📱 Sincronización completa con la versión móvil Android"
     )
 
     for platform in ["android", "windows"]:
