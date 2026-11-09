@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Nombre de la versión / Etiqueta (ej. v2.0.7)'
+        description: 'Nombre de la versión / Etiqueta (ej. v2.0.8)'
         required: false
-        default: 'v2.0.7'
+        default: 'v2.0.8'
 
 permissions:
   contents: write

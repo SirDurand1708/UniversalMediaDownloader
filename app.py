@@ -32,6 +32,11 @@ from config_manager import ConfigManager
 from audio_player import AudioPlayer
 from notifications import send_notification
 import updater
+from single_instance import (
+    notify_running_instance,
+    start_single_instance_server,
+    stop_single_instance_server
+)
 
 import traceback
 import time
@@ -155,6 +160,9 @@ class OmniVaultApp(ctk.CTk):
         # Protocolo de cierre limpio de ventana
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
+        # Servidor de instancia única para evitar múltiples procesos
+        self._single_instance_sock = start_single_instance_server(self._on_single_instance_restore)
+
         # Estado actual
         self.current_media = None
         self.playlist_entries = []
@@ -182,10 +190,39 @@ class OmniVaultApp(ctk.CTk):
         self.after(1500, self._check_clipboard_loop)
         self.after(3500, self._check_updates_startup)
 
+    def _on_single_instance_restore(self):
+        """Notificación recibida de otra instancia intentando abrirse."""
+        self.after(0, self._restore_and_focus)
+
+    def _restore_and_focus(self):
+        """Restaura la ventana al frente con foco asegurado."""
+        try:
+            self.deiconify()
+            self.state("normal")
+            self.lift()
+            self.attributes("-topmost", True)
+            self.after(150, lambda: self.attributes("-topmost", False))
+            self.focus_force()
+        except Exception:
+            pass
+
     def _on_close(self, force: bool = False):
         """Maneja el cierre ordenado de la aplicación o la minimiza a la bandeja del sistema."""
-        if not force and self.config.get("tray_enabled", True) and self.tray.is_available():
+        close_action = self.config.get("close_action", "minimize")
+        tray_enabled = self.config.get("tray_enabled", True) and self.tray.is_available()
+
+        if not force and close_action == "minimize" and tray_enabled:
             self.withdraw()
+            # Notificación informativa solo la primera vez que se minimiza
+            if not self.config.get("tray_notified_on_close", False):
+                self.config.set("tray_notified_on_close", True)
+                try:
+                    send_notification(
+                        "✦ OmniVault en segundo plano",
+                        "OmniVault sigue ejecutándose en el área de notificación. Haz clic en su icono para volver a abrirlo."
+                    )
+                except Exception:
+                    pass
             return
 
         active_tasks = self.queue_manager.get_active_tasks()
@@ -203,15 +240,16 @@ class OmniVaultApp(ctk.CTk):
         self.player.close()
         self.queue_manager.stop()
         self.img_cache.shutdown(wait=False)
+        if hasattr(self, "_single_instance_sock") and self._single_instance_sock:
+            stop_single_instance_server(self._single_instance_sock)
+            self._single_instance_sock = None
         self.destroy()
 
     def _tray_restore(self):
-        self.after(0, self._restore_from_tray)
+        self.after(0, self._restore_and_focus)
 
     def _restore_from_tray(self):
-        self.deiconify()
-        self.lift()
-        self.focus_force()
+        self._restore_and_focus()
 
     def _tray_toggle_hud(self):
         self.after(0, self.mini_hud.toggle_hud)
@@ -2159,11 +2197,33 @@ class OmniVaultApp(ctk.CTk):
         # Switch System Tray
         self.tray_switch_var = ctk.BooleanVar(value=bool(self.config.get("tray_enabled", True)))
         tray_sw = ctk.CTkSwitch(
-            box2, text="Minimizar a la bandeja del sistema (System Tray) al cerrar la ventana",
+            box2, text="Habilitar icono en la bandeja del sistema (System Tray)",
             variable=self.tray_switch_var, font=ctk.CTkFont(size=11),
             command=self._on_tray_toggle
         )
-        tray_sw.pack(anchor="w", padx=14, pady=(2, 8))
+        tray_sw.pack(anchor="w", padx=14, pady=(2, 6))
+
+        # Selector Acción al presionar la [X] para cerrar
+        row_close = ctk.CTkFrame(box2, fg_color="transparent")
+        row_close.pack(fill="x", padx=14, pady=(2, 6))
+
+        ctk.CTkLabel(
+            row_close,
+            text="Acción al hacer clic en [X] para cerrar ventana:",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color=theme.TEXT_PRIMARY
+        ).pack(side="left")
+
+        current_close = "Minimizar a la bandeja (Segundo plano)" if self.config.get("close_action", "minimize") == "minimize" else "Cerrar aplicación por completo"
+        self.close_action_var = ctk.StringVar(value=current_close)
+        self.close_action_menu = ctk.CTkOptionMenu(
+            row_close,
+            values=["Minimizar a la bandeja (Segundo plano)", "Cerrar aplicación por completo"],
+            variable=self.close_action_var,
+            height=28,
+            command=self._on_close_action_changed
+        )
+        self.close_action_menu.pack(side="right")
 
         # Acción al terminar descargas
         row_action = ctk.CTkFrame(box2, fg_color="transparent")
@@ -2618,6 +2678,10 @@ class OmniVaultApp(ctk.CTk):
             self.tray.start()
         elif not val and self.tray._is_running:
             self.tray.stop()
+
+    def _on_close_action_changed(self, value: str):
+        action = "minimize" if "Minimizar" in value else "exit"
+        self.config.set("close_action", action)
 
     def _on_normalize_toggle(self):
         val = self.norm_switch_var.get()
@@ -3090,5 +3154,7 @@ class OmniVaultApp(ctk.CTk):
 
 
 if __name__ == "__main__":
+    if notify_running_instance():
+        sys.exit(0)
     app = OmniVaultApp()
     app.mainloop()

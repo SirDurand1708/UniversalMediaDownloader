@@ -48,6 +48,8 @@ class ConfigManager:
             "aria2c_enabled": True,
             "accent_theme": "violet",
             "tray_enabled": True,
+            "close_action": "minimize",
+            "tray_notified_on_close": False,
             "on_finish_action": "none",
             "sync_channels_auto": True,
             "sync_channels_interval_min": 30,

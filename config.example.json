@@ -12,6 +12,8 @@
   "aria2c_enabled": true,
   "accent_theme": "violet",
   "tray_enabled": true,
+  "close_action": "minimize",
+  "tray_notified_on_close": false,
   "on_finish_action": "none",
   "sync_channels_auto": true,
   "sync_channels_interval_min": 30,

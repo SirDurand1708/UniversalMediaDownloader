@@ -62,13 +62,13 @@ def update_version_json(new_version: str, version_code: int):
     data["version"] = new_version
     data["version_code"] = version_code
     data["release_date"] = today
-    data["title"] = f"OmniVault v{new_version} — Cyberpunk Neon Desktop & 1-Click Auto-Updater"
+    data["title"] = f"OmniVault v{new_version} — Single-Instance App Lock & Tray Close Control"
     data["changelog"] = (
-        "⚡ Interfaz rediseñada 'Cyberpunk Neon Vault' de alto contraste para Desktop y Portable\n"
-        "🚀 Botón de actualización en la barra lateral con detector de versión en tiempo real\n"
-        "📢 Banner superior interactivo en la vista de búsqueda con actualización a 1 solo clic\n"
-        "📦 Soporte transparente para auto-instalación en Windows Setup y apertura directa en Portable\n"
-        "📱 Sincronización completa con la versión móvil Android"
+        "🛡️ Bloqueo de Instancia Única (Single-Instance): Evita procesos duplicados y acumulación de iconos en la bandeja del sistema\n"
+        "⚡ Restauración automática al frente: Al abrir el acceso directo mientras corre en segundo plano, restaura la ventana existente\n"
+        "⚙️ Selector de Acción al cerrar en Ajustes: Elige entre 'Minimizar a la bandeja' o 'Cerrar aplicación por completo' al presionar [X]\n"
+        "🔔 Notificación informativa inicial al minimizar a la bandeja para evitar confusiones\n"
+        "🚀 Sincronización oficial multi-plataforma"
     )
 
     for platform in ["android", "windows"]:

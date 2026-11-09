@@ -1,19 +1,19 @@
 {
-  "version": "2.0.7",
-  "version_code": 207,
-  "release_date": "2026-11-06",
-  "title": "OmniVault v2.0.7 — Cyberpunk Neon Desktop & 1-Click Auto-Updater",
-  "changelog": "⚡ Interfaz rediseñada 'Cyberpunk Neon Vault' de alto contraste para Desktop y Portable\n🚀 Botón de actualización en la barra lateral con detector de versión en tiempo real\n📢 Banner superior interactivo en la vista de búsqueda con actualización a 1 solo clic\n📦 Soporte transparente para auto-instalación en Windows Setup y apertura directa en Portable\n📱 Sincronización completa con la versión móvil Android",
+  "version": "2.0.8",
+  "version_code": 208,
+  "release_date": "2026-11-09",
+  "title": "OmniVault v2.0.8 — Single-Instance App Lock & Tray Close Control",
+  "changelog": "🛡️ Bloqueo de Instancia Única (Single-Instance): Evita procesos duplicados y acumulación de iconos en la bandeja del sistema\n⚡ Restauración automática al frente: Al abrir el acceso directo mientras corre en segundo plano, restaura la ventana existente\n⚙️ Selector de Acción al cerrar en Ajustes: Elige entre 'Minimizar a la bandeja' o 'Cerrar aplicación por completo' al presionar [X]\n🔔 Notificación informativa inicial al minimizar a la bandeja para evitar confusiones\n🚀 Sincronización oficial multi-plataforma",
   "android": {
-    "version": "2.0.7",
-    "version_code": 207,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.7/OmniVault-v2.0.7-Android.apk",
+    "version": "2.0.8",
+    "version_code": 208,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.8/OmniVault-v2.0.8-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.0.7",
-    "version_code": 207,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.7/OmniVault-v2.0.7-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.7/OmniVault-v2.0.7-Windows-x64-Portable.zip"
+    "version": "2.0.8",
+    "version_code": 208,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.8/OmniVault-v2.0.8-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.8/OmniVault-v2.0.8-Windows-x64-Portable.zip"
   }
 }
