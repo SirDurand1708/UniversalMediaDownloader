@@ -269,13 +269,20 @@ class QueueManager:
             task.status_text = "Iniciando descarga..."
             self._notify_update(task)
 
+            last_notify = 0.0
+
             def progress_cb(percent, speed, eta, msg):
+                nonlocal last_notify
                 if task.status != "cancelled" and self._running:
                     task.percent = percent
                     task.speed = speed
                     task.eta = eta
                     task.status_text = f"{int(percent * 100)}% - {speed} (Restante: {eta})"
-                    self._notify_update(task)
+                    now = time.monotonic()
+                    # Limitar actualizaciones a ~13 FPS para no saturar la cola de la interfaz gráfica
+                    if percent >= 1.0 or (now - last_notify >= 0.075):
+                        last_notify = now
+                        self._notify_update(task)
 
             def status_cb(text):
                 if task.status != "cancelled" and self._running:

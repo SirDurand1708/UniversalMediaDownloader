@@ -18,6 +18,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
+import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
@@ -131,10 +133,10 @@ class DownloadManager private constructor(private val context: Context) {
 
                 val body = response.body ?: throw Exception("Cuerpo de respuesta vacío")
                 val totalBytes = body.contentLength()
-                val inputStream = body.byteStream()
-                val outputStream = FileOutputStream(tempDownloadFile)
+                val inputStream = BufferedInputStream(body.byteStream(), 65536)
+                val outputStream = BufferedOutputStream(FileOutputStream(tempDownloadFile), 65536)
 
-                val buffer = ByteArray(16384)
+                val buffer = ByteArray(65536)
                 var bytesRead: Int
                 var totalRead = 0L
                 var lastTime = System.currentTimeMillis()

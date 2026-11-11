@@ -41,6 +41,14 @@ class HistoryAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         holder.bind(items[position])
+        holder.itemView.alpha = 0f
+        holder.itemView.translationY = 15f
+        holder.itemView.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .setDuration(160)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .start()
     }
 
     override fun getItemCount(): Int = items.size
@@ -52,9 +60,30 @@ class HistoryAdapter(
             binding.tvHistoryDate.text = dateFormat.format(Date(item.timestamp))
             binding.tvHistorySize.text = item.fileSizeFormatted
 
-            binding.btnPlay.setOnClickListener { onPlayClick(item) }
-            binding.btnShare.setOnClickListener { onShareClick(item) }
-            binding.btnDelete.setOnClickListener { onDeleteClick(item) }
+            binding.btnPlay.setOnClickListener { v ->
+                v.animate().scaleX(0.92f).scaleY(0.92f).setDuration(70).withEndAction {
+                    v.scaleX = 1f; v.scaleY = 1f
+                    onPlayClick(item)
+                }.start()
+            }
+            binding.btnShare.setOnClickListener { v ->
+                v.animate().scaleX(0.92f).scaleY(0.92f).setDuration(70).withEndAction {
+                    v.scaleX = 1f; v.scaleY = 1f
+                    onShareClick(item)
+                }.start()
+            }
+            binding.btnDelete.setOnClickListener { v ->
+                v.animate().scaleX(0.92f).scaleY(0.92f).setDuration(70).withEndAction {
+                    v.scaleX = 1f; v.scaleY = 1f
+                    onDeleteClick(item)
+                }.start()
+            }
+
+            fun applyCover(bitmap: android.graphics.Bitmap) {
+                binding.imgHistoryCover.alpha = 0f
+                binding.imgHistoryCover.setImageBitmap(bitmap)
+                binding.imgHistoryCover.animate().alpha(1f).setDuration(180).start()
+            }
 
             // Cargar carátula del contenido
             val thumb = item.thumbnailUrl
@@ -64,7 +93,7 @@ class HistoryAdapter(
                     try {
                         val bitmap = BitmapFactory.decodeFile(localFile.absolutePath)
                         if (bitmap != null) {
-                            binding.imgHistoryCover.setImageBitmap(bitmap)
+                            applyCover(bitmap)
                             return
                         }
                     } catch (_: Exception) {}
@@ -77,7 +106,7 @@ class HistoryAdapter(
                                     val bitmap = BitmapFactory.decodeStream(resp.body?.byteStream())
                                     withContext(Dispatchers.Main) {
                                         if (bitmap != null) {
-                                            binding.imgHistoryCover.setImageBitmap(bitmap)
+                                            applyCover(bitmap)
                                         }
                                     }
                                 }

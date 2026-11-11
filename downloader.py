@@ -70,11 +70,21 @@ def is_ffmpeg_available() -> bool:
     """Comprueba si FFmpeg está disponible y funcional."""
     return bool(FFMPEG_DIR or shutil.which("ffmpeg"))
 
-def _get_aria2c_path() -> Optional[str]:
-    """Busca aria2c en el PATH, carpeta del proyecto, subcarpeta bin o rutas comunes del usuario."""
+_ARIA2C_CACHED_PATH: Optional[str] = None
+_ARIA2C_CHECKED: bool = False
+
+def _get_aria2c_path(force_refresh: bool = False) -> Optional[str]:
+    """Busca aria2c en el PATH, carpeta del proyecto, subcarpeta bin o rutas comunes del usuario (con caché ultrarrápida)."""
+    global _ARIA2C_CACHED_PATH, _ARIA2C_CHECKED
+    if _ARIA2C_CHECKED and not force_refresh:
+        return _ARIA2C_CACHED_PATH
+
+    _ARIA2C_CHECKED = True
     found = shutil.which("aria2c")
     if found:
+        _ARIA2C_CACHED_PATH = found
         return found
+
     base_dir = get_app_dir()
     candidates = [
         os.path.join(base_dir, "bin", "aria2c.exe"),
@@ -85,6 +95,7 @@ def _get_aria2c_path() -> Optional[str]:
     ]
     if hasattr(sys, '_MEIPASS'):
         candidates.insert(0, os.path.join(sys._MEIPASS, "bin", "aria2c.exe"))
+
     docs_software = os.path.expanduser(r"~\Documents\Software")
     if os.path.isdir(docs_software):
         try:
@@ -100,7 +111,10 @@ def _get_aria2c_path() -> Optional[str]:
             aria_dir = os.path.dirname(os.path.abspath(c))
             if aria_dir not in os.environ.get("PATH", ""):
                 os.environ["PATH"] = aria_dir + os.pathsep + os.environ.get("PATH", "")
+            _ARIA2C_CACHED_PATH = c
             return c
+
+    _ARIA2C_CACHED_PATH = None
     return None
 
 def is_aria2c_available() -> bool:
@@ -179,9 +193,10 @@ def install_aria2(
         if test_run.returncode != 0:
             return False, "Aria2c se extrajo pero no pudo ser ejecutado en este sistema."
 
-        # Actualizar variable PATH en el proceso actual
+        # Actualizar variable PATH y caché en el proceso actual
         if bin_dir not in os.environ.get("PATH", ""):
             os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
+        _get_aria2c_path(force_refresh=True)
 
         first_line = test_run.stdout.splitlines()[0] if test_run.stdout else "Versión 1.37.0"
         return True, f"Aria2c instalado y activo ({first_line})."
@@ -195,14 +210,20 @@ def install_aria2(
             except Exception:
                 pass
 
+_CURL_CFFI_AVAILABLE: Optional[bool] = None
+
 def is_curl_cffi_available() -> bool:
-    """Comprueba si curl_cffi está presente y disponible para impersonación TLS."""
+    """Comprueba si curl_cffi está presente y disponible para impersonación TLS (con caché en memoria)."""
+    global _CURL_CFFI_AVAILABLE
+    if _CURL_CFFI_AVAILABLE is not None:
+        return _CURL_CFFI_AVAILABLE
     try:
         import curl_cffi
         from yt_dlp.networking.impersonate import ImpersonateTarget
-        return True
+        _CURL_CFFI_AVAILABLE = True
     except Exception:
-        return False
+        _CURL_CFFI_AVAILABLE = False
+    return _CURL_CFFI_AVAILABLE
 
 
 _DETECTED_GPU_ACCEL: Optional[str] = None
@@ -716,6 +737,12 @@ class DownloaderEngine:
             'nocheckcertificate': False,  # Verificación SSL activa por defecto
             'windowsfilenames': True,
             'js_runtimes': js_conf,
+            'concurrent_fragment_downloads': 5,
+            'buffersize': 1048576,
+            'http_chunk_size': 10485760,
+            'retries': 5,
+            'fragment_retries': 5,
+            'socket_timeout': 15,
         }
 
         # Aceleración de red con aria2c si está disponible
@@ -723,7 +750,16 @@ class DownloaderEngine:
             aria_path = _get_aria2c_path()
             opts['external_downloader'] = aria_path or 'aria2c'
             opts['external_downloader_args'] = {
-                'aria2c': ['-s', '8', '-x', '8', '-k', '1M', '-j', '4', '--file-allocation=none']
+                'aria2c': [
+                    '-s', '16',
+                    '-x', '16',
+                    '-k', '1M',
+                    '-j', '4',
+                    '--min-split-size=1M',
+                    '--file-allocation=none',
+                    '--max-connection-per-server=16',
+                    '--summary-interval=0'
+                ]
             }
 
         # Soporte de impersonate solo si curl_cffi está realmente instalado y operativo
@@ -1011,6 +1047,7 @@ class DownloaderEngine:
         })
 
         start_time = time.time()
+        last_cb_time = 0.0
         try:
             with urllib.request.urlopen(req, timeout=20) as resp:
                 total_bytes = int(resp.headers.get('content-length', 0))
@@ -1021,25 +1058,27 @@ class DownloaderEngine:
                         if self.is_cancelled(task_id):
                             raise Exception("Descarga cancelada por el usuario.")
 
-                        chunk = resp.read(65536)
+                        chunk = resp.read(262144)  # Buffer de 256KB para máxima tasa de transferencia
                         if not chunk:
                             break
                         out_f.write(chunk)
                         downloaded_bytes += len(chunk)
 
-                        elapsed = max(time.time() - start_time, 0.001)
-                        speed_bps = downloaded_bytes / elapsed
-                        speed_str = f"{speed_bps / (1024 * 1024):.1f} MB/s"
+                        now = time.monotonic()
+                        if progress_callback and (now - last_cb_time >= 0.08 or (total_bytes > 0 and downloaded_bytes >= total_bytes)):
+                            last_cb_time = now
+                            elapsed = max(time.time() - start_time, 0.001)
+                            speed_bps = downloaded_bytes / elapsed
+                            speed_str = f"{speed_bps / (1024 * 1024):.1f} MB/s"
 
-                        percent = (downloaded_bytes / total_bytes) if total_bytes > 0 else 0.5
-                        if total_bytes > 0:
-                            rem_bytes = max(total_bytes - downloaded_bytes, 0)
-                            rem_sec = int(rem_bytes / max(speed_bps, 1))
-                            eta_str = f"{rem_sec}s"
-                        else:
-                            eta_str = "--"
+                            percent = (downloaded_bytes / total_bytes) if total_bytes > 0 else 0.5
+                            if total_bytes > 0:
+                                rem_bytes = max(total_bytes - downloaded_bytes, 0)
+                                rem_sec = int(rem_bytes / max(speed_bps, 1))
+                                eta_str = f"{rem_sec}s"
+                            else:
+                                eta_str = "--"
 
-                        if progress_callback:
                             progress_callback(percent, speed_str, eta_str, f"{int(percent * 100)}%")
 
             if progress_callback:
@@ -1167,14 +1206,23 @@ class DownloaderEngine:
                 "Coloca ffmpeg.exe en la carpeta de la app o instálalo en tu sistema."
             )
 
+        last_hook_time = 0.0
+
         def hook(d):
+            nonlocal last_hook_time
             if self.is_cancelled(task_id):
                 raise Exception("Descarga cancelada por el usuario.")
 
             status = d.get('status')
             if status == 'downloading':
+                now = time.monotonic()
                 total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate') or 0
                 downloaded_bytes = d.get('downloaded_bytes', 0)
+                is_done = total_bytes > 0 and downloaded_bytes >= total_bytes
+
+                if not is_done and (now - last_hook_time < 0.075):
+                    return
+                last_hook_time = now
 
                 percent = 0.0
                 if total_bytes > 0:

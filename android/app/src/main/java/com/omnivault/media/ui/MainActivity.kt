@@ -189,6 +189,7 @@ class MainActivity : AppCompatActivity() {
 
         // Paste Button
         binding.btnPasteUrl.setOnClickListener {
+            it.bounce()
             val clipMgr = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = clipMgr.primaryClip
             if (clip != null && clip.itemCount > 0) {
@@ -206,6 +207,7 @@ class MainActivity : AppCompatActivity() {
 
         // Analyze Button
         binding.btnAnalyzeUrl.setOnClickListener {
+            it.bounce()
             val raw = binding.etUrlInput.text.toString().trim()
             val extracted = UrlUtils.extractUrlFromText(raw) ?: raw
             if (extracted.isNotBlank()) {
@@ -217,8 +219,9 @@ class MainActivity : AppCompatActivity() {
 
         // Clear Button
         binding.btnClearUrl.setOnClickListener {
+            it.bounce()
             binding.etUrlInput.setText("")
-            binding.cardPreview.visibility = View.GONE
+            hideCardPreview()
         }
 
         // TextWatcher
@@ -245,6 +248,7 @@ class MainActivity : AppCompatActivity() {
 
         // Start Download Button (Soporta canciones individuales y Álbumes/Playlists completos de YouTube)
         binding.btnStartDownload.setOnClickListener {
+            it.bounce()
             val url = binding.etUrlInput.text.toString().trim()
             val extracted = UrlUtils.extractUrlFromText(url) ?: url
 
@@ -263,13 +267,13 @@ class MainActivity : AppCompatActivity() {
                                 MediaDownloadService.startDownload(this@MainActivity, vUrl, selectedFormat)
                             }
                             binding.etUrlInput.setText("")
-                            binding.cardPreview.visibility = View.GONE
+                            hideCardPreview()
                             Toast.makeText(this@MainActivity, "✦ Álbum añadido: ${videoUrls.size} canciones en descarga (${selectedFormat.extension.uppercase()})", Toast.LENGTH_LONG).show()
                             refreshLists()
                         } else {
                             MediaDownloadService.startDownload(this@MainActivity, extracted, selectedFormat)
                             binding.etUrlInput.setText("")
-                            binding.cardPreview.visibility = View.GONE
+                            hideCardPreview()
                             Toast.makeText(this@MainActivity, "✦ Descarga añadida a la cola", Toast.LENGTH_SHORT).show()
                             refreshLists()
                         }
@@ -280,7 +284,7 @@ class MainActivity : AppCompatActivity() {
 
             MediaDownloadService.startDownload(this, extracted, selectedFormat)
             binding.etUrlInput.setText("")
-            binding.cardPreview.visibility = View.GONE
+            hideCardPreview()
             Toast.makeText(this, "✦ OmniVault: Descarga añadida a la cola (${selectedFormat.extension.uppercase()})", Toast.LENGTH_SHORT).show()
             refreshLists()
         }
@@ -385,7 +389,7 @@ class MainActivity : AppCompatActivity() {
                         binding.tvPreviewDuration.visibility = View.GONE
                     }
 
-                    binding.cardPreview.visibility = View.VISIBLE
+                    showCardPreview()
                     loadThumbnailImage(preview.thumbnailUrl)
                 }
             } catch (e: Exception) {
@@ -413,7 +417,9 @@ class MainActivity : AppCompatActivity() {
                         val bitmap = BitmapFactory.decodeStream(stream)
                         if (bitmap != null) {
                             withContext(Dispatchers.Main) {
+                                binding.imgPreviewThumbnail.alpha = 0f
                                 binding.imgPreviewThumbnail.setImageBitmap(bitmap)
+                                binding.imgPreviewThumbnail.animate().alpha(1f).setDuration(180).start()
                             }
                         }
                     }
@@ -809,5 +815,39 @@ class MainActivity : AppCompatActivity() {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         startActivity(Intent.createChooser(intent, "Compartir con"))
+    }
+
+    private fun showCardPreview() {
+        binding.cardPreview.alpha = 0f
+        binding.cardPreview.translationY = 15f
+        binding.cardPreview.visibility = View.VISIBLE
+        binding.cardPreview.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .setDuration(220)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .start()
+    }
+
+    private fun hideCardPreview() {
+        if (binding.cardPreview.visibility == View.VISIBLE) {
+            binding.cardPreview.animate()
+                .alpha(0f)
+                .translationY(-10f)
+                .setDuration(160)
+                .withEndAction {
+                    binding.cardPreview.visibility = View.GONE
+                    binding.cardPreview.alpha = 1f
+                    binding.cardPreview.translationY = 0f
+                }.start()
+        } else {
+            binding.cardPreview.visibility = View.GONE
+        }
+    }
+
+    private fun View.bounce() {
+        animate().scaleX(0.93f).scaleY(0.93f).setDuration(70).withEndAction {
+            animate().scaleX(1f).scaleY(1f).setDuration(70).start()
+        }.start()
     }
 }

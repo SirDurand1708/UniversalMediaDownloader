@@ -21,7 +21,7 @@ def notify_running_instance(port: int = SINGLE_INSTANCE_PORT) -> bool:
     """
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client.settimeout(0.6)
+        client.settimeout(0.25)
         client.connect(("127.0.0.1", port))
         client.sendall(b"RESTORE\n")
         try:

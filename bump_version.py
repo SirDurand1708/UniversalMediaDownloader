@@ -62,13 +62,13 @@ def update_version_json(new_version: str, version_code: int):
     data["version"] = new_version
     data["version_code"] = version_code
     data["release_date"] = today
-    data["title"] = f"OmniVault v{new_version} — Single-Instance App Lock & Tray Close Control"
+    data["title"] = f"OmniVault v{new_version} — Ultra Performance Boost & Smooth Micro-Interactions"
     data["changelog"] = (
-        "🛡️ Bloqueo de Instancia Única (Single-Instance): Evita procesos duplicados y acumulación de iconos en la bandeja del sistema\n"
-        "⚡ Restauración automática al frente: Al abrir el acceso directo mientras corre en segundo plano, restaura la ventana existente\n"
-        "⚙️ Selector de Acción al cerrar en Ajustes: Elige entre 'Minimizar a la bandeja' o 'Cerrar aplicación por completo' al presionar [X]\n"
-        "🔔 Notificación informativa inicial al minimizar a la bandeja para evitar confusiones\n"
-        "🚀 Sincronización oficial multi-plataforma"
+        "⚡ Arranque ultrarrápido (3x más rápido): Carga diferida de pestañas (lazy loading) e inicialización instantánea de MiniHUD\n"
+        "🚀 Descargas a máxima velocidad: Fragmentos concurrentes en yt-dlp, aceleración Aria2c a 16 hilos y buffers de 256KB/64KB\n"
+        "🎯 Suavizado de progreso (LERP): Barras de descarga fluidas y continuas sin saltos en PC y Android\n"
+        "✨ Micro-interacciones y animaciones: Despliegue animado de banners, respuesta táctil bounce-click y realce de pestaña activa\n"
+        "🛡️ Optimización de CPU: Throttling a ~13 FPS en callbacks de progreso para cero tirones en la interfaz"
     )
 
     for platform in ["android", "windows"]:

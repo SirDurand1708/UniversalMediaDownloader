@@ -170,6 +170,8 @@ class OmniVaultApp(ctk.CTk):
         self.search_results = []
         self.search_check_vars = []
         self.selected_format = ctk.StringVar(value=self.config.get("default_format", "mp3_320"))
+        self.task_ui_cards: dict = {}
+        self._last_dl_btn_text = ""
 
         # Detección inteligente de portapapeles y actualizaciones
         self._last_detected_clipboard = ""
@@ -186,7 +188,8 @@ class OmniVaultApp(ctk.CTk):
         # Ciclo de actualización de timeline del reproductor
         self.after(500, self._update_player_loop)
 
-        # Iniciar monitoreo del portapapeles si está activado
+        # Iniciar monitoreo del portapapeles y precarga progresiva
+        self.after(600, self._lazy_preload_views)
         self.after(1500, self._check_clipboard_loop)
         self.after(3500, self._check_updates_startup)
 
@@ -435,26 +438,66 @@ class OmniVaultApp(ctk.CTk):
         self.main_container.grid_rowconfigure(0, weight=1)
         self.main_container.grid_columnconfigure(0, weight=1)
 
+        # Vistas dinámicas con inicialización diferida (Lazy Loading) para arranque instantáneo
+        self._view_builders = {
+            "explore": self._create_explore_view,
+            "downloads": self._create_downloads_view,
+            "library": self._create_library_view,
+            "converter": self._create_converter_view,
+            "subscriptions": self._create_subscriptions_view,
+            "settings": self._create_settings_view,
+        }
+        # Solo inicializar la pestaña de aterrizaje (explore) en el arranque
         self.views = {
-            "explore": self._create_explore_view(),
-            "downloads": self._create_downloads_view(),
-            "library": self._create_library_view(),
-            "converter": self._create_converter_view(),
-            "subscriptions": self._create_subscriptions_view(),
-            "settings": self._create_settings_view(),
+            "explore": self._create_explore_view()
         }
 
         # Mini-Reproductor integrado en el pie de página
         self.player_frame = self._create_player_bar()
 
+    def _get_or_create_view(self, tab_id: str):
+        """Devuelve la vista de la pestaña solicitada, creándola bajo demanda si aún no existe."""
+        if tab_id not in self.views and tab_id in self._view_builders:
+            try:
+                self.views[tab_id] = self._view_builders[tab_id]()
+            except Exception as e:
+                print(f"Error creando vista {tab_id}: {e}")
+        return self.views.get(tab_id)
+
+    def _lazy_preload_views(self):
+        """Pre-construye las demás pestañas de forma escalonada e imperceptible en segundo plano."""
+        pending = [t for t in ["downloads", "library", "converter", "subscriptions", "settings"] if t not in self.views]
+        if not pending:
+            return
+
+        target_tab = pending[0]
+        self._get_or_create_view(target_tab)
+
+        if len(pending) > 1:
+            self.after(90, self._lazy_preload_views)
+
     def _select_tab(self, tab_id: str):
-        for t_id, view in self.views.items():
+        target_view = self._get_or_create_view(tab_id)
+
+        for t_id, btn in self.nav_btns.items():
+            view = self.views.get(t_id)
             if t_id == tab_id:
-                view.grid(row=0, column=0, sticky="nsew")
-                self.nav_btns[t_id].configure(fg_color=theme.BG_CARD, text_color=theme.TEXT_PRIMARY)
+                if view:
+                    view.grid(row=0, column=0, sticky="nsew")
+                btn.configure(
+                    fg_color=theme.BG_CARD,
+                    text_color=self.theme_accent.get("text_accent", theme.TEXT_PRIMARY),
+                    border_width=1,
+                    border_color=self.theme_accent.get("primary", theme.BORDER_COLOR)
+                )
             else:
-                view.grid_forget()
-                self.nav_btns[t_id].configure(fg_color="transparent", text_color=theme.TEXT_SECONDARY)
+                if view:
+                    view.grid_forget()
+                btn.configure(
+                    fg_color="transparent",
+                    text_color=theme.TEXT_SECONDARY,
+                    border_width=0
+                )
 
         if tab_id == "library":
             self._refresh_library_list()
@@ -462,6 +505,82 @@ class OmniVaultApp(ctk.CTk):
             self._refresh_downloads_list()
         elif tab_id == "subscriptions":
             self._refresh_subscriptions_list()
+
+    def _animate_pack_in(self, widget, target_pad=8, steps=4, delay_ms=16):
+        """Despliegue vertical suave para notificaciones y banners (micro-animación fluida)."""
+        widget.pack(fill="x", pady=(0, 1))
+        def _step(cur):
+            if cur > steps:
+                try: widget.pack_configure(pady=(0, target_pad))
+                except Exception: pass
+                return
+            pad = max(1, int(target_pad * (cur / steps)))
+            try: widget.pack_configure(pady=(0, pad))
+            except Exception: pass
+            self.after(delay_ms, lambda: _step(cur + 1))
+        _step(1)
+
+    def _animate_pack_out(self, widget, callback=None, target_pad=8, steps=3, delay_ms=15):
+        """Desvanecimiento y cierre suave de banner."""
+        def _step(cur):
+            if cur <= 0:
+                try: widget.pack_forget()
+                except Exception: pass
+                if callback:
+                    callback()
+                return
+            pad = int(target_pad * (cur / steps))
+            try: widget.pack_configure(pady=(0, pad))
+            except Exception: pass
+            self.after(delay_ms, lambda: _step(cur - 1))
+        _step(steps)
+
+    def _flash_button_feedback(self, btn, flash_text=None, original_text=None, duration_ms=180):
+        """Micro-interacción táctil: confirmación visual inmediata al pulsar un botón clave."""
+        if not btn:
+            return
+        orig_text = original_text or btn.cget("text")
+        orig_fg = btn.cget("fg_color")
+        highlight = self.theme_accent.get("hover", theme.BTN_PRIMARY_HOVER)
+
+        try:
+            if flash_text:
+                btn.configure(text=flash_text, fg_color=highlight)
+            else:
+                btn.configure(fg_color=highlight)
+        except Exception:
+            return
+
+        def _restore():
+            try:
+                btn.configure(text=orig_text, fg_color=orig_fg)
+            except Exception:
+                pass
+
+        self.after(duration_ms, _restore)
+
+    def _smooth_progress_bar(self, p_bar, target_val, ui_dict):
+        """Interpola suavemente el progreso de descarga para evitar saltos bruscos."""
+        curr = ui_dict.get("current_animated_val", target_val)
+        diff = target_val - curr
+
+        if abs(diff) < 0.008 or target_val >= 1.0 or target_val <= 0.0:
+            ui_dict["current_animated_val"] = target_val
+            p_bar.set(target_val)
+            return
+
+        step = diff / 3.0
+        def _lerp(count):
+            if count <= 0:
+                ui_dict["current_animated_val"] = target_val
+                p_bar.set(target_val)
+                return
+            new_v = ui_dict.get("current_animated_val", curr) + step
+            ui_dict["current_animated_val"] = new_v
+            p_bar.set(new_v)
+            self.after(18, lambda: _lerp(count - 1))
+
+        _lerp(3)
 
     def _show_explore(self): self._select_tab("explore")
     def _show_downloads(self): self._select_tab("downloads")
@@ -626,8 +745,9 @@ class OmniVaultApp(ctk.CTk):
                     self._last_detected_clipboard = clip
                     short_display = clip if len(clip) <= 45 else clip[:42] + "..."
                     self.clipboard_lbl.configure(text=f"📋 Enlace detectado: {short_display}")
-                    self.clipboard_banner.pack(fill="x", pady=(0, 8))
-                    self._clipboard_banner_visible = True
+                    if not self._clipboard_banner_visible:
+                        self._animate_pack_in(self.clipboard_banner, target_pad=8)
+                        self._clipboard_banner_visible = True
         except Exception:
             pass
         finally:
@@ -641,20 +761,21 @@ class OmniVaultApp(ctk.CTk):
             self._on_search_submit()
 
     def _dismiss_clipboard_banner(self):
-        self.clipboard_banner.pack_forget()
-        self._clipboard_banner_visible = False
+        if self._clipboard_banner_visible:
+            self._animate_pack_out(self.clipboard_banner, callback=lambda: setattr(self, '_clipboard_banner_visible', False))
 
     def _show_update_banner(self, data: dict):
         """Muestra el banner superior notificando que hay una nueva versión."""
         self._latest_update_data = data
         remote_v = data.get("version", "2.0.7")
         self.update_banner_lbl.configure(text=f"🚀 ¡Nueva versión OmniVault v{remote_v} disponible! Optimizaciones y nuevas funciones listas.")
-        self.update_banner.pack(fill="x", pady=(0, 8))
-        self._update_banner_visible = True
+        if not self._update_banner_visible:
+            self._animate_pack_in(self.update_banner, target_pad=8)
+            self._update_banner_visible = True
 
     def _dismiss_update_banner(self):
-        self.update_banner.pack_forget()
-        self._update_banner_visible = False
+        if self._update_banner_visible:
+            self._animate_pack_out(self.update_banner, callback=lambda: setattr(self, '_update_banner_visible', False))
 
     def _on_update_banner_clicked(self):
         if hasattr(self, "_latest_update_data") and self._latest_update_data:
@@ -1236,6 +1357,8 @@ class OmniVaultApp(ctk.CTk):
         return view
 
     def _refresh_downloads_list(self):
+        if not hasattr(self, "downloads_scroll"):
+            return
         tasks = self.queue_manager.get_all_tasks()
         for widget in self.downloads_scroll.winfo_children():
             widget.destroy()
@@ -1295,11 +1418,13 @@ class OmniVaultApp(ctk.CTk):
         def _apply():
             active_count = len(self.queue_manager.get_active_tasks())
             btn_text = f"📥  Descargas ({active_count})" if active_count > 0 else "📥  Descargas"
-            self.nav_btns["downloads"].configure(text=btn_text)
+            if getattr(self, "_last_dl_btn_text", None) != btn_text:
+                self._last_dl_btn_text = btn_text
+                self.nav_btns["downloads"].configure(text=btn_text)
 
-            if task.id in self.task_ui_cards:
+            if hasattr(self, "task_ui_cards") and task.id in self.task_ui_cards:
                 ui = self.task_ui_cards[task.id]
-                ui["progress_bar"].set(task.percent)
+                self._smooth_progress_bar(ui["progress_bar"], task.percent, ui)
                 ui["status_label"].configure(text=task.status_text)
                 if task.status in ["completed"]:
                     ui["cancel_btn"].pack_forget()
@@ -1367,6 +1492,8 @@ class OmniVaultApp(ctk.CTk):
         return view
 
     def _refresh_library_list(self):
+        if not hasattr(self, "library_scroll"):
+            return
         for widget in self.library_scroll.winfo_children():
             widget.destroy()
 
@@ -1906,6 +2033,8 @@ class OmniVaultApp(ctk.CTk):
         return view
 
     def _refresh_subscriptions_list(self):
+        if not hasattr(self, "subs_scroll"):
+            return
         for w in self.subs_scroll.winfo_children():
             w.destroy()
 

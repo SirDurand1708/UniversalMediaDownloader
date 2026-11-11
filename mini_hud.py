@@ -14,7 +14,7 @@ import theme
 from downloader import is_url, normalize_url
 
 
-class MiniHUD(ctk.CTkToplevel):
+class MiniHUD:
     def __init__(
         self,
         master,
@@ -23,40 +23,42 @@ class MiniHUD(ctk.CTkToplevel):
         config_manager,
         on_restore_callback: Optional[Callable[[], None]] = None
     ):
-        super().__init__(master)
+        self.master = master
         self.queue_manager = queue_manager
         self.audio_player = audio_player
         self.config = config_manager
         self.on_restore_callback = on_restore_callback
 
+        self._window: Optional[ctk.CTkToplevel] = None
         self._drag_start_x = 0
         self._drag_start_y = 0
         self._is_visible = False
+        self._loop_scheduled = False
 
-        # Configuración de ventana sin marco y siempre visible al frente
-        self.overrideredirect(True)
-        self.attributes("-topmost", True)
-        self.configure(fg_color=theme.BG_SIDEBAR)
+    def _ensure_window(self):
+        """Inicializa la ventana flotante de forma diferida (lazy) para arranque instantáneo."""
+        if self._window is not None:
+            return
 
-        # Dimensiones y posición inicial (esquina inferior derecha de la pantalla)
-        screen_w = self.winfo_screenwidth()
-        screen_h = self.winfo_screenheight()
+        self._window = ctk.CTkToplevel(self.master)
+        self._window.overrideredirect(True)
+        self._window.attributes("-topmost", True)
+        self._window.configure(fg_color=theme.BG_SIDEBAR)
+
+        screen_w = self._window.winfo_screenwidth()
+        screen_h = self._window.winfo_screenheight()
         width = 440
         height = 135
         pos_x = max(20, screen_w - width - 40)
         pos_y = max(20, screen_h - height - 80)
-        self.geometry(f"{width}x{height}+{pos_x}+{pos_y}")
+        self._window.geometry(f"{width}x{height}+{pos_x}+{pos_y}")
 
         self._build_ui()
-        self.withdraw()  # Inicia oculto hasta que se invoque
-
-        # Bucle de refresco en tiempo real
-        self.after(500, self._refresh_loop)
 
     def _build_ui(self):
         # Marco principal contenedor con borde elegante
         self.outer_frame = ctk.CTkFrame(
-            self,
+            self._window,
             fg_color=theme.BG_CARD,
             corner_radius=theme.CORNER_RADIUS,
             border_width=1,
@@ -181,19 +183,26 @@ class MiniHUD(ctk.CTkToplevel):
         self._drag_start_y = event.y
 
     def _on_drag(self, event):
-        x = self.winfo_x() - self._drag_start_x + event.x
-        y = self.winfo_y() - self._drag_start_y + event.y
-        self.geometry(f"+{x}+{y}")
+        if not self._window:
+            return
+        x = self._window.winfo_x() - self._drag_start_x + event.x
+        y = self._window.winfo_y() - self._drag_start_y + event.y
+        self._window.geometry(f"+{x}+{y}")
 
     def show_hud(self):
+        self._ensure_window()
         self._is_visible = True
-        self.deiconify()
-        self.lift()
-        self.attributes("-topmost", True)
+        self._window.deiconify()
+        self._window.lift()
+        self._window.attributes("-topmost", True)
+        if not self._loop_scheduled:
+            self._loop_scheduled = True
+            self.master.after(500, self._refresh_loop)
 
     def hide_hud(self):
         self._is_visible = False
-        self.withdraw()
+        if self._window:
+            self._window.withdraw()
 
     def toggle_hud(self):
         if self._is_visible:
@@ -234,9 +243,30 @@ class MiniHUD(ctk.CTkToplevel):
         except Exception as e:
             self.substatus_lbl.configure(text=f"✖ Error: {str(e)[:45]}", text_color=theme.STATUS_ERROR)
 
+    def _smooth_hud_progress(self, target_val):
+        """Interpola suavemente la barra de progreso en el HUD."""
+        curr = getattr(self, "_current_hud_val", target_val)
+        diff = target_val - curr
+        if abs(diff) < 0.01 or target_val >= 1.0 or target_val <= 0.0:
+            self._current_hud_val = target_val
+            self.progress_bar.set(target_val)
+            return
+
+        step = diff / 3.0
+        def _lerp(count):
+            if count <= 0 or not self._is_visible or not self._window:
+                self._current_hud_val = target_val
+                self.progress_bar.set(target_val)
+                return
+            new_v = getattr(self, "_current_hud_val", curr) + step
+            self._current_hud_val = new_v
+            self.progress_bar.set(new_v)
+            self.master.after(20, lambda: _lerp(count - 1))
+        _lerp(3)
+
     def _refresh_loop(self):
-        if not self._is_visible:
-            self.after(800, self._refresh_loop)
+        if not self._is_visible or not self._window:
+            self._loop_scheduled = False
             return
 
         try:
@@ -252,7 +282,7 @@ class MiniHUD(ctk.CTkToplevel):
                 speed = first.speed if first.speed and first.speed != "--" else "Descargando..."
                 pct = first.percent
                 self.speed_badge.configure(text=f"⚡ {speed}", text_color=theme.ACCENT_CYAN)
-                self.progress_bar.set(pct)
+                self._smooth_hud_progress(pct)
 
                 title_clean = first.title[:38] + ("..." if len(first.title) > 38 else "")
                 pending_count = len(active_tasks) + len(queued)
@@ -275,7 +305,10 @@ class MiniHUD(ctk.CTkToplevel):
                 if not self.quick_entry.get():
                     self.substatus_lbl.configure(text="Listo para descargar cualquier enlace", text_color=theme.TEXT_MUTED)
 
-        except Exception as e:
+        except Exception:
             pass
 
-        self.after(500, self._refresh_loop)
+        if self._is_visible:
+            self.master.after(500, self._refresh_loop)
+        else:
+            self._loop_scheduled = False
