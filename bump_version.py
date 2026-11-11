@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
 """
-bump_version.py — Script de incremento automático de versión para OmniVault.
+bump_version.py — Script de incremento de versión independiente o conjunto para OmniVault.
 
 Uso:
-    python bump_version.py           # incrementa el patch (2.0.3 -> 2.0.4)
-    python bump_version.py --minor   # incrementa el minor (2.0.x -> 2.1.0)
-    python bump_version.py --major   # incrementa el major (2.x.x -> 3.0.0)
-    python bump_version.py --set 2.1.5  # establece una versión específica
-
-Actualiza automáticamente:
-    - version.json
-    - android/app/build.gradle (versionCode y versionName)
-    - android/app/src/main/java/.../utils/UpdateManager.kt
-    - updater.py (escritorio)
+    python bump_version.py                  # incrementa patch global (ambas plataformas)
+    python bump_version.py --android        # incrementa patch SOLO para Android APK
+    python bump_version.py --windows        # incrementa patch SOLO para Windows PC
+    python bump_version.py --minor          # incrementa minor (2.1.x -> 2.2.0)
+    python bump_version.py --major          # incrementa major (2.x.x -> 3.0.0)
+    python bump_version.py --set 2.1.5      # establece versión específica
+    python bump_version.py --status         # consulta las versiones actuales de PC y Android
 """
 
 import json
@@ -53,36 +50,29 @@ def bump(current: str, mode: str) -> str:
         return f"{major}.{minor}.{patch + 1}"
 
 
-def update_version_json(new_version: str, version_code: int):
+def update_version_json(new_version: str, version_code: int, platform: str = "all"):
     path = os.path.join(ROOT, "version.json")
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     today = datetime.date.today().isoformat()
-    data["version"] = new_version
-    data["version_code"] = version_code
     data["release_date"] = today
-    data["title"] = f"OmniVault v{new_version} — Ultra Performance Boost & Smooth Micro-Interactions"
-    data["changelog"] = (
-        "⚡ Arranque ultrarrápido (3x más rápido): Carga diferida de pestañas (lazy loading) e inicialización instantánea de MiniHUD\n"
-        "🚀 Descargas a máxima velocidad: Fragmentos concurrentes en yt-dlp, aceleración Aria2c a 16 hilos y buffers de 256KB/64KB\n"
-        "🎯 Suavizado de progreso (LERP): Barras de descarga fluidas y continuas sin saltos en PC y Android\n"
-        "✨ Micro-interacciones y animaciones: Despliegue animado de banners, respuesta táctil bounce-click y realce de pestaña activa\n"
-        "🛡️ Optimización de CPU: Throttling a ~13 FPS en callbacks de progreso para cero tirones en la interfaz"
-    )
 
-    for platform in ["android", "windows"]:
-        if platform in data:
-            data[platform]["version"] = new_version
-            data[platform]["version_code"] = version_code
-
-    if "android" in data:
+    if platform in ("android", "all"):
+        if "android" not in data:
+            data["android"] = {}
+        data["android"]["version"] = new_version
+        data["android"]["version_code"] = version_code
         data["android"]["apk_url"] = (
             f"https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/"
             f"v{new_version}/OmniVault-v{new_version}-Android.apk"
         )
 
-    if "windows" in data:
+    if platform in ("windows", "all"):
+        if "windows" not in data:
+            data["windows"] = {}
+        data["windows"]["version"] = new_version
+        data["windows"]["version_code"] = version_code
         base = (
             f"https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/"
             f"v{new_version}"
@@ -90,9 +80,25 @@ def update_version_json(new_version: str, version_code: int):
         data["windows"]["setup_url"] = f"{base}/OmniVault-v{new_version}-Windows-x64-Setup.exe"
         data["windows"]["portable_url"] = f"{base}/OmniVault-v{new_version}-Windows-x64-Portable.zip"
 
+    win_v = data.get("windows", {}).get("version", "0.0.0")
+    and_v = data.get("android", {}).get("version", "0.0.0")
+    max_v = new_version
+    try:
+        from updater import is_newer_version
+        if is_newer_version(win_v, max_v):
+            max_v = win_v
+        if is_newer_version(and_v, max_v):
+            max_v = and_v
+    except Exception:
+        pass
+
+    data["version"] = max_v
+    data["version_code"] = version_code
+    data["title"] = f"OmniVault v{max_v} — Windows PC & Android"
+
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
-    print(f"  [OK] version.json actualizado -> {new_version}")
+    print(f"  [OK] version.json actualizado -> {new_version} (plataforma: {platform})")
 
 
 def update_build_gradle(new_version: str, version_code: int):
@@ -183,14 +189,45 @@ def update_package_release(new_version: str):
     print(f"  [OK] package_release.py actualizado -> {new_version}")
 
 
+def print_status():
+    version_json_path = os.path.join(ROOT, "version.json")
+    with open(version_json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    print("\n" + "=" * 65)
+    print("✦ ESTADO DE VERSIONES DE OMNIVAULT (Desktop & Android)")
+    print("=" * 65)
+    print(f"  Tag de Release Global : v{data.get('version', 'N/A')}")
+    print(f"  💻 Windows PC        : v{data.get('windows', {}).get('version', 'N/A')} (código: {data.get('windows', {}).get('version_code', 'N/A')})")
+    print(f"  📱 Android APK       : v{data.get('android', {}).get('version', 'N/A')} (código: {data.get('android', {}).get('version_code', 'N/A')})")
+    print("=" * 65 + "\n")
+
+
 def main():
     args = sys.argv[1:]
+
+    if "--status" in args or "-s" in args:
+        print_status()
+        return
 
     # Leer versión actual desde version.json
     version_json_path = os.path.join(ROOT, "version.json")
     with open(version_json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    current = data.get("version", "2.0.0")
+
+    # Determinar plataforma objetivo
+    target_platform = "all"
+    if "--android" in args or ("--platform" in args and args[args.index("--platform") + 1].lower() == "android"):
+        target_platform = "android"
+    elif "--windows" in args or ("--platform" in args and args[args.index("--platform") + 1].lower() == "windows"):
+        target_platform = "windows"
+
+    # Seleccionar la versión base correspondiente
+    if target_platform == "android":
+        current = data.get("android", {}).get("version") or data.get("version", "2.0.0")
+    elif target_platform == "windows":
+        current = data.get("windows", {}).get("version") or data.get("version", "2.0.0")
+    else:
+        current = data.get("version", "2.0.0")
 
     # Determinar nueva versión
     if "--set" in args:
@@ -206,23 +243,27 @@ def main():
     major, minor, patch = parse_version(new_version)
     version_code = version_to_code(major, minor, patch)
 
-    print(f"\n[*] OmniVault Version Bump")
+    print(f"\n[*] OmniVault Version Bump [Plataforma: {target_platform.upper()}]")
     print(f"    {current}  ->  {new_version}  (code: {version_code})\n")
 
-    update_version_json(new_version, version_code)
-    update_build_gradle(new_version, version_code)
-    update_manager_kt(new_version, version_code)
-    update_updater_py(new_version)
-    update_installer_iss(new_version)
-    update_package_release(new_version)
+    update_version_json(new_version, version_code, platform=target_platform)
 
-    print(f"\n[OK] Todos los archivos actualizados exitosamente a v{new_version}")
+    if target_platform in ("android", "all"):
+        update_build_gradle(new_version, version_code)
+        update_manager_kt(new_version, version_code)
+
+    if target_platform in ("windows", "all"):
+        update_updater_py(new_version)
+        update_installer_iss(new_version)
+        update_package_release(new_version)
+
+    print(f"\n[OK] Archivos de {target_platform.upper()} actualizados exitosamente a v{new_version}")
     print(f"\nProximos pasos:")
     print(f"  git add -A")
-    print(f"  git commit -m \"chore: bump version to v{new_version}\"")
+    print(f"  git commit -m \"chore({target_platform}): bump version to v{new_version}\"")
     print(f"  git tag v{new_version}")
     print(f"  git push origin main --tags")
-    print(f"\nEl CI/CD de GitHub Actions compilara y publicara la release automaticamente.\n")
+    print(f"\nEl CI/CD de GitHub Actions detectara y publicara la release automaticamente.\n")
 
 
 if __name__ == "__main__":

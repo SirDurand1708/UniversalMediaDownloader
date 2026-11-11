@@ -74,9 +74,9 @@ object UpdateManager {
                     val remoteVersion = androidObj.get("version")?.asString ?: "2.0.0"
                     val remoteVersionCode = androidObj.get("version_code")?.asInt ?: 200
                     val apkUrl = androidObj.get("apk_url")?.asString ?: ""
-                    val title = root.get("title")?.asString ?: "OmniVault Update"
-                    val releaseDate = root.get("release_date")?.asString ?: ""
-                    val changelog = root.get("changelog")?.asString ?: "Mejoras de rendimiento y corrección de errores."
+                    val title = if (androidObj.has("title")) androidObj.get("title").asString else (root.get("title")?.asString ?: "OmniVault Update")
+                    val releaseDate = if (androidObj.has("release_date")) androidObj.get("release_date").asString else (root.get("release_date")?.asString ?: "")
+                    val changelog = if (androidObj.has("changelog")) androidObj.get("changelog").asString else (root.get("changelog")?.asString ?: "Mejoras de rendimiento y corrección de errores.")
 
                     val updateInfo = UpdateInfo(
                         version = remoteVersion,
@@ -87,15 +87,22 @@ object UpdateManager {
                         apkUrl = apkUrl
                     )
 
-                    val isNewer = remoteVersionCode > CURRENT_VERSION_CODE || isSemverNewer(remoteVersion, CURRENT_VERSION_NAME)
+                    // Verificación estricta: sólo considerar actualización si es superior Y existe URL válida de APK
+                    val hasNewerVersion = remoteVersionCode > CURRENT_VERSION_CODE || isSemverNewer(remoteVersion, CURRENT_VERSION_NAME)
+                    val hasValidApkUrl = apkUrl.isNotBlank() && apkUrl.endsWith(".apk", ignoreCase = true)
+                    val isNewer = hasNewerVersion && hasValidApkUrl
 
                     withContext(Dispatchers.Main) {
                         if (isNewer) {
-                            Log.i(TAG, "Nueva versión detectada: $remoteVersion (Código: $remoteVersionCode)")
+                            Log.i(TAG, "Nueva versión oficial detectada para Android: $remoteVersion (Código: $remoteVersionCode)")
                             NotificationHelper.showUpdateNotification(context, remoteVersion, apkUrl, changelog)
                             onUpdateFound?.invoke(updateInfo)
                         } else {
-                            Log.i(TAG, "La aplicación está actualizada ($CURRENT_VERSION_NAME)")
+                            if (hasNewerVersion && !hasValidApkUrl) {
+                                Log.i(TAG, "La versión remota ($remoteVersion) no cuenta con paquete APK para Android. Se omite notificación.")
+                            } else {
+                                Log.i(TAG, "La aplicación Android está actualizada ($CURRENT_VERSION_NAME)")
+                            }
                             onNoUpdate?.invoke()
                         }
                     }

@@ -3176,7 +3176,11 @@ class OmniVaultApp(ctk.CTk):
                 else:
                     if hasattr(self, "update_nav_btn") and self.update_nav_btn.winfo_exists():
                         self.update_nav_btn.configure(text=f"✓ Al día (v{updater.CURRENT_VERSION})")
-                    messagebox.showinfo("OmniVault al día", f"✓ Ya estás utilizando la versión oficial más reciente (v{updater.CURRENT_VERSION}).")
+                    msg = f"✓ Ya estás utilizando la versión oficial más reciente para Windows (v{updater.CURRENT_VERSION})."
+                    android_v = data.get("android", {}).get("version") if isinstance(data.get("android"), dict) else None
+                    if android_v and updater.is_newer_version(android_v, updater.CURRENT_VERSION):
+                        msg += f"\n\n(Nota: La versión v{android_v} disponible en el repositorio corresponde únicamente a la aplicación de Android)."
+                    messagebox.showinfo("OmniVault al día", msg)
             self.after(0, _gui)
 
         updater.check_for_updates_async(_on_result)
@@ -3185,20 +3189,13 @@ class OmniVaultApp(ctk.CTk):
         """Muestra un diálogo moderno estilo Cyberpunk informando la nueva versión con botón de 1 clic."""
         remote_version = data.get("version", updater.CURRENT_VERSION)
         changelog = data.get("changelog", "Mejoras de rendimiento y estabilidad general.")
-        windows_data = data.get("windows", {})
-        setup_url = windows_data.get("setup_url", "")
-        portable_url = windows_data.get("portable_url", "")
-
-        is_frozen = getattr(sys, 'frozen', False)
-        exe_dir = os.path.dirname(sys.executable) if is_frozen else ""
-        has_uninstaller = bool(exe_dir and os.path.isfile(os.path.join(exe_dir, "unins000.exe")))
-        is_installed = is_frozen and (
-            has_uninstaller
-            or "program files" in sys.executable.lower()
-            or r"programs\omnivault" in sys.executable.lower()
-            or r"appdata\local\programs" in sys.executable.lower()
-        )
-        target_url = setup_url if (is_installed or not portable_url) else (setup_url or portable_url)
+        is_installed = (updater.get_installation_type() == "installed")
+        target_url = data.get("resolved_url") or data.get("target_url")
+        if not target_url:
+            windows_data = data.get("windows", {})
+            setup_url = windows_data.get("setup_url", "")
+            portable_url = windows_data.get("portable_url", "")
+            target_url = setup_url if (is_installed or not portable_url) else (setup_url or portable_url)
 
         dialog = ctk.CTkToplevel(self)
         dialog.title("🚀 Actualización Disponible - OmniVault")
