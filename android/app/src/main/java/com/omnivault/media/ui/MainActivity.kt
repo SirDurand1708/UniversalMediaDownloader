@@ -44,7 +44,6 @@ import androidx.core.content.ContextCompat
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import com.omnivault.media.BuildConfig
 import com.omnivault.media.service.MediaDownloadService
 import com.omnivault.media.utils.UpdateInfo
 import com.omnivault.media.utils.UpdateManager
@@ -81,13 +80,15 @@ class MainActivity : AppCompatActivity() {
 
         // Respetar recortes de cámara y barra de estado (Edge-to-Edge)
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
-            val statusBar = insets.getInsets(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.displayCutout())
-            binding.mainScrollView.setPadding(0, statusBar.top, 0, 0)
+            val statusBar = insets.getInsets(WindowInsetsCompat.Type.statusBars())
+            val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
+            val topInset = maxOf(statusBar.top, cutout.top)
+            binding.mainScrollView.setPadding(0, topInset, 0, 0)
             insets
         }
 
         // Subtítulo dinámico con versión oficial
-        binding.tvAppSubtitle.text = "OmniVault v${BuildConfig.VERSION_NAME} • Audio-First Edition"
+        binding.tvAppSubtitle.text = "OmniVault v${UpdateManager.CURRENT_VERSION_NAME} • Audio-First Edition"
 
         downloadManager = DownloadManager.getInstance(this)
         NotificationHelper.createNotificationChannels(this)

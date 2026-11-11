@@ -224,7 +224,7 @@
                         <ImageView
                             android:layout_width="16dp"
                             android:layout_height="16dp"
-                            android:src="@drawable/ic_search"
+                            app:srcCompat="@drawable/ic_search"
                             app:tint="@color/text_muted" />
 
                         <EditText
@@ -551,7 +551,7 @@
                     <ImageView
                         android:layout_width="16dp"
                         android:layout_height="16dp"
-                        android:src="@drawable/ic_search"
+                        app:srcCompat="@drawable/ic_search"
                         app:tint="@color/text_muted" />
 
                     <EditText
@@ -852,7 +852,7 @@
                     android:id="@+id/iconNavDownload"
                     android:layout_width="20dp"
                     android:layout_height="20dp"
-                    android:src="@drawable/ic_nav_download"
+                    app:srcCompat="@drawable/ic_nav_download"
                     app:tint="@color/spotify_green" />
 
                 <TextView
@@ -880,7 +880,7 @@
                     android:id="@+id/iconNavLibrary"
                     android:layout_width="20dp"
                     android:layout_height="20dp"
-                    android:src="@drawable/ic_nav_library"
+                    app:srcCompat="@drawable/ic_nav_library"
                     app:tint="@color/text_muted" />
 
                 <TextView
@@ -908,7 +908,7 @@
                     android:id="@+id/iconNavSettings"
                     android:layout_width="20dp"
                     android:layout_height="20dp"
-                    android:src="@drawable/ic_nav_settings"
+                    app:srcCompat="@drawable/ic_nav_settings"
                     app:tint="@color/text_muted" />
 
                 <TextView
