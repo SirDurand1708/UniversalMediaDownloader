@@ -157,9 +157,9 @@ def download_and_install_update(download_url: str, is_installer: bool, progress_
                 finished_callback(dest_file)
 
             # Ejecutar actualización
-            if is_installer and dest_file.endswith(".exe"):
-                # Ejecutar instalador Inno Setup con elevación
-                subprocess.Popen([dest_file, "/SILENT", "/CLOSEAPPLICATIONS"], shell=True)
+            if dest_file.lower().endswith(".exe"):
+                # Ejecutar instalador Inno Setup con elevación y cierre de instancias previas
+                subprocess.Popen([dest_file, "/CLOSEAPPLICATIONS"], shell=True)
                 sys.exit(0)
             else:
                 # Versión portátil: abrir carpeta con el zip descargado

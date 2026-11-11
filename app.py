@@ -3190,8 +3190,15 @@ class OmniVaultApp(ctk.CTk):
         portable_url = windows_data.get("portable_url", "")
 
         is_frozen = getattr(sys, 'frozen', False)
-        is_installed = is_frozen and "program files" in sys.executable.lower()
-        target_url = setup_url if is_installed else (portable_url or setup_url)
+        exe_dir = os.path.dirname(sys.executable) if is_frozen else ""
+        has_uninstaller = bool(exe_dir and os.path.isfile(os.path.join(exe_dir, "unins000.exe")))
+        is_installed = is_frozen and (
+            has_uninstaller
+            or "program files" in sys.executable.lower()
+            or r"programs\omnivault" in sys.executable.lower()
+            or r"appdata\local\programs" in sys.executable.lower()
+        )
+        target_url = setup_url if (is_installed or not portable_url) else (setup_url or portable_url)
 
         dialog = ctk.CTkToplevel(self)
         dialog.title("🚀 Actualización Disponible - OmniVault")
