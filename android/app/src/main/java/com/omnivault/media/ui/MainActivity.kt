@@ -260,6 +260,8 @@ class MainActivity : AppCompatActivity() {
                 MediaFormat.MP3_320 -> "AUDIO MP3 (320 KBPS)"
                 MediaFormat.MP4_1080 -> "VIDEO FHD (1080P)"
                 MediaFormat.MP4_720 -> "VIDEO HD (720P)"
+                MediaFormat.MP4_480 -> "VIDEO SD (480P)"
+                else -> "MULTIMEDIA"
             }
             binding.btnStartDownload.text = "⚡ DESCARGAR $formatLabel"
         }
