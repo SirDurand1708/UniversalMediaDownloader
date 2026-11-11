@@ -24,13 +24,31 @@ class HistoryAdapter(
     private val onDeleteClick: (DownloadItem) -> Unit
 ) : RecyclerView.Adapter<HistoryAdapter.ViewHolder>() {
 
+    private val allItems = mutableListOf<DownloadItem>()
     private val items = mutableListOf<DownloadItem>()
+    private var currentQuery: String = ""
     private val dateFormat = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
     private val httpClient = OkHttpClient()
 
     fun updateList(newItems: List<DownloadItem>) {
+        allItems.clear()
+        allItems.addAll(newItems)
+        filter(currentQuery)
+    }
+
+    fun filter(query: String) {
+        currentQuery = query
         items.clear()
-        items.addAll(newItems)
+        if (query.isBlank()) {
+            items.addAll(allItems)
+        } else {
+            val q = query.lowercase().trim()
+            items.addAll(allItems.filter {
+                it.title.lowercase().contains(q) ||
+                (it.artist?.lowercase()?.contains(q) == true) ||
+                it.platform.displayName.lowercase().contains(q)
+            })
+        }
         notifyDataSetChanged()
     }
 

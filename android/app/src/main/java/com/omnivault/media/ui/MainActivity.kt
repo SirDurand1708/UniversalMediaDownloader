@@ -42,6 +42,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import com.omnivault.media.BuildConfig
 import com.omnivault.media.service.MediaDownloadService
 import com.omnivault.media.utils.UpdateInfo
 import com.omnivault.media.utils.UpdateManager
@@ -75,6 +78,16 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Respetar recortes de cámara y barra de estado (Edge-to-Edge)
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            val statusBar = insets.getInsets(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.displayCutout())
+            binding.mainScrollView.setPadding(0, statusBar.top, 0, 0)
+            insets
+        }
+
+        // Subtítulo dinámico con versión oficial
+        binding.tvAppSubtitle.text = "OmniVault v${BuildConfig.VERSION_NAME} • Audio-First Edition"
 
         downloadManager = DownloadManager.getInstance(this)
         NotificationHelper.createNotificationChannels(this)
@@ -224,18 +237,34 @@ class MainActivity : AppCompatActivity() {
             hideCardPreview()
         }
 
-        // TextWatcher
+        // TextWatcher con detección y análisis automático inteligente
         binding.etUrlInput.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val text = s?.toString() ?: ""
                 binding.btnClearUrl.visibility = if (text.isNotEmpty()) View.VISIBLE else View.GONE
                 updatePlatformBadge(text)
+                val clean = UrlUtils.extractUrlFromText(text)
+                if (!clean.isNullOrBlank() && UrlUtils.isSupportedMediaUrl(clean) && binding.cardPreview.visibility != View.VISIBLE) {
+                    analyzeUrl(clean)
+                }
             }
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        // Format Chips
+        // Helper para texto contextual del botón de descarga
+        fun updateDownloadButtonText() {
+            val formatLabel = when (selectedFormat) {
+                MediaFormat.M4A -> "AUDIO M4A (ORIGINAL HQ)"
+                MediaFormat.MP3_320 -> "AUDIO MP3 (320 KBPS)"
+                MediaFormat.MP4_1080 -> "VIDEO FHD (1080P)"
+                MediaFormat.MP4_720 -> "VIDEO HD (720P)"
+            }
+            binding.btnStartDownload.text = "⚡ DESCARGAR $formatLabel"
+        }
+        updateDownloadButtonText()
+
+        // Format Chips con respuesta háptica y actualización dinámica
         binding.chipGroupFormats.setOnCheckedStateChangeListener { _, checkedIds ->
             selectedFormat = when {
                 checkedIds.contains(binding.chipM4a.id) -> MediaFormat.M4A
@@ -244,6 +273,10 @@ class MainActivity : AppCompatActivity() {
                 checkedIds.contains(binding.chipMp4Hd.id) -> MediaFormat.MP4_720
                 else -> MediaFormat.M4A
             }
+            updateDownloadButtonText()
+            try {
+                binding.root.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+            } catch (_: Exception) {}
         }
 
         // Start Download Button (Soporta canciones individuales y Álbumes/Playlists completos de YouTube)
@@ -312,6 +345,23 @@ class MainActivity : AppCompatActivity() {
             binding.tvStorageLocationSummary.text = StorageHelper.getStorageSummary(this)
         }
 
+        // Buscador interactivo en Mi Bóveda (Biblioteca)
+        binding.etLibrarySearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val q = s?.toString() ?: ""
+                binding.btnClearLibrarySearch.visibility = if (q.isNotEmpty()) View.VISIBLE else View.GONE
+                historyAdapter.filter(q)
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+
+        binding.btnClearLibrarySearch.setOnClickListener {
+            it.bounce()
+            binding.etLibrarySearch.setText("")
+            historyAdapter.filter("")
+        }
+
         // Navegación Inferior (Pestañas Concept 3: Spotify Vault)
         setupBottomNavigation()
 
@@ -341,6 +391,10 @@ class MainActivity : AppCompatActivity() {
                 binding.labelNavDownload.setTextColor(colorActive)
                 binding.labelNavLibrary.setTextColor(colorMuted)
                 binding.labelNavSettings.setTextColor(colorMuted)
+
+                binding.iconNavDownload.setColorFilter(colorActive)
+                binding.iconNavLibrary.setColorFilter(colorMuted)
+                binding.iconNavSettings.setColorFilter(colorMuted)
             }
             1 -> {
                 binding.layoutTabDownload.visibility = View.GONE
@@ -350,6 +404,10 @@ class MainActivity : AppCompatActivity() {
                 binding.labelNavDownload.setTextColor(colorMuted)
                 binding.labelNavLibrary.setTextColor(colorActive)
                 binding.labelNavSettings.setTextColor(colorMuted)
+
+                binding.iconNavDownload.setColorFilter(colorMuted)
+                binding.iconNavLibrary.setColorFilter(colorActive)
+                binding.iconNavSettings.setColorFilter(colorMuted)
                 refreshLists()
             }
             2 -> {
@@ -360,6 +418,10 @@ class MainActivity : AppCompatActivity() {
                 binding.labelNavDownload.setTextColor(colorMuted)
                 binding.labelNavLibrary.setTextColor(colorMuted)
                 binding.labelNavSettings.setTextColor(colorActive)
+
+                binding.iconNavDownload.setColorFilter(colorMuted)
+                binding.iconNavLibrary.setColorFilter(colorMuted)
+                binding.iconNavSettings.setColorFilter(colorActive)
             }
         }
     }
@@ -846,6 +908,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun View.bounce() {
+        try {
+            performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+        } catch (_: Exception) {}
         animate().scaleX(0.93f).scaleY(0.93f).setDuration(70).withEndAction {
             animate().scaleX(1f).scaleY(1f).setDuration(70).start()
         }.start()

@@ -4,6 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:fitsSystemWindows="true"
     android:background="@color/spotify_black">
 
     <!-- Contenido Scrollable Principal -->
@@ -115,7 +116,7 @@
                         android:layout_height="wrap_content"
                         android:background="?attr/selectableItemBackground"
                         android:fontFamily="sans-serif-medium"
-                        android:text="OmniVault v2.0.2 • Audio-First Edition"
+                        android:text="OmniVault v2.0.9 • Audio-First Edition"
                         android:textColor="@color/spotify_green"
                         android:textSize="11sp" />
                 </LinearLayout>
@@ -217,14 +218,14 @@
                         android:background="@drawable/bg_input_box"
                         android:gravity="center_vertical"
                         android:orientation="horizontal"
-                        android:paddingHorizontal="12dp"
-                        android:paddingVertical="2dp">
+                        android:paddingHorizontal="10dp"
+                        android:paddingVertical="3dp">
 
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="🔍"
-                            android:textSize="14sp" />
+                        <ImageView
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:src="@drawable/ic_search"
+                            app:tint="@color/text_muted" />
 
                         <EditText
                             android:id="@+id/etUrlInput"
@@ -243,16 +244,33 @@
 
                         <ImageButton
                             android:id="@+id/btnClearUrl"
-                            android:layout_width="32dp"
-                            android:layout_height="32dp"
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
                             android:background="?attr/selectableItemBackgroundBorderless"
                             android:contentDescription="Limpiar enlace"
                             android:src="@android:drawable/ic_menu_close_clear_cancel"
                             android:visibility="gone"
                             app:tint="@color/text_muted" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnPasteUrl"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="34dp"
+                            android:layout_marginStart="4dp"
+                            android:fontFamily="sans-serif-bold"
+                            android:paddingHorizontal="10dp"
+                            android:text="Pegar"
+                            android:textColor="@color/spotify_green"
+                            android:textSize="11sp"
+                            app:icon="@drawable/ic_paste"
+                            app:iconSize="14dp"
+                            app:iconTint="@color/spotify_green"
+                            app:backgroundTint="@color/spotify_card_elevated"
+                            app:cornerRadius="8dp" />
                     </LinearLayout>
 
-                    <!-- Botones de Acción: Pegar y Analizar -->
+                    <!-- Botón de Análisis Directo y Spinner -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -261,24 +279,10 @@
                         android:orientation="horizontal">
 
                         <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnPasteUrl"
-                            style="@style/Widget.Material3.Button.TonalButton"
-                            android:layout_width="0dp"
-                            android:layout_height="38dp"
-                            android:layout_weight="1"
-                            android:fontFamily="sans-serif-medium"
-                            android:text="📋 Pegar"
-                            android:textColor="@color/spotify_green"
-                            android:textSize="11sp"
-                            app:backgroundTint="@color/spotify_card_elevated"
-                            app:cornerRadius="8dp" />
-
-                        <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnAnalyzeUrl"
                             style="@style/Widget.Material3.Button.TonalButton"
                             android:layout_width="0dp"
-                            android:layout_height="38dp"
-                            android:layout_marginStart="8dp"
+                            android:layout_height="36dp"
                             android:layout_weight="1"
                             android:fontFamily="sans-serif-medium"
                             android:text="🔍 Analizar Enlace"
@@ -291,8 +295,8 @@
 
                         <ProgressBar
                             android:id="@+id/pbAnalyzing"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
                             android:layout_marginStart="8dp"
                             android:indeterminateTint="@color/spotify_green"
                             android:visibility="gone" />
@@ -385,13 +389,13 @@
                         android:textSize="12sp" />
                 </LinearLayout>
 
-                <!-- Selección de Formato -->
+                <!-- Selección de Formato Compacto -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
+                    android:layout_marginTop="14dp"
                     android:fontFamily="sans-serif-bold"
-                    android:text="SELECCIONA FORMATO:"
+                    android:text="FORMATO DE DESCARGA:"
                     android:textColor="@color/spotify_green"
                     android:textSize="11sp"
                     android:letterSpacing="0.05" />
@@ -401,6 +405,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
+                    app:chipSpacingHorizontal="8dp"
+                    app:chipSpacingVertical="4dp"
                     app:singleLine="false"
                     app:singleSelection="true">
 
@@ -410,9 +416,11 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:checked="true"
-                        android:fontFamily="sans-serif-medium"
-                        android:text="🎵 Audio M4A (Original HQ)"
+                        android:fontFamily="sans-serif-bold"
+                        android:text="M4A • Original HQ"
                         android:textColor="@color/text_primary"
+                        app:chipIcon="@drawable/ic_format_audio"
+                        app:chipIconTint="@color/spotify_green"
                         app:chipBackgroundColor="@color/spotify_card_elevated" />
 
                     <com.google.android.material.chip.Chip
@@ -420,9 +428,11 @@
                         style="@style/Widget.Material3.Chip.Filter"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-medium"
-                        android:text="🎵 Audio MP3 (320k)"
+                        android:fontFamily="sans-serif-bold"
+                        android:text="MP3 • 320 kbps"
                         android:textColor="@color/text_primary"
+                        app:chipIcon="@drawable/ic_format_audio"
+                        app:chipIconTint="@color/spotify_green"
                         app:chipBackgroundColor="@color/spotify_card_elevated" />
 
                     <com.google.android.material.chip.Chip
@@ -430,9 +440,11 @@
                         style="@style/Widget.Material3.Chip.Filter"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-medium"
-                        android:text="🎬 Video FHD (1080p)"
+                        android:fontFamily="sans-serif-bold"
+                        android:text="1080p • Full HD"
                         android:textColor="@color/text_primary"
+                        app:chipIcon="@drawable/ic_format_video"
+                        app:chipIconTint="@color/accent_cyan"
                         app:chipBackgroundColor="@color/spotify_card_elevated" />
 
                     <com.google.android.material.chip.Chip
@@ -440,9 +452,11 @@
                         style="@style/Widget.Material3.Chip.Filter"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-medium"
-                        android:text="🎬 Video HD (720p)"
+                        android:fontFamily="sans-serif-bold"
+                        android:text="720p • HD"
                         android:textColor="@color/text_primary"
+                        app:chipIcon="@drawable/ic_format_video"
+                        app:chipIconTint="@color/accent_cyan"
                         app:chipBackgroundColor="@color/spotify_card_elevated" />
                 </com.google.android.material.chip.ChipGroup>
 
@@ -520,6 +534,50 @@
                         android:text="Limpiar"
                         android:textColor="@color/spotify_green"
                         android:textSize="12sp" />
+                </LinearLayout>
+
+                <!-- Buscador Integrado en Bóveda -->
+                <LinearLayout
+                    android:id="@+id/cardLibrarySearch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_input_box"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="2dp">
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/ic_search"
+                        app:tint="@color/text_muted" />
+
+                    <EditText
+                        android:id="@+id/etLibrarySearch"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:background="@android:color/transparent"
+                        android:fontFamily="sans-serif"
+                        android:hint="Buscar por título, artista o plataforma…"
+                        android:inputType="text"
+                        android:maxLines="1"
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/text_muted"
+                        android:textSize="12sp" />
+
+                    <ImageButton
+                        android:id="@+id/btnClearLibrarySearch"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Limpiar búsqueda"
+                        android:src="@android:drawable/ic_menu_close_clear_cancel"
+                        android:visibility="gone"
+                        app:tint="@color/text_muted" />
                 </LinearLayout>
 
                 <!-- Lista de Historial -->
@@ -790,17 +848,18 @@
                 android:gravity="center"
                 android:orientation="vertical">
 
-                <TextView
+                <ImageView
                     android:id="@+id/iconNavDownload"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="📥"
-                    android:textSize="16sp" />
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_nav_download"
+                    app:tint="@color/spotify_green" />
 
                 <TextView
                     android:id="@+id/labelNavDownload"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
                     android:fontFamily="sans-serif-bold"
                     android:text="Descargar"
                     android:textColor="@color/spotify_green"
@@ -817,17 +876,18 @@
                 android:gravity="center"
                 android:orientation="vertical">
 
-                <TextView
+                <ImageView
                     android:id="@+id/iconNavLibrary"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🎵"
-                    android:textSize="16sp" />
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_nav_library"
+                    app:tint="@color/text_muted" />
 
                 <TextView
                     android:id="@+id/labelNavLibrary"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
                     android:fontFamily="sans-serif-medium"
                     android:text="Mi Bóveda"
                     android:textColor="@color/text_muted"
@@ -844,17 +904,18 @@
                 android:gravity="center"
                 android:orientation="vertical">
 
-                <TextView
+                <ImageView
                     android:id="@+id/iconNavSettings"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="⚙️"
-                    android:textSize="16sp" />
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_nav_settings"
+                    app:tint="@color/text_muted" />
 
                 <TextView
                     android:id="@+id/labelNavSettings"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
                     android:fontFamily="sans-serif-medium"
                     android:text="Ajustes"
                     android:textColor="@color/text_muted"
