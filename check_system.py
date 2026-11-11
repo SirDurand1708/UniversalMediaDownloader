@@ -47,6 +47,7 @@ def run_diagnostics():
         ("pystray", "pystray (Área de notificación / System Tray)"),
         ("curl_cffi", "curl_cffi (Evasión TLS contra bloqueos antibot)"),
         ("speech_recognition", "SpeechRecognition (Subtítulos IA y transcripción)"),
+        ("packaging", "packaging (Comparador semántico de versiones y actualizaciones)"),
         ("PyInstaller", "PyInstaller (Compilador a ejecutable autónomo)"),
     ]
 

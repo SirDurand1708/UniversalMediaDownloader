@@ -149,6 +149,40 @@ def update_updater_py(new_version: str):
     print(f"  [OK] updater.py actualizado -> {new_version}")
 
 
+def update_installer_iss(new_version: str):
+    path = os.path.join(ROOT, "installer.iss")
+    if not os.path.isfile(path):
+        return
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    content = re.sub(
+        r'#define MyAppVersion\s+"[^"]*"',
+        f'#define MyAppVersion "{new_version}"',
+        content
+    )
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+    print(f"  [OK] installer.iss actualizado -> {new_version}")
+
+
+def update_package_release(new_version: str):
+    path = os.path.join(ROOT, "package_release.py")
+    if not os.path.isfile(path):
+        return
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    content = re.sub(
+        r'DEFAULT_VERSION = "[^"]*"',
+        f'DEFAULT_VERSION = "{new_version}"',
+        content
+    )
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+    print(f"  [OK] package_release.py actualizado -> {new_version}")
+
+
 def main():
     args = sys.argv[1:]
 
@@ -179,6 +213,8 @@ def main():
     update_build_gradle(new_version, version_code)
     update_manager_kt(new_version, version_code)
     update_updater_py(new_version)
+    update_installer_iss(new_version)
+    update_package_release(new_version)
 
     print(f"\n[OK] Todos los archivos actualizados exitosamente a v{new_version}")
     print(f"\nProximos pasos:")

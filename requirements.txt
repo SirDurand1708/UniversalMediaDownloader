@@ -6,4 +6,5 @@ Pillow>=10.0.0
 curl_cffi>=0.7.0
 pystray>=0.19.5
 SpeechRecognition>=3.10.0
+packaging>=23.0
 pyinstaller>=6.0.0

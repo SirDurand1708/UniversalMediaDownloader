@@ -37,7 +37,7 @@ def build():
     add_data_args = ["--add-data", f"{assets_dir};assets"] if os.path.isdir(assets_dir) else []
 
     # Paquetes requeridos y opcionales
-    packages_to_collect = ["customtkinter", "PIL", "mutagen", "yt_dlp"]
+    packages_to_collect = ["customtkinter", "PIL", "mutagen", "yt_dlp", "packaging"]
     optional_packages = ["pystray", "curl_cffi", "darkdetect", "speech_recognition"]
     for pkg in optional_packages:
         try:

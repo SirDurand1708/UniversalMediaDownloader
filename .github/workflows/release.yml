@@ -53,7 +53,7 @@ jobs:
 
       - name: 📦 Generar paquetes portátiles e instalador
         run: |
-          python package_release.py
+          python package_release.py --version "${{ github.ref_name }}"
 
       - name: 📤 Subir artefactos de Windows
         uses: actions/upload-artifact@v4

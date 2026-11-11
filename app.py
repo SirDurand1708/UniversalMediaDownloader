@@ -3249,15 +3249,25 @@ class OmniVaultApp(ctk.CTk):
                 self.after(0, lambda: progress_lbl.configure(text="¡Descarga completada! Iniciando actualización..."))
 
             def _error(err):
-                self.after(0, lambda: messagebox.showerror("Error de actualización", f"No se pudo descargar:\n{err}"))
-                self.after(0, lambda: btn_up.configure(state="normal", text="Reintentar"))
+                def _show_err():
+                    btn_up.configure(state="normal", text="Reintentar")
+                    resp = messagebox.askyesno(
+                        "Error de actualización",
+                        f"No se pudo descargar automáticamente el archivo:\n{err}\n\n"
+                        "¿Deseas abrir la página oficial de GitHub Releases en tu navegador para descargarlo manualmente?"
+                    )
+                    if resp:
+                        import webbrowser
+                        webbrowser.open("https://github.com/SirDurand1708/UniversalMediaDownloader/releases/latest")
+                self.after(0, _show_err)
 
             updater.download_and_install_update(
                 target_url,
                 is_installer=is_installed,
                 progress_callback=_progress,
                 finished_callback=_finish,
-                error_callback=_error
+                error_callback=_error,
+                remote_version=remote_version
             )
 
         btn_up = ctk.CTkButton(

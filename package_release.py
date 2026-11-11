@@ -16,7 +16,38 @@ if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
     except Exception:
         pass
 
-VERSION = "2.0.0"
+DEFAULT_VERSION = "2.0.9"
+
+def get_release_version() -> str:
+    """Obtiene la versión oficial de forma dinámica desde argumentos CLI, entorno CI/CD o version.json."""
+    # 1. Argumentos CLI: --version X.Y.Z o -v X.Y.Z
+    for i, arg in enumerate(sys.argv):
+        if arg in ("--version", "-v") and i + 1 < len(sys.argv):
+            return sys.argv[i + 1].lstrip("v").strip()
+
+    # 2. Variable de entorno del flujo CI/CD de GitHub Actions
+    for env_var in ["GITHUB_REF_NAME", "RELEASE_TAG", "RELEASE_VERSION"]:
+        val = os.environ.get(env_var)
+        if val:
+            cleaned = val.split("/")[-1].lstrip("v").strip()
+            if cleaned and cleaned != "main":
+                return cleaned
+
+    # 3. Leer directamente desde version.json
+    try:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(base_dir, "version.json"), "r", encoding="utf-8") as f:
+            import json
+            data = json.load(f)
+            v = data.get("version")
+            if v:
+                return v.lstrip("v").strip()
+    except Exception:
+        pass
+
+    return DEFAULT_VERSION
+
+VERSION = get_release_version()
 
 def calculate_sha256(filepath: str) -> str:
     """Calcula el hash SHA-256 de un archivo en bloques de 64KB."""
@@ -41,9 +72,10 @@ def make_portable_zip(source_dir: str, target_zip: str):
     size_mb = os.path.getsize(target_zip) / (1024 * 1024)
     print(f"    -> [OK] Versión portátil generada ({size_mb:.2f} MB)")
 
-def compile_inno_setup(iss_file: str) -> bool:
+def compile_inno_setup(iss_file: str, version_str: str = None) -> bool:
     """Compila el instalador con Inno Setup Compiler si está instalado."""
-    print("[*] Buscando compilador Inno Setup (ISCC.exe)...")
+    ver = version_str or VERSION
+    print(f"[*] Buscando compilador Inno Setup (ISCC.exe) para versión v{ver}...")
     iscc_candidates = [
         shutil.which("iscc"),
         os.path.expandvars(r"%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"),
@@ -59,8 +91,14 @@ def compile_inno_setup(iss_file: str) -> bool:
         print("    Descárgalo gratis desde: https://jrsoftware.org/isdl.php para generar el instalador .exe")
         return False
 
-    print(f"[*] Compilando instalador oficial con {iscc_bin}...")
-    res = subprocess.call([iscc_bin, iss_file])
+    print(f"[*] Compilando instalador oficial con {iscc_bin} (v{ver})...")
+    cmd = [
+        iscc_bin,
+        f"/DMyAppVersion={ver}",
+        f"/DOutputBaseFilename=OmniVault-v{ver}-Windows-x64-Setup",
+        iss_file
+    ]
+    res = subprocess.call(cmd)
     return res == 0
 
 def generate_checksums(releases_dir: str) -> str:
@@ -109,7 +147,7 @@ def main():
     # 3. Compilar Instalador con Inno Setup
     iss_file = os.path.join(base_dir, "installer.iss")
     if os.path.isfile(iss_file):
-        compile_inno_setup(iss_file)
+        compile_inno_setup(iss_file, VERSION)
 
     # 4. Generar Sumas de Verificación SHA-256
     generate_checksums(releases_dir)

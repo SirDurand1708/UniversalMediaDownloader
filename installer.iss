@@ -2,10 +2,17 @@
 ; Para compilar este instalador, descarga e instala Inno Setup (gratuito) desde https://jrsoftware.org/isdl.php
 ; Abre este archivo en Inno Setup Compiler y presiona 'Compile' (F9).
 
+#ifndef MyAppVersion
+#define MyAppVersion "2.0.9"
+#endif
+
+#ifndef OutputBaseFilename
+#define OutputBaseFilename "OmniVault-v" + MyAppVersion + "-Windows-x64-Setup"
+#endif
+
 #define MyAppName "OmniVault Desktop"
-#define MyAppVersion "2.0.0"
 #define MyAppPublisher "OmniVault Media Labs"
-#define MyAppURL "https://github.com/UniversalMediaDownloader"
+#define MyAppURL "https://github.com/SirDurand1708/UniversalMediaDownloader"
 #define MyAppExeName "OmniVault.exe"
 
 [Setup]
@@ -20,7 +27,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DisableProgramGroupPage=yes
 LicenseFile=LICENSE
 OutputDir=dist\Releases
-OutputBaseFilename=OmniVault-v2.0.0-Windows-x64-Setup
+OutputBaseFilename={#OutputBaseFilename}
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern

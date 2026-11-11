@@ -5,9 +5,9 @@ echo ========================================================
 echo   EMPAQUETADOR OFICIAL DE LANZAMIENTOS (GITHUB RELEASE)
 echo ========================================================
 echo.
-echo Este script creara:
-echo   1. Version Portatil: OmniVault-v2.0.0-Windows-x64-Portable.zip
-echo   2. Instalador Setup: OmniVault-v2.0.0-Windows-x64-Setup.exe
+echo Este script creara para la version actual:
+echo   1. Version Portatil: OmniVault-v[VERSION]-Windows-x64-Portable.zip
+echo   2. Instalador Setup: OmniVault-v[VERSION]-Windows-x64-Setup.exe
 echo   3. Sumas de Integridad: SHA256SUMS.txt
 echo.
 echo ========================================================

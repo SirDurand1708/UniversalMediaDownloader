@@ -13,7 +13,7 @@
   "windows": {
     "version": "2.0.9",
     "version_code": 209,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.9/OmniVault-v2.0.9-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.9/OmniVault-v2.0.9-Windows-x64-Portable.zip"
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.9/OmniVault-v2.0.0-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.9/OmniVault-v2.0.0-Windows-x64-Portable.zip"
   }
 }
