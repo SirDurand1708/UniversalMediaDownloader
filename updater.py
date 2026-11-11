@@ -17,7 +17,7 @@ try:
 except ImportError:
     version = None
 
-CURRENT_VERSION = "2.0.9"
+CURRENT_VERSION = "2.1.0"
 VERSION_INFO_URL = "https://raw.githubusercontent.com/SirDurand1708/UniversalMediaDownloader/main/version.json"
 
 def is_newer_version(remote_str: str, local_str: str) -> bool:

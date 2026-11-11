@@ -1,19 +1,19 @@
 {
-  "version": "2.0.9",
-  "version_code": 209,
-  "release_date": "2026-11-10",
-  "title": "OmniVault v2.0.9 — Ultra Performance Boost & Smooth Micro-Interactions",
-  "changelog": "⚡ Arranque ultrarrápido (3x más rápido): Carga diferida de pestañas (lazy loading) e inicialización instantánea de MiniHUD\n🚀 Descargas a máxima velocidad: Fragmentos concurrentes en yt-dlp, aceleración Aria2c a 16 hilos y buffers de 256KB/64KB\n🎯 Suavizado de progreso (LERP): Barras de descarga fluidas y continuas sin saltos en PC y Android\n✨ Micro-interacciones y animaciones: Despliegue animado de banners, respuesta táctil bounce-click y realce de pestaña activa\n🛡️ Optimización de CPU: Throttling a ~13 FPS en callbacks de progreso para cero tirones en la interfaz",
+  "version": "2.1.0",
+  "version_code": 210,
+  "release_date": "2026-11-11",
+  "title": "OmniVault v2.1.0 — UI Redesign, Native Vector Icons & Resilient Auto-Updater",
+  "changelog": "🎨 Rediseño visual Android: Soporte Edge-to-Edge sin recortes en cámara, iconos vectoriales nativos en barra inferior y temas unificados\n🔍 Buscador interactivo en Mi Bóveda: Filtrado en tiempo real de audios y videos por título, artista o plataforma\n⚡ Caja de entrada inteligente: Botón Pegar integrado y auto-análisis inmediato al detectar enlaces\n🎛️ Selector de formatos compacto: Cuadrícula organizada con botón de descarga contextual dinámico\n🛡️ Actualizador resiliente en PC: Detección precisa de instalaciones en AppData, auto-recuperación ante errores 404 y ejecución automática",
   "android": {
-    "version": "2.0.9",
-    "version_code": 209,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.9/OmniVault-v2.0.9-Android.apk",
+    "version": "2.1.0",
+    "version_code": 210,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.1.0/OmniVault-v2.1.0-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.0.9",
-    "version_code": 209,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.9/OmniVault-v2.0.0-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.0.9/OmniVault-v2.0.0-Windows-x64-Portable.zip"
+    "version": "2.1.0",
+    "version_code": 210,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.1.0/OmniVault-v2.1.0-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.1.0/OmniVault-v2.1.0-Windows-x64-Portable.zip"
   }
 }
