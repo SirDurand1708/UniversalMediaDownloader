@@ -92,6 +92,9 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     
     var playbackState by mutableStateOf<PlaybackState>(PlaybackState.Idle)
         private set
+
+    val isPlaying: Boolean
+        get() = playbackState is PlaybackState.Playing
     
     private val _uiEvents = MutableSharedFlow<UiEvent>()
     val uiEvents = _uiEvents.asSharedFlow()

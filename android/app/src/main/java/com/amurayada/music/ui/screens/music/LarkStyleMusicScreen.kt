@@ -36,6 +36,7 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.amurayada.music.data.model.Album
 import com.amurayada.music.data.model.Artist
+import com.amurayada.music.data.model.PlaybackState
 import com.amurayada.music.data.model.Playlist
 import com.amurayada.music.data.model.Song
 import com.amurayada.music.ui.components.AddToPlaylistSheet
@@ -73,7 +74,7 @@ fun LarkStyleMusicScreen(
 ) {
     val context = LocalContext.current
     val currentSong = playbackViewModel.currentSong
-    val isPlaying = playbackViewModel.playbackState is com.amurayada.music.ui.viewmodel.PlaybackState.Playing
+    val isPlaying = playbackViewModel.isPlaying
 
     var selectedCategory by remember { mutableStateOf(LarkCategory.CANCIONES) }
     var searchQuery by remember { mutableStateOf("") }
