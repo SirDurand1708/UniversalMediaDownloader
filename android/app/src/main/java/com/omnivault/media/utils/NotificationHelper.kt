@@ -9,12 +9,11 @@ import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
-import com.omnivault.media.R
+import com.amurayada.music.R
 import com.omnivault.media.model.DownloadItem
 import com.omnivault.media.model.MediaFormat
 import com.omnivault.media.service.MediaDownloadService
-import com.omnivault.media.ui.MainActivity
-import com.omnivault.media.ui.QuickShareActivity
+import com.amurayada.music.MainActivity
 import java.io.File
 
 object NotificationHelper {
@@ -282,7 +281,7 @@ object NotificationHelper {
     fun showClipboardDetectedNotification(context: Context, detectedUrl: String) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        val openIntent = Intent(context, QuickShareActivity::class.java).apply {
+        val openIntent = Intent(context, MainActivity::class.java).apply {
             action = Intent.ACTION_SEND
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, detectedUrl)

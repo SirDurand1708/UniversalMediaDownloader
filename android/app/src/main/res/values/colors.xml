@@ -1,54 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Paleta Obsidian & Titanium Oficial OmniVault -->
-    <color name="obsidian_base">#0F1012</color>
-    <color name="obsidian_darker">#090A0C</color>
-    <color name="titanium_card">#18191E</color>
-    <color name="titanium_elevated">#22242A</color>
-    <color name="titanium_border">#2D3139</color>
-    <color name="titanium_border_focus">#38BDF8</color>
-
-    <!-- Acentos Dinámicos de Alto Impacto -->
-    <color name="accent_cyan">#38BDF8</color>
-    <color name="accent_cyan_glow">#144059</color>
-    <color name="accent_cyan_dark">#0284C7</color>
-    <color name="accent_indigo">#818CF8</color>
-    <color name="accent_emerald">#10B981</color>
-    <color name="accent_amber">#F59E0B</color>
-    <color name="accent_rose">#F43F5E</color>
-
-    <!-- Texto de Alta Legibilidad -->
-    <color name="text_primary">#F8FAFC</color>
-    <color name="text_secondary">#94A3B8</color>
-    <color name="text_muted">#64748B</color>
-    <color name="text_inverse">#0F1012</color>
-
-    <!-- Estados -->
-    <color name="badge_youtube">#EF4444</color>
-    <color name="badge_tiktok">#06B6D4</color>
-    <color name="badge_instagram">#E1306C</color>
-    <color name="badge_twitter">#38BDF8</color>
-    <color name="badge_facebook">#3B82F6</color>
-    <color name="badge_audio">#818CF8</color>
-    <color name="badge_video">#10B981</color>
-
-    <!-- Paleta Oficial OmniVault — Propuesta 1: Prismatic Aurora (Logo Cósmico) -->
-    <color name="vault_cyan">#00F0FF</color>
-    <color name="vault_cyan_glow">#144059</color>
-    <color name="vault_purple">#8B5CF6</color>
-    <color name="vault_purple_dark">#6D28D9</color>
-    <color name="vault_magenta">#EC4899</color>
-    <color name="vault_magenta_boost">#F43F5E</color>
-    <color name="vault_bg_dark">#0A0C14</color>
-    <color name="vault_card">#121422</color>
-    <color name="vault_card_border">#1F2338</color>
-
-    <!-- Compatibilidad de Componentes Reemplazados (Adiós al verde plano, hola Cian Neón) -->
-    <color name="spotify_black">#0A0C14</color>
-    <color name="spotify_card">#121422</color>
-    <color name="spotify_card_elevated">#1A1D30</color>
-    <color name="spotify_green">#00F0FF</color>
-    <color name="spotify_green_hover">#38BDF8</color>
-    <color name="ambient_purple">#8B5CF6</color>
-    <color name="ambient_purple_glow">#4C1D95</color>
+    <color name="purple_200">#FFBB86FC</color>
+    <color name="purple_500">#FF6200EE</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="teal_200">#FF03DAC5</color>
+    <color name="teal_700">#FF018786</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
 </resources>

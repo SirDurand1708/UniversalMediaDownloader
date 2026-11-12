@@ -6,7 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
-import com.omnivault.media.R
+import com.amurayada.music.R
 import com.omnivault.media.utils.NotificationHelper
 import com.omnivault.media.utils.UrlUtils
 

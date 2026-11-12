@@ -1,13 +1,13 @@
 {
-  "version": "2.3.3",
-  "version_code": 233,
+  "version": "2.4.0",
+  "version_code": 240,
   "release_date": "2026-11-12",
-  "title": "OmniVault v2.3.3 — Optimización Extrema para Bibliotecas Masivas (+2000 Canciones y +500 Videos)",
-  "changelog": "🚀 Virtualización completa de RecyclerViews: navegación instantánea y sin cierres con miles de archivos locales\n💾 SharedPreferences ultraligero: prevención de bloqueos de memoria y OOM mediante indexación directa por MediaStore\n⚡ Decodificación asíncrona de miniaturas con Coil Video Frame Decoder y límites estrictos de caché\n🎯 Comparaciones O(1) en memoria para ordenamiento instantáneo por tamaño y fecha sin accesos repetitivos a disco\n🛡️ Inserciones Room por lotes seguros (chunked) evitando límites de variables SQLite",
+  "title": "OmniVault v2.4.0 — Base Jetpack Compose & Motor Universal de Descargas",
+  "changelog": "💎 Migración completa a arquitectura moderna Jetpack Compose y Material 3\n⚡ Motor de descargas universal OmniVault: descarga audio (M4A HQ, MP3 320k) y video (1080p FHD, 720p HD con muxing nativo) de cualquier fuente (YouTube, TikTok sin marca de agua, Instagram, Facebook, X/Twitter, SoundCloud)\n🔊 Super Volumen de hasta 300% con limitador por hardware LoudnessEnhancer sin distorsión\n🎬 Nueva pestaña exclusiva para videos locales y descargados con miniaturas dinámicas, filtros y reproductor a pantalla completa\n🎵 Búsqueda y streaming directo de YouTube Music con letras sincronizadas estilo karaoke\n🗂️ 4 pestañas intuitivas: Descargas, Música, Videos y Ajustes",
   "android": {
-    "version": "2.3.3",
-    "version_code": 233,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.3.3/OmniVault-v2.3.3-Android.apk",
+    "version": "2.4.0",
+    "version_code": 240,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.4.0/OmniVault-v2.4.0-Android.apk",
     "min_version_code": 201
   },
   "windows": {

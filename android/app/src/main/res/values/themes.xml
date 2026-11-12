@@ -1,37 +1,5 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Tema Principal Obsidian & Titanium para OmniVault -->
-    <style name="Theme.OmniVault" parent="Theme.Material3.Dark.NoActionBar">
-        <!-- Colores Primarios del Sistema -->
-        <item name="colorPrimary">@color/accent_cyan</item>
-        <item name="colorOnPrimary">@color/obsidian_darker</item>
-        <item name="colorPrimaryContainer">@color/titanium_elevated</item>
-        <item name="colorOnPrimaryContainer">@color/accent_cyan</item>
-        
-        <!-- Fondos y Superficies -->
-        <item name="android:windowBackground">@color/obsidian_base</item>
-        <item name="colorSurface">@color/titanium_card</item>
-        <item name="colorOnSurface">@color/text_primary</item>
-        <item name="colorSurfaceVariant">@color/titanium_elevated</item>
-        <item name="colorOnSurfaceVariant">@color/text_secondary</item>
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
 
-        <!-- Barra de Estado y Navegación -->
-        <item name="android:statusBarColor">@color/obsidian_darker</item>
-        <item name="android:navigationBarColor">@color/obsidian_darker</item>
-        <item name="android:windowLightStatusBar">false</item>
-    </style>
-
-    <!-- Tema Flotante Translúcido Estilo Snaptube para Compartir Directo -->
-    <style name="Theme.OmniVault.Dialog" parent="Theme.Material3.Dark.BottomSheetDialog">
-        <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:colorBackground">@color/titanium_card</item>
-        <item name="android:windowIsFloating">true</item>
-        <item name="android:backgroundDimEnabled">true</item>
-        <item name="android:backgroundDimAmount">0.65</item>
-        <item name="colorPrimary">@color/accent_cyan</item>
-    </style>
-    <!-- Estilo para Carátulas con Esquinas Redondeadas -->
-    <style name="Rounded12">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">12dp</item>
-    </style>
+    <style name="Theme.Music" parent="android:Theme.Material.Light.NoActionBar" />
 </resources>
