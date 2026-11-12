@@ -403,7 +403,7 @@ fun OmniVaultDownloaderScreen(
                             try {
                                 val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                    type = if (item.format.isVideo) "video/*" else "audio/*"
+                                    type = if (!item.format.isAudio) "video/*" else "audio/*"
                                     putExtra(Intent.EXTRA_STREAM, uri)
                                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                 }
@@ -509,7 +509,7 @@ fun ActiveDownloadCard(
                     color = neonGreen
                 )
                 Text(
-                    text = item.format.displayName,
+                    text = item.format.label,
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.6f)
                 )
@@ -553,7 +553,7 @@ fun HistoryDownloadCard(
                     )
                 } else {
                     Icon(
-                        imageVector = if (item.format.isVideo) Icons.Rounded.Movie else Icons.Rounded.MusicNote,
+                        imageVector = if (!item.format.isAudio) Icons.Rounded.Movie else Icons.Rounded.MusicNote,
                         contentDescription = null,
                         tint = neonGreen,
                         modifier = Modifier.size(24.dp)
@@ -574,7 +574,7 @@ fun HistoryDownloadCard(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = "${item.platform.displayName} • ${item.format.displayName} • ${item.fileSizeFormatted}",
+                    text = "${item.platform.displayName} • ${item.format.label} • ${item.fileSizeFormatted}",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.6f),
                     fontSize = 10.sp
