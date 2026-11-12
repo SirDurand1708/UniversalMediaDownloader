@@ -30,7 +30,7 @@ interface PlaylistDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertPlaylistItem(item: PlaylistItemEntity)
 
-    @Query("DELETE FROM playlist_items WHERE playlistId = :playlistId AND trackPath = :path")
+    @Query("DELETE FROM playlist_items WHERE playlistId = :playlistId AND trackPath = :trackPath")
     suspend fun removePlaylistItem(playlistId: String, trackPath: String)
 
     @Query("DELETE FROM playlist_items WHERE playlistId = :playlistId")
