@@ -87,7 +87,14 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace
+          if ! ./gradlew assembleRelease --stacktrace 2>&1 | tee ../build_release.log; then
+            echo "### ❌ Gradle Build Failed" >> $GITHUB_STEP_SUMMARY
+            echo '```text' >> $GITHUB_STEP_SUMMARY
+            tail -n 100 ../build_release.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          echo "### ✅ Gradle Build Succeeded" >> $GITHUB_STEP_SUMMARY
           mkdir -p ../dist/Releases
           TAG_VAL="${{ github.ref_name }}"
           if [ -z "$TAG_VAL" ] || [ "$TAG_VAL" = "refs/heads/main" ]; then
@@ -96,8 +103,10 @@ jobs:
           if [ -z "$TAG_VAL" ]; then
             TAG_VAL="v2.5.0"
           fi
-          cp app/build/outputs/apk/release/*.apk ../dist/Releases/OmniVault-${TAG_VAL}-Android.apk
-          cp ../dist/Releases/OmniVault-${TAG_VAL}-Android.apk ../dist/Releases/AuraPlayer-${TAG_VAL}-Android.apk
+          APK_FOUND=$(find app/build/outputs -name "*.apk" | head -n 1)
+          echo "Found APK: $APK_FOUND" >> $GITHUB_STEP_SUMMARY
+          cp "$APK_FOUND" ../dist/Releases/OmniVault-${TAG_VAL}-Android.apk
+          cp "$APK_FOUND" ../dist/Releases/AuraPlayer-${TAG_VAL}-Android.apk
           ls -la ../dist/Releases
 
       - name: 📤 Subir artefacto de Android
