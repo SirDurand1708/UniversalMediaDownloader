@@ -1,11 +1,13 @@
 package com.omnivault.media.ui
 
+import android.Manifest
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.BitmapFactory
-import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -14,8 +16,12 @@ import android.widget.ImageButton
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.widget.NestedScrollView
 import androidx.lifecycle.lifecycleScope
 import androidx.palette.graphics.Palette
@@ -30,25 +36,17 @@ import com.omnivault.media.data.LocalMediaScanner
 import com.omnivault.media.databinding.ActivityMainBinding
 import com.omnivault.media.downloader.DownloadManager
 import com.omnivault.media.downloader.MediaExtractor
-import com.omnivault.media.downloader.MediaPreview
 import com.omnivault.media.model.DownloadItem
 import com.omnivault.media.model.MediaFormat
 import com.omnivault.media.model.PlatformType
 import com.omnivault.media.player.AudioPlayerManager
 import com.omnivault.media.player.NowPlayingTrack
 import com.omnivault.media.service.ClipboardMonitorService
+import com.omnivault.media.service.MediaDownloadService
 import com.omnivault.media.utils.CoverArtHelper
 import com.omnivault.media.utils.LyricsHelper
 import com.omnivault.media.utils.NotificationHelper
 import com.omnivault.media.utils.StorageHelper
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.core.content.ContextCompat
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import com.omnivault.media.service.MediaDownloadService
 import com.omnivault.media.utils.UpdateInfo
 import com.omnivault.media.utils.UpdateManager
 import com.omnivault.media.utils.UrlUtils
@@ -72,7 +70,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var downloadManager: DownloadManager
     private lateinit var downloadAdapter: DownloadAdapter
-    private lateinit var historyAdapter: HistoryAdapter
+    private lateinit var recentAdapter: HistoryAdapter
+    private lateinit var musicAdapter: HistoryAdapter
+    private lateinit var videoAdapter: VideoAdapter
 
     private var selectedFormat: MediaFormat = MediaFormat.M4A
     private var pendingUpdateInfo: UpdateInfo? = null
@@ -92,7 +92,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Subtítulo dinámico con versión oficial
-        binding.tvAppSubtitle.text = "OmniVault v${UpdateManager.CURRENT_VERSION_NAME} • Audio-First Edition"
+        binding.tvAppSubtitle.text = "OmniVault • Music & Video v${UpdateManager.CURRENT_VERSION_NAME}"
 
         downloadManager = DownloadManager.getInstance(this)
         NotificationHelper.createNotificationChannels(this)
@@ -100,12 +100,20 @@ class MainActivity : AppCompatActivity() {
 
         setupRecyclerViews()
         setupListeners()
+        setupBottomNavigation()
+        selectFormat(MediaFormat.M4A) // Formato predeterminado HQ
+
         handlePreloadedUrl(intent)
         checkClipboardForMediaUrl()
 
         // Comprobación de actualizaciones en segundo plano
         checkForUpdates(silent = true)
         handleUpdateIntent(intent)
+
+        // Escaneo de música local con Room SQLite + MediaStore
+        lifecycleScope.launch(Dispatchers.IO) {
+            LocalMediaScanner.scanDeviceAudio(this@MainActivity)
+        }
     }
 
     override fun onResume() {
@@ -120,7 +128,6 @@ class MainActivity : AppCompatActivity() {
         handlePreloadedUrl(intent)
         handleUpdateIntent(intent)
 
-        // Escaneo inicial de música local en segundo plano (Room + MediaStore)
         lifecycleScope.launch(Dispatchers.IO) {
             LocalMediaScanner.scanDeviceAudio(this@MainActivity)
         }
@@ -154,7 +161,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupRecyclerViews() {
-        // Active Downloads
+        // 1. Descargas activas
         downloadAdapter = DownloadAdapter { item ->
             downloadManager.cancelDownload(item.id)
             refreshLists()
@@ -162,8 +169,8 @@ class MainActivity : AppCompatActivity() {
         binding.rvActiveDownloads.layoutManager = LinearLayoutManager(this)
         binding.rvActiveDownloads.adapter = downloadAdapter
 
-        // History
-        historyAdapter = HistoryAdapter(
+        // 2. Historial de descargas recientes (Pestaña Descargas)
+        recentAdapter = HistoryAdapter(
             onPlayClick = { item -> playMediaFile(item) },
             onShareClick = { item -> shareMediaFile(item) },
             onDeleteClick = { item ->
@@ -172,7 +179,27 @@ class MainActivity : AppCompatActivity() {
             }
         )
         binding.rvDownloadHistory.layoutManager = LinearLayoutManager(this)
-        binding.rvDownloadHistory.adapter = historyAdapter
+        binding.rvDownloadHistory.adapter = recentAdapter
+
+        // 3. Biblioteca de Música (Pestaña Música)
+        musicAdapter = HistoryAdapter(
+            onPlayClick = { item -> playMediaFile(item) },
+            onShareClick = { item -> shareMediaFile(item) },
+            onDeleteClick = { item ->
+                downloadManager.removeHistoryItem(item)
+                refreshLists()
+            }
+        )
+        binding.rvMusicLibrary.layoutManager = LinearLayoutManager(this)
+        binding.rvMusicLibrary.adapter = musicAdapter
+
+        // 4. Biblioteca de Videos (Pestaña Videos con tarjetas 16:9)
+        videoAdapter = VideoAdapter(
+            onVideoClick = { item -> playMediaFile(item) },
+            onShareClick = { item -> shareMediaFile(item) }
+        )
+        binding.rvVideoLibrary.layoutManager = LinearLayoutManager(this)
+        binding.rvVideoLibrary.adapter = videoAdapter
 
         downloadManager.onDownloadUpdatedListener = {
             runOnUiThread { refreshLists() }
@@ -208,6 +235,39 @@ class MainActivity : AppCompatActivity() {
         binding.btnUpdateNow.setOnClickListener {
             val update = pendingUpdateInfo ?: return@setOnClickListener
             startUpdateDownload(update.apkUrl, update.version)
+        }
+
+        // Botones Top-Bar (Ecualizador & Búsqueda)
+        binding.btnTopBarEqualizer.setOnClickListener {
+            it.bounce()
+            val history = downloadManager.getHistory()
+            val audioItem = history.firstOrNull { it.format.isAudio && !it.localFilePath.isNullOrBlank() }
+            if (audioItem != null) {
+                showFullPlayerBottomSheet(audioItem)
+            } else {
+                Toast.makeText(this, "🎛️ Reproduce una canción para ecualizar y subir hasta 300% de volumen", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        binding.btnTopBarSearch.setOnClickListener {
+            it.bounce()
+            when {
+                binding.layoutTabDownload.visibility == View.VISIBLE -> {
+                    binding.etUrlInput.requestFocus()
+                }
+                binding.layoutTabMusic.visibility == View.VISIBLE -> {
+                    binding.etMusicSearch.requestFocus()
+                }
+                binding.layoutTabVideos.visibility == View.VISIBLE -> {
+                    binding.etVideoSearch.requestFocus()
+                }
+            }
+        }
+
+        // Botón "Ver Todas" canciones en pantalla principal -> Salta a la pestaña Música
+        binding.btnViewAllSongs.setOnClickListener {
+            it.bounce()
+            switchTab(1)
         }
 
         // Paste Button
@@ -262,33 +322,22 @@ class MainActivity : AppCompatActivity() {
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        // Helper para texto contextual del botón de descarga
-        fun updateDownloadButtonText() {
-            val formatLabel = when (selectedFormat) {
-                MediaFormat.M4A -> "AUDIO M4A (ORIGINAL HQ)"
-                MediaFormat.MP3_320 -> "AUDIO MP3 (320 KBPS)"
-                MediaFormat.MP4_1080 -> "VIDEO FHD (1080P)"
-                MediaFormat.MP4_720 -> "VIDEO HD (720P)"
-                MediaFormat.MP4_480 -> "VIDEO SD (480P)"
-                else -> "MULTIMEDIA"
-            }
-            binding.btnStartDownload.text = "⚡ DESCARGAR $formatLabel"
+        // Selección de Formatos 2x2 (Diseño Idéntico al Mockup)
+        binding.btnFormatM4A.setOnClickListener {
+            it.bounce()
+            selectFormat(MediaFormat.M4A)
         }
-        updateDownloadButtonText()
-
-        // Format Chips con respuesta háptica y actualización dinámica
-        binding.chipGroupFormats.setOnCheckedStateChangeListener { _, checkedIds ->
-            selectedFormat = when {
-                checkedIds.contains(binding.chipM4a.id) -> MediaFormat.M4A
-                checkedIds.contains(binding.chipMp3.id) -> MediaFormat.MP3_320
-                checkedIds.contains(binding.chipMp4Full.id) -> MediaFormat.MP4_1080
-                checkedIds.contains(binding.chipMp4Hd.id) -> MediaFormat.MP4_720
-                else -> MediaFormat.M4A
-            }
-            updateDownloadButtonText()
-            try {
-                binding.root.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
-            } catch (_: Exception) {}
+        binding.btnFormatMP3.setOnClickListener {
+            it.bounce()
+            selectFormat(MediaFormat.MP3_320)
+        }
+        binding.btnFormat1080p.setOnClickListener {
+            it.bounce()
+            selectFormat(MediaFormat.MP4_1080)
+        }
+        binding.btnFormat720p.setOnClickListener {
+            it.bounce()
+            selectFormat(MediaFormat.MP4_720)
         }
 
         // Start Download Button (Soporta canciones individuales y Álbumes/Playlists completos de YouTube)
@@ -334,12 +383,6 @@ class MainActivity : AppCompatActivity() {
             refreshLists()
         }
 
-        // Clear History
-        binding.tvClearHistory.setOnClickListener {
-            downloadManager.clearAllHistory()
-            refreshLists()
-        }
-
         // Ubicación de Almacenamiento y MicroSD (Pestaña Ajustes)
         binding.tvStorageLocationSummary.text = StorageHelper.getStorageSummary(this)
         binding.btnToggleStorageLocation.setOnClickListener {
@@ -357,25 +400,52 @@ class MainActivity : AppCompatActivity() {
             binding.tvStorageLocationSummary.text = StorageHelper.getStorageSummary(this)
         }
 
-        // Buscador interactivo en Mi Bóveda (Biblioteca)
-        binding.etLibrarySearch.addTextChangedListener(object : TextWatcher {
+        // Buscador interactivo en Pestaña Música
+        binding.etMusicSearch.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val q = s?.toString() ?: ""
-                binding.btnClearLibrarySearch.visibility = if (q.isNotEmpty()) View.VISIBLE else View.GONE
-                historyAdapter.filter(q)
+                binding.btnClearMusicSearch.visibility = if (q.isNotEmpty()) View.VISIBLE else View.GONE
+                musicAdapter.filter(q)
             }
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        binding.btnClearLibrarySearch.setOnClickListener {
+        binding.btnClearMusicSearch.setOnClickListener {
             it.bounce()
-            binding.etLibrarySearch.setText("")
-            historyAdapter.filter("")
+            binding.etMusicSearch.setText("")
+            musicAdapter.filter("")
         }
 
-        // Navegación Inferior (Pestañas Concept 3: Spotify Vault)
-        setupBottomNavigation()
+        // Botón Reproducir Todo en Modo Aleatorio (Pestaña Música)
+        binding.btnPlayAllMusic.setOnClickListener {
+            it.bounce()
+            val audioItems = downloadManager.getHistory().filter { it.format.isAudio && !it.localFilePath.isNullOrBlank() }
+            if (audioItems.isNotEmpty()) {
+                val randomSong = audioItems.random()
+                playAudioInApp(randomSong)
+                Toast.makeText(this, "▶ Reproduciendo de forma aleatoria (${audioItems.size} canciones)", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Aún no tienes canciones en tu biblioteca", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // Buscador interactivo en Pestaña Videos
+        binding.etVideoSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val q = s?.toString() ?: ""
+                binding.btnClearVideoSearch.visibility = if (q.isNotEmpty()) View.VISIBLE else View.GONE
+                videoAdapter.filter(q)
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+
+        binding.btnClearVideoSearch.setOnClickListener {
+            it.bounce()
+            binding.etVideoSearch.setText("")
+            videoAdapter.filter("")
+        }
 
         // Botón Manual de Actualizaciones (Pestaña Ajustes)
         binding.btnCheckUpdatesManual.setOnClickListener {
@@ -384,58 +454,71 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun selectFormat(format: MediaFormat) {
+        selectedFormat = format
+        val selectedBg = R.drawable.bg_chip_selected
+        val unselectedBg = R.drawable.bg_chip_unselected
+        val cyan = ContextCompat.getColor(this, R.color.vault_cyan)
+        val muted = ContextCompat.getColor(this, R.color.text_secondary)
+
+        // M4A
+        binding.btnFormatM4A.setBackgroundResource(if (format == MediaFormat.M4A) selectedBg else unselectedBg)
+        binding.btnFormatM4A.setTextColor(if (format == MediaFormat.M4A) cyan else muted)
+        binding.btnFormatM4A.text = if (format == MediaFormat.M4A) "✓ M4A • Original HQ" else "M4A • Original HQ"
+
+        // MP3
+        binding.btnFormatMP3.setBackgroundResource(if (format == MediaFormat.MP3_320) selectedBg else unselectedBg)
+        binding.btnFormatMP3.setTextColor(if (format == MediaFormat.MP3_320) cyan else muted)
+        binding.btnFormatMP3.text = if (format == MediaFormat.MP3_320) "✓ MP3 • 320 kbps" else "MP3 • 320 kbps"
+
+        // 1080p
+        binding.btnFormat1080p.setBackgroundResource(if (format == MediaFormat.MP4_1080) selectedBg else unselectedBg)
+        binding.btnFormat1080p.setTextColor(if (format == MediaFormat.MP4_1080) cyan else muted)
+        binding.btnFormat1080p.text = if (format == MediaFormat.MP4_1080) "✓ 1080p • Full HD" else "1080p • Full HD"
+
+        // 720p
+        binding.btnFormat720p.setBackgroundResource(if (format == MediaFormat.MP4_720) selectedBg else unselectedBg)
+        binding.btnFormat720p.setTextColor(if (format == MediaFormat.MP4_720) cyan else muted)
+        binding.btnFormat720p.text = if (format == MediaFormat.MP4_720) "✓ 720p • HD" else "720p • HD"
+
+        val formatLabel = when (selectedFormat) {
+            MediaFormat.M4A -> "AUDIO HQ (M4A)"
+            MediaFormat.MP3_320 -> "AUDIO MP3 (320 KBPS)"
+            MediaFormat.MP4_1080 -> "VIDEO FHD (1080P)"
+            MediaFormat.MP4_720 -> "VIDEO HD (720P)"
+            MediaFormat.MP4_480 -> "VIDEO SD (480P)"
+            else -> "MULTIMEDIA"
+        }
+        binding.btnStartDownload.text = "⚡ DESCARGAR $formatLabel"
+    }
+
     private fun setupBottomNavigation() {
         binding.tabBtnDownload.setOnClickListener { switchTab(0) }
-        binding.tabBtnLibrary.setOnClickListener { switchTab(1) }
-        binding.tabBtnSettings.setOnClickListener { switchTab(2) }
+        binding.tabBtnMusic.setOnClickListener { switchTab(1) }
+        binding.tabBtnVideos.setOnClickListener { switchTab(2) }
+        binding.tabBtnSettings.setOnClickListener { switchTab(3) }
     }
 
     private fun switchTab(index: Int) {
-        val colorActive = getColor(R.color.spotify_green)
-        val colorMuted = getColor(R.color.text_muted)
+        val cyan = ContextCompat.getColor(this, R.color.vault_cyan)
+        val muted = ContextCompat.getColor(this, R.color.text_muted)
 
-        when (index) {
-            0 -> {
-                binding.layoutTabDownload.visibility = View.VISIBLE
-                binding.layoutTabLibrary.visibility = View.GONE
-                binding.layoutTabSettings.visibility = View.GONE
+        binding.layoutTabDownload.visibility = if (index == 0) View.VISIBLE else View.GONE
+        binding.layoutTabMusic.visibility = if (index == 1) View.VISIBLE else View.GONE
+        binding.layoutTabVideos.visibility = if (index == 2) View.VISIBLE else View.GONE
+        binding.layoutTabSettings.visibility = if (index == 3) View.VISIBLE else View.GONE
 
-                binding.labelNavDownload.setTextColor(colorActive)
-                binding.labelNavLibrary.setTextColor(colorMuted)
-                binding.labelNavSettings.setTextColor(colorMuted)
+        binding.iconNavDownload.setColorFilter(if (index == 0) cyan else muted)
+        binding.iconNavMusic.setColorFilter(if (index == 1) cyan else muted)
+        binding.iconNavVideos.setColorFilter(if (index == 2) cyan else muted)
+        binding.iconNavSettings.setColorFilter(if (index == 3) cyan else muted)
 
-                binding.iconNavDownload.setColorFilter(colorActive)
-                binding.iconNavLibrary.setColorFilter(colorMuted)
-                binding.iconNavSettings.setColorFilter(colorMuted)
-            }
-            1 -> {
-                binding.layoutTabDownload.visibility = View.GONE
-                binding.layoutTabLibrary.visibility = View.VISIBLE
-                binding.layoutTabSettings.visibility = View.GONE
+        binding.labelNavDownload.setTextColor(if (index == 0) cyan else muted)
+        binding.labelNavMusic.setTextColor(if (index == 1) cyan else muted)
+        binding.labelNavVideos.setTextColor(if (index == 2) cyan else muted)
+        binding.labelNavSettings.setTextColor(if (index == 3) cyan else muted)
 
-                binding.labelNavDownload.setTextColor(colorMuted)
-                binding.labelNavLibrary.setTextColor(colorActive)
-                binding.labelNavSettings.setTextColor(colorMuted)
-
-                binding.iconNavDownload.setColorFilter(colorMuted)
-                binding.iconNavLibrary.setColorFilter(colorActive)
-                binding.iconNavSettings.setColorFilter(colorMuted)
-                refreshLists()
-            }
-            2 -> {
-                binding.layoutTabDownload.visibility = View.GONE
-                binding.layoutTabLibrary.visibility = View.GONE
-                binding.layoutTabSettings.visibility = View.VISIBLE
-
-                binding.labelNavDownload.setTextColor(colorMuted)
-                binding.labelNavLibrary.setTextColor(colorMuted)
-                binding.labelNavSettings.setTextColor(colorActive)
-
-                binding.iconNavDownload.setColorFilter(colorMuted)
-                binding.iconNavLibrary.setColorFilter(colorMuted)
-                binding.iconNavSettings.setColorFilter(colorActive)
-            }
-        }
+        refreshLists()
     }
 
     private fun analyzeUrl(url: String) {
@@ -581,6 +664,7 @@ class MainActivity : AppCompatActivity() {
         val active = downloadManager.getActiveDownloads()
         val history = downloadManager.getHistory()
 
+        // 1. Descargas activas
         if (active.isNotEmpty()) {
             binding.tvActiveDownloadsHeader.visibility = View.VISIBLE
             binding.rvActiveDownloads.visibility = View.VISIBLE
@@ -590,80 +674,41 @@ class MainActivity : AppCompatActivity() {
             binding.rvActiveDownloads.visibility = View.GONE
         }
 
+        // 2. Historial en Pestaña Descargas
+        val audioTracks = history.filter { it.format.isAudio }
+        val videoTracks = history.filter { !it.format.isAudio }
+
+        binding.btnViewAllSongs.text = "Ver Todas (${audioTracks.size})"
+
         if (history.isNotEmpty()) {
             binding.rvDownloadHistory.visibility = View.VISIBLE
             binding.tvEmptyHistory.visibility = View.GONE
-            historyAdapter.updateList(history)
+            recentAdapter.updateList(history.take(8))
         } else {
             binding.rvDownloadHistory.visibility = View.GONE
             binding.tvEmptyHistory.visibility = View.VISIBLE
         }
 
-        // Mini-reproductor flotante persistente estilo Spotify Vault
-        val latest = history.firstOrNull()
-        if (latest != null && !latest.localFilePath.isNullOrBlank()) {
-            binding.cardMiniPlayer.visibility = View.VISIBLE
-            binding.tvMiniPlayerTitle.text = latest.title
-            val artistOrPlatform = if (!latest.artist.isNullOrBlank()) latest.artist else latest.platform.displayName
-            binding.tvMiniPlayerSubtitle.text = "$artistOrPlatform • Toca para reproducir con carátula"
-
-            // Carátula del mini-reproductor
-            var coverSet = false
-            val thumb = latest.thumbnailUrl
-            if (!thumb.isNullOrBlank()) {
-                val f = File(thumb)
-                if (f.exists()) {
-                    try {
-                        val bm = BitmapFactory.decodeFile(f.absolutePath)
-                        if (bm != null) {
-                            binding.imgMiniPlayerCover.setImageBitmap(bm)
-                            coverSet = true
-                        }
-                    } catch (_: Exception) {}
-                }
-            }
-            if (!coverSet) {
-                val cached = latest.id?.let { CoverArtHelper.getCachedCoverFile(this, it) }
-                if (cached != null && cached.exists()) {
-                    try {
-                        val bm = BitmapFactory.decodeFile(cached.absolutePath)
-                        if (bm != null) {
-                            binding.imgMiniPlayerCover.setImageBitmap(bm)
-                            coverSet = true
-                        }
-                    } catch (_: Exception) {}
-                }
-            }
-            if (!coverSet) {
-                binding.imgMiniPlayerCover.setImageResource(R.mipmap.ic_launcher)
-            }
-
-            val isCurrentTrackPlaying = AudioPlayerManager.isPlaying() && AudioPlayerManager.getCurrentTrack()?.filePath == latest.localFilePath
-            binding.btnMiniPlayerPlay.setImageResource(
-                if (isCurrentTrackPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
-            )
-
-            binding.cardMiniPlayer.setOnClickListener {
-                if (latest.format.isAudio) {
-                    playAudioInApp(latest)
-                } else {
-                    playMediaFile(latest)
-                }
-            }
-            binding.btnMiniPlayerPlay.setOnClickListener {
-                if (latest.format.isAudio) {
-                    if (AudioPlayerManager.getCurrentTrack()?.filePath == latest.localFilePath) {
-                        AudioPlayerManager.togglePlayPause()
-                    } else {
-                        playAudioInApp(latest)
-                    }
-                } else {
-                    playMediaFile(latest)
-                }
-            }
-            binding.btnMiniPlayerShare.setOnClickListener { shareMediaFile(latest) }
+        // 3. Pestaña Música
+        binding.tvTotalMusicCount.text = "${audioTracks.size} canciones"
+        if (audioTracks.isNotEmpty()) {
+            binding.rvMusicLibrary.visibility = View.VISIBLE
+            binding.tvEmptyMusic.visibility = View.GONE
+            musicAdapter.updateList(audioTracks)
         } else {
-            binding.cardMiniPlayer.visibility = View.GONE
+            binding.rvMusicLibrary.visibility = View.GONE
+            binding.tvEmptyMusic.visibility = View.VISIBLE
+        }
+
+        // 4. Pestaña Videos
+        binding.tvTotalVideosCount.text = "${videoTracks.size} videos"
+        if (videoTracks.isNotEmpty()) {
+            binding.rvVideoLibrary.visibility = View.VISIBLE
+            binding.tvEmptyVideos.visibility = View.GONE
+            videoAdapter.updateList(history)
+        } else {
+            binding.rvVideoLibrary.visibility = View.GONE
+            binding.tvEmptyVideos.visibility = View.VISIBLE
         }
     }
 
@@ -861,10 +906,8 @@ class MainActivity : AppCompatActivity() {
         val updatePlayIcon = {
             if (AudioPlayerManager.isPlaying()) {
                 fabPlayPause.setImageResource(android.R.drawable.ic_media_pause)
-                binding.btnMiniPlayerPlay.setImageResource(android.R.drawable.ic_media_pause)
             } else {
                 fabPlayPause.setImageResource(android.R.drawable.ic_media_play)
-                binding.btnMiniPlayerPlay.setImageResource(android.R.drawable.ic_media_play)
             }
         }
         updatePlayIcon()

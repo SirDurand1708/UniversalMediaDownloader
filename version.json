@@ -1,13 +1,13 @@
 {
-  "version": "2.3.0",
-  "version_code": 230,
+  "version": "2.3.1",
+  "version_code": 231,
   "release_date": "2026-11-12",
-  "title": "OmniVault v2.3.0 — Lark Player Music Engine & Cosmic Redesign",
-  "changelog": "🎵 Reproductor estilo Lark Player con AndroidX Media3 (ExoPlayer)\n🔊 Super Volumen hasta 300% con LoudnessEnhancer y limitador anti-distorsión\n🎨 Rediseño visual Prismatic Aurora basado en el logotipo oficial (Cian Neón y Púrpura)\n🎛️ Ecualizador por hardware de 5 bandas, Bass Boost y sonido envolvente 3D\n📂 Biblioteca local integrada con Room SQLite y escáner automático de MediaStore\n🖼️ Carga eficiente de carátulas con Coil y atmósfera adaptativa con Palette API\n📱 Notificación multimedia estándar de Android 13/14 con reproducción en segundo plano",
+  "title": "OmniVault v2.3.1 — 4 Pestañas Dedicadas & Reproductor Optimizado",
+  "changelog": "🎨 Interfaz Prismatic Aurora idéntica a la maqueta aprobada con paleta Cian Neón y Púrpura\n🎬 Nueva pestaña dedicada exclusivamente a Videos (resolución 1080p FHD / 720p HD y miniaturas 16:9)\n📱 4 pestañas de navegación: Descargas, Música, Videos y Ajustes\n⚡ Selector de formato 2x2 directo (M4A, MP3 320k, 1080p, 720p) sin mini reproductor inferior\n🔊 Super Volumen hasta 300% con ecualizador por hardware de 5 bandas y Bass Boost en el reproductor completo\n🎵 Motor de audio profesional AndroidX Media3 (ExoPlayer) con MediaSessionService en segundo plano",
   "android": {
-    "version": "2.3.0",
-    "version_code": 230,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.3.0/OmniVault-v2.3.0-Android.apk",
+    "version": "2.3.1",
+    "version_code": 231,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.3.1/OmniVault-v2.3.1-Android.apk",
     "min_version_code": 201
   },
   "windows": {
