@@ -96,16 +96,21 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     var userPlaylists by mutableStateOf<List<com.amurayada.music.data.model.Playlist>>(emptyList())
         private set
 
-    private val prefs = getApplication<Application>().getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE)
+    private val omniPrefs by lazy {
+        application.getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE)
+    }
 
     var songSortOrder by mutableStateOf(
-        SongSort.fromKey(prefs.getString("song_sort_order", SongSort.RECENT.name))
+        SongSort.fromKey(
+            application.getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE)
+                .getString("song_sort_order", SongSort.RECENT.name)
+        )
     )
         private set
 
     fun setSongSort(sort: SongSort) {
         songSortOrder = sort
-        prefs.edit().putString("song_sort_order", sort.name).apply()
+        omniPrefs.edit().putString("song_sort_order", sort.name).apply()
     }
 
     var isLoading by mutableStateOf(false)
