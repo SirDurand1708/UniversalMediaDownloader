@@ -202,11 +202,13 @@ class DownloadManager private constructor(private val context: Context) {
                 item.speedText = "Remuxing 1080p FHD…"
                 notifyUpdate(item)
                 val muxed = MediaMuxerHelper.muxVideoAndAudio(tempDownloadFile, tempAudioFile, stagedFile)
-                tempDownloadFile.delete()
-                tempAudioFile.delete()
-
-                if (!muxed || !stagedFile.exists() || stagedFile.length() == 0L) {
+                if (muxed && stagedFile.exists() && stagedFile.length() > 0L) {
+                    tempDownloadFile.delete()
+                    tempAudioFile.delete()
+                } else {
                     tempDownloadFile.copyTo(stagedFile, overwrite = true)
+                    tempDownloadFile.delete()
+                    tempAudioFile.delete()
                 }
                 finalMimeType = "video/mp4"
             } else if (item.format.isAudio) {

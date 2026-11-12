@@ -565,12 +565,12 @@ object MediaExtractor {
 
                                 for (elem in adaptive) {
                                     val obj = elem.asJsonObject
-                                    val mime = obj.get("mimeType")?.asString ?: ""
-                                    val url = if (obj.has("url")) obj.get("url").asString else null
+                                    val mime = if (obj.has("mimeType") && !obj.get("mimeType").isJsonNull) obj.get("mimeType").asString else ""
+                                    val url = if (obj.has("url") && !obj.get("url").isJsonNull) obj.get("url").asString else null
 
                                     if (url != null && v1080Url == null && mime.startsWith("video/mp4")) {
-                                        val height = if (obj.has("height")) obj.get("height").asInt else 0
-                                        val quality = if (obj.has("qualityLabel")) obj.get("qualityLabel").asString else ""
+                                        val height = if (obj.has("height") && !obj.get("height").isJsonNull) obj.get("height").asInt else 0
+                                        val quality = if (obj.has("qualityLabel") && !obj.get("qualityLabel").isJsonNull) obj.get("qualityLabel").asString else ""
                                         if (height >= 1080 || quality.contains("1080")) {
                                             v1080Url = url
                                         }
@@ -661,15 +661,15 @@ object MediaExtractor {
                             var v1080Url: String? = null
                             for (elem in videos) {
                                 val obj = elem.asJsonObject
-                                val q = if (obj.has("quality")) obj.get("quality").asString else ""
-                                val fmt = if (obj.has("format")) obj.get("format").asString else ""
-                                val sUrl = if (obj.has("url")) obj.get("url").asString else ""
+                                val q = if (obj.has("quality") && !obj.get("quality").isJsonNull) obj.get("quality").asString else ""
+                                val fmt = if (obj.has("format") && !obj.get("format").isJsonNull) obj.get("format").asString else ""
+                                val sUrl = if (obj.has("url") && !obj.get("url").isJsonNull) obj.get("url").asString else ""
                                 if (q.contains("1080") && fmt.contains("mp4", ignoreCase = true) && sUrl.isNotBlank()) {
                                     v1080Url = sUrl
                                     break
                                 }
                             }
-                            val aUrl = if (audios[0].isJsonObject && audios[0].asJsonObject.has("url")) audios[0].asJsonObject.get("url").asString else null
+                            val aUrl = if (audios[0].isJsonObject && audios[0].asJsonObject.has("url") && !audios[0].asJsonObject.get("url").isJsonNull) audios[0].asJsonObject.get("url").asString else null
                             if (v1080Url != null && aUrl != null) {
                                 return ExtractedMediaInfo(
                                     title = title,

@@ -73,19 +73,22 @@ object MediaMuxerHelper {
                 return false
             }
 
+            val vFormat = videoFormat
+            val aFormat = audioFormat
+
             videoExtractor.selectTrack(videoTrackIndex)
             audioExtractor.selectTrack(audioTrackIndex)
 
             // 3. Iniciar MediaMuxer
             if (outputFile.exists()) outputFile.delete()
             muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-            val muxerVideoTrack = muxer.addTrack(videoFormat)
-            val muxerAudioTrack = muxer.addTrack(audioFormat)
+            val muxerVideoTrack = muxer.addTrack(vFormat)
+            val muxerAudioTrack = muxer.addTrack(aFormat)
             muxer.start()
 
             // 4. Escribir muestras de video
-            val videoBufSize = if (videoFormat.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
-                videoFormat.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE).coerceAtLeast(256 * 1024)
+            val videoBufSize = if (vFormat.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
+                vFormat.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE).coerceAtLeast(256 * 1024)
             } else {
                 512 * 1024
             }
@@ -104,8 +107,8 @@ object MediaMuxerHelper {
             }
 
             // 5. Escribir muestras de audio
-            val audioBufSize = if (audioFormat.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
-                audioFormat.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE).coerceAtLeast(64 * 1024)
+            val audioBufSize = if (aFormat.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
+                aFormat.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE).coerceAtLeast(64 * 1024)
             } else {
                 128 * 1024
             }

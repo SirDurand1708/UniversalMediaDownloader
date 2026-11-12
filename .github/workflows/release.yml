@@ -87,7 +87,7 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease --stacktrace
           mkdir -p ../dist/Releases
           TAG_VAL="${{ github.ref_name }}"
           if [ -z "$TAG_VAL" ] || [ "$TAG_VAL" = "refs/heads/main" ]; then
