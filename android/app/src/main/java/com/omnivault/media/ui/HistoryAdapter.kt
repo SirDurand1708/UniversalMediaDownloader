@@ -62,8 +62,8 @@ class HistoryAdapter(
             SortOption.MOST_PLAYED -> filtered.sortedByDescending { it.playCount }
             SortOption.NAME_ASC -> filtered.sortedBy { it.title.lowercase() }
             SortOption.NAME_DESC -> filtered.sortedByDescending { it.title.lowercase() }
-            SortOption.SIZE_DESC -> filtered.sortedByDescending { File(it.localFilePath ?: "").length() }
-            SortOption.SIZE_ASC -> filtered.sortedBy { File(it.localFilePath ?: "").length() }
+            SortOption.SIZE_DESC -> filtered.sortedByDescending { if (it.fileSizeBytes > 0) it.fileSizeBytes else File(it.localFilePath ?: "").length() }
+            SortOption.SIZE_ASC -> filtered.sortedBy { if (it.fileSizeBytes > 0) it.fileSizeBytes else File(it.localFilePath ?: "").length() }
         }
 
         items.clear()
@@ -88,11 +88,10 @@ class HistoryAdapter(
             binding.tvHistoryPlatform.text = item.artist ?: item.platform.displayName
             binding.tvHistoryDate.text = dateFormat.format(Date(item.timestamp))
 
-            val file = item.localFilePath?.let { File(it) }
             val sizeStr = if (item.fileSizeFormatted.isNotBlank()) {
                 item.fileSizeFormatted
-            } else if (file != null && file.exists()) {
-                String.format("%.1f MB", file.length() / (1024f * 1024f))
+            } else if (item.fileSizeBytes > 0) {
+                String.format("%.1f MB", item.fileSizeBytes / (1024f * 1024f))
             } else {
                 "Descargado"
             }
@@ -128,20 +127,14 @@ class HistoryAdapter(
                 }.start()
             }
 
-            // Cargar carátula con Coil
+            // Cargar carátula con Coil y tamaño restringido para miles de pistas
             val thumb = item.thumbnailUrl
             if (!thumb.isNullOrBlank()) {
-                val localFile = File(thumb)
-                if (localFile.exists()) {
-                    binding.imgHistoryCover.load(localFile) {
-                        crossfade(true)
-                        error(R.mipmap.ic_launcher)
-                    }
-                } else {
-                    binding.imgHistoryCover.load(thumb) {
-                        crossfade(true)
-                        error(R.mipmap.ic_launcher)
-                    }
+                val model: Any = if (thumb.startsWith("content://") || thumb.startsWith("http")) thumb else File(thumb)
+                binding.imgHistoryCover.load(model) {
+                    crossfade(true)
+                    size(128, 128)
+                    error(R.mipmap.ic_launcher)
                 }
             } else {
                 binding.imgHistoryCover.setImageResource(R.mipmap.ic_launcher)

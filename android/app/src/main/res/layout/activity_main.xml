@@ -7,21 +7,15 @@
     android:fitsSystemWindows="true"
     android:background="@color/spotify_black">
 
-    <!-- Contenido Scrollable Principal -->
-    <androidx.core.widget.NestedScrollView
-        android:id="@+id/mainScrollView"
+    <!-- Cabecera Superior Oficial OmniVault (Fija Arriba) -->
+    <LinearLayout
+        android:id="@+id/layoutTopHeader"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_above="@+id/layoutBottomSection"
-        android:fillViewport="true">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingHorizontal="16dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="24dp">
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:orientation="vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="12dp">
 
             <!-- Banner de Actualización Oficial (1 Toque) -->
             <LinearLayout
@@ -168,15 +162,34 @@
                     android:src="@drawable/ic_search"
                     app:tint="@color/text_secondary" />
             </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
 
-            <!-- ======================================================== -->
-            <!-- PESTAÑA 1: DESCARGAR (Diseño Idéntico al Mockup)        -->
-            <!-- ======================================================== -->
+    <!-- Contenedor Principal de Pestañas -->
+    <FrameLayout
+        android:id="@+id/layoutTabContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@+id/layoutTopHeader"
+        android:layout_above="@+id/layoutBottomSection">
+
+        <!-- ======================================================== -->
+        <!-- PESTAÑA 1: DESCARGAR (Diseño Idéntico al Mockup)        -->
+        <!-- ======================================================== -->
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/mainScrollView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:visibility="visible">
+
             <LinearLayout
                 android:id="@+id/layoutTabDownload"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
+                android:paddingHorizontal="16dp"
+                android:paddingBottom="24dp"
                 android:visibility="visible">
 
                 <!-- Caja de Entrada con Detección Automática -->
@@ -559,266 +572,90 @@
                     android:visibility="gone" />
 
             </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
 
-            <!-- ======================================================== -->
-            <!-- PESTAÑA 2: MÚSICA (Biblioteca Completa de Audio)         -->
-            <!-- ======================================================== -->
+        <!-- ======================================================== -->
+        <!-- PESTAÑA 2: MÚSICA (Biblioteca Completa de Audio)         -->
+        <!-- ======================================================== -->
+        <LinearLayout
+            android:id="@+id/layoutTabMusic"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:visibility="gone">
+
             <LinearLayout
-                android:id="@+id/layoutTabMusic"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone">
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-                <LinearLayout
-                    android:layout_width="match_parent"
+                <TextView
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
+                    android:layout_weight="1"
+                    android:fontFamily="sans-serif-black"
+                    android:letterSpacing="0.04"
+                    android:text="🎵 MÚSICA EN TU BÓVEDA"
+                    android:textColor="@color/vault_cyan"
+                    android:textSize="15sp" />
 
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:fontFamily="sans-serif-black"
-                        android:letterSpacing="0.04"
-                        android:text="🎵 MÚSICA EN TU BÓVEDA"
-                        android:textColor="@color/vault_cyan"
-                        android:textSize="15sp" />
-
-                    <TextView
-                        android:id="@+id/tvTotalMusicCount"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-medium"
-                        android:text="0 canciones"
-                        android:textColor="@color/vault_purple"
-                        android:textSize="11sp" />
-                </LinearLayout>
-
-                <!-- Selector de Sub-Pestañas: Canciones vs Playlists -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="40dp"
-                    android:layout_marginTop="10dp"
-                    android:background="@drawable/bg_input_box"
-                    android:padding="3dp"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:id="@+id/btnSubTabSongs"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_chip_selected"
-                        android:fontFamily="sans-serif-bold"
-                        android:gravity="center"
-                        android:text="🎵 Canciones"
-                        android:textColor="@color/vault_cyan"
-                        android:textSize="11sp" />
-
-                    <TextView
-                        android:id="@+id/btnSubTabPlaylists"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_chip_unselected"
-                        android:fontFamily="sans-serif-bold"
-                        android:gravity="center"
-                        android:text="📑 Playlists"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="11sp" />
-                </LinearLayout>
-
-                <!-- CONTENEDOR 1: SUB-PESTAÑA CANCIONES -->
-                <LinearLayout
-                    android:id="@+id/layoutSongsSubTab"
-                    android:layout_width="match_parent"
+                <TextView
+                    android:id="@+id/tvTotalMusicCount"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="visible">
-
-                    <!-- Buscador de Música + Botón de Ordenar -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:background="@drawable/bg_input_box"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:paddingHorizontal="10dp"
-                        android:paddingVertical="2dp">
-
-                        <ImageView
-                            android:layout_width="16dp"
-                            android:layout_height="16dp"
-                            app:srcCompat="@drawable/ic_search"
-                            app:tint="@color/text_muted" />
-
-                        <EditText
-                            android:id="@+id/etMusicSearch"
-                            android:layout_width="0dp"
-                            android:layout_height="40dp"
-                            android:layout_marginStart="8dp"
-                            android:layout_weight="1"
-                            android:background="@android:color/transparent"
-                            android:fontFamily="sans-serif"
-                            android:hint="Buscar por canción, artista o álbum…"
-                            android:inputType="text"
-                            android:maxLines="1"
-                            android:textColor="@color/text_primary"
-                            android:textColorHint="@color/text_muted"
-                            android:textSize="12sp" />
-
-                        <ImageButton
-                            android:id="@+id/btnClearMusicSearch"
-                            android:layout_width="26dp"
-                            android:layout_height="26dp"
-                            android:background="?attr/selectableItemBackgroundBorderless"
-                            android:contentDescription="Limpiar"
-                            android:src="@android:drawable/ic_menu_close_clear_cancel"
-                            android:visibility="gone"
-                            app:tint="@color/text_muted" />
-
-                        <!-- Botón Ordenar Música -->
-                        <ImageButton
-                            android:id="@+id/btnSortMusic"
-                            android:layout_width="32dp"
-                            android:layout_height="32dp"
-                            android:layout_marginStart="6dp"
-                            android:background="?attr/selectableItemBackgroundBorderless"
-                            android:contentDescription="Ordenar"
-                            android:src="@drawable/ic_sort"
-                            app:tint="@color/vault_cyan" />
-                    </LinearLayout>
-
-                    <!-- Botón de Reproducción Aleatoria Rápida -->
-                    <LinearLayout
-                        android:id="@+id/btnPlayAllMusic"
-                        android:layout_width="match_parent"
-                        android:layout_height="42dp"
-                        android:layout_marginTop="10dp"
-                        android:background="@drawable/bg_paste_gradient"
-                        android:gravity="center"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="sans-serif-black"
-                            android:text="▶ Reproducir Todo (Modo Aleatorio)"
-                            android:textColor="#0A0C14"
-                            android:textSize="12sp" />
-                    </LinearLayout>
-
-                    <androidx.recyclerview.widget.RecyclerView
-                        android:id="@+id/rvMusicLibrary"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:nestedScrollingEnabled="false" />
-
-                    <TextView
-                        android:id="@+id/tvEmptyMusic"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="30dp"
-                        android:layout_marginBottom="30dp"
-                        android:fontFamily="sans-serif"
-                        android:gravity="center"
-                        android:text="Aún no tienes canciones en tu biblioteca.\nDescarga música o sincroniza las de tu celular."
-                        android:textColor="@color/text_muted"
-                        android:textSize="12sp"
-                        android:visibility="gone" />
-                </LinearLayout>
-
-                <!-- CONTENEDOR 2: SUB-PESTAÑA PLAYLISTS -->
-                <LinearLayout
-                    android:id="@+id/layoutPlaylistsSubTab"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone">
-
-                    <!-- Botón Crear Nueva Playlist -->
-                    <LinearLayout
-                        android:id="@+id/btnCreatePlaylist"
-                        android:layout_width="match_parent"
-                        android:layout_height="46dp"
-                        android:layout_marginTop="12dp"
-                        android:background="@drawable/bg_btn_gradient"
-                        android:gravity="center">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="sans-serif-black"
-                            android:text="✨ + Crear Nueva Playlist"
-                            android:textColor="#0A0C14"
-                            android:textSize="12sp" />
-                    </LinearLayout>
-
-                    <androidx.recyclerview.widget.RecyclerView
-                        android:id="@+id/rvPlaylists"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:nestedScrollingEnabled="false" />
-
-                    <TextView
-                        android:id="@+id/tvEmptyPlaylists"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="30dp"
-                        android:layout_marginBottom="30dp"
-                        android:fontFamily="sans-serif"
-                        android:gravity="center"
-                        android:text="Aún no has creado playlists.\nPulsa el botón de arriba para crear tu primera lista personalizada."
-                        android:textColor="@color/text_muted"
-                        android:textSize="12sp"
-                        android:visibility="visible" />
-                </LinearLayout>
+                    android:fontFamily="sans-serif-medium"
+                    android:text="0 canciones"
+                    android:textColor="@color/vault_purple"
+                    android:textSize="11sp" />
             </LinearLayout>
 
-            <!-- ======================================================== -->
-            <!-- PESTAÑA 3: VIDEOS (Nueva Pestaña Exclusiva para Videos)  -->
-            <!-- ======================================================== -->
+            <!-- Selector de Sub-Pestañas: Canciones vs Playlists -->
             <LinearLayout
-                android:id="@+id/layoutTabVideos"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_input_box"
+                android:padding="3dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/btnSubTabSongs"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_chip_selected"
+                    android:fontFamily="sans-serif-bold"
+                    android:gravity="center"
+                    android:text="🎵 Canciones"
+                    android:textColor="@color/vault_cyan"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/btnSubTabPlaylists"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_chip_unselected"
+                    android:fontFamily="sans-serif-bold"
+                    android:gravity="center"
+                    android:text="📑 Playlists"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <!-- CONTENEDOR 1: SUB-PESTAÑA CANCIONES (Con RecyclerView virtualizado) -->
+            <LinearLayout
+                android:id="@+id/layoutSongsSubTab"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
                 android:orientation="vertical"
-                android:visibility="gone">
+                android:visibility="visible">
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:fontFamily="sans-serif-black"
-                        android:letterSpacing="0.04"
-                        android:text="🎬 VIDEOS EN TU BÓVEDA"
-                        android:textColor="@color/vault_cyan"
-                        android:textSize="15sp" />
-
-                    <TextView
-                        android:id="@+id/tvTotalVideosCount"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-medium"
-                        android:text="0 videos"
-                        android:textColor="@color/vault_purple"
-                        android:textSize="11sp" />
-                </LinearLayout>
-
-                <!-- Buscador de Videos -->
+                <!-- Buscador de Música + Botón de Ordenar -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -836,14 +673,14 @@
                         app:tint="@color/text_muted" />
 
                     <EditText
-                        android:id="@+id/etVideoSearch"
+                        android:id="@+id/etMusicSearch"
                         android:layout_width="0dp"
                         android:layout_height="40dp"
                         android:layout_marginStart="8dp"
                         android:layout_weight="1"
                         android:background="@android:color/transparent"
                         android:fontFamily="sans-serif"
-                        android:hint="Buscar videos por título…"
+                        android:hint="Buscar por canción, artista o álbum…"
                         android:inputType="text"
                         android:maxLines="1"
                         android:textColor="@color/text_primary"
@@ -851,7 +688,7 @@
                         android:textSize="12sp" />
 
                     <ImageButton
-                        android:id="@+id/btnClearVideoSearch"
+                        android:id="@+id/btnClearMusicSearch"
                         android:layout_width="26dp"
                         android:layout_height="26dp"
                         android:background="?attr/selectableItemBackgroundBorderless"
@@ -860,9 +697,9 @@
                         android:visibility="gone"
                         app:tint="@color/text_muted" />
 
-                    <!-- Botón Ordenar Videos -->
+                    <!-- Botón Ordenar Música -->
                     <ImageButton
-                        android:id="@+id/btnSortVideos"
+                        android:id="@+id/btnSortMusic"
                         android:layout_width="32dp"
                         android:layout_height="32dp"
                         android:layout_marginStart="6dp"
@@ -872,36 +709,231 @@
                         app:tint="@color/vault_cyan" />
                 </LinearLayout>
 
-                <!-- Lista de Videos en Tarjetas 16:9 con Badge 1080p -->
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/rvVideoLibrary"
+                <!-- Botón de Reproducción Aleatoria Rápida -->
+                <LinearLayout
+                    android:id="@+id/btnPlayAllMusic"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_height="42dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_paste_gradient"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-black"
+                        android:text="▶ Reproducir Todo (Modo Aleatorio)"
+                        android:textColor="#0A0C14"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvMusicLibrary"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
                     android:layout_marginTop="12dp"
-                    android:nestedScrollingEnabled="false" />
+                    android:clipToPadding="false"
+                    android:paddingBottom="16dp" />
 
                 <TextView
-                    android:id="@+id/tvEmptyVideos"
+                    android:id="@+id/tvEmptyMusic"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="30dp"
                     android:layout_marginBottom="30dp"
                     android:fontFamily="sans-serif"
                     android:gravity="center"
-                    android:text="Aún no tienes videos descargados.\nDescarga videos en 1080p o 720p desde la pestaña Descargas."
+                    android:text="Aún no tienes canciones en tu biblioteca.\nDescarga música o sincroniza las de tu celular."
                     android:textColor="@color/text_muted"
-                    android:textSize="12sp" />
+                    android:textSize="12sp"
+                    android:visibility="gone" />
             </LinearLayout>
 
-            <!-- ======================================================== -->
-            <!-- PESTAÑA 4: AJUSTES (Configuración de OmniVault)          -->
-            <!-- ======================================================== -->
+            <!-- CONTENEDOR 2: SUB-PESTAÑA PLAYLISTS -->
+            <LinearLayout
+                android:id="@+id/layoutPlaylistsSubTab"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <!-- Botón Crear Nueva Playlist -->
+                <LinearLayout
+                    android:id="@+id/btnCreatePlaylist"
+                    android:layout_width="match_parent"
+                    android:layout_height="46dp"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_btn_gradient"
+                    android:gravity="center">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-black"
+                        android:text="✨ + Crear Nueva Playlist"
+                        android:textColor="#0A0C14"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvPlaylists"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:layout_marginTop="12dp"
+                    android:clipToPadding="false"
+                    android:paddingBottom="16dp" />
+
+                <TextView
+                    android:id="@+id/tvEmptyPlaylists"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="30dp"
+                    android:layout_marginBottom="30dp"
+                    android:fontFamily="sans-serif"
+                    android:gravity="center"
+                    android:text="Aún no has creado playlists.\nPulsa el botón de arriba para crear tu primera lista personalizada."
+                    android:textColor="@color/text_muted"
+                    android:textSize="12sp"
+                    android:visibility="visible" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ======================================================== -->
+        <!-- PESTAÑA 3: VIDEOS (Nueva Pestaña Exclusiva para Videos)  -->
+        <!-- ======================================================== -->
+        <LinearLayout
+            android:id="@+id/layoutTabVideos"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="sans-serif-black"
+                    android:letterSpacing="0.04"
+                    android:text="🎬 VIDEOS EN TU BÓVEDA"
+                    android:textColor="@color/vault_cyan"
+                    android:textSize="15sp" />
+
+                <TextView
+                    android:id="@+id/tvTotalVideosCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="0 videos"
+                    android:textColor="@color/vault_purple"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <!-- Buscador de Videos -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_input_box"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="2dp">
+
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    app:srcCompat="@drawable/ic_search"
+                    app:tint="@color/text_muted" />
+
+                <EditText
+                    android:id="@+id/etVideoSearch"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:background="@android:color/transparent"
+                    android:fontFamily="sans-serif"
+                    android:hint="Buscar videos por título…"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_muted"
+                    android:textSize="12sp" />
+
+                <ImageButton
+                    android:id="@+id/btnClearVideoSearch"
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Limpiar"
+                    android:src="@android:drawable/ic_menu_close_clear_cancel"
+                    android:visibility="gone"
+                    app:tint="@color/text_muted" />
+
+                <!-- Botón Ordenar Videos -->
+                <ImageButton
+                    android:id="@+id/btnSortVideos"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="6dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Ordenar"
+                    android:src="@drawable/ic_sort"
+                    app:tint="@color/vault_cyan" />
+            </LinearLayout>
+
+            <!-- Lista de Videos en Tarjetas 16:9 con Badge 1080p y RecyclerView Virtualizado -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvVideoLibrary"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:layout_marginTop="12dp"
+                android:clipToPadding="false"
+                android:paddingBottom="16dp" />
+
+            <TextView
+                android:id="@+id/tvEmptyVideos"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="30dp"
+                android:layout_marginBottom="30dp"
+                android:fontFamily="sans-serif"
+                android:gravity="center"
+                android:text="Aún no tienes videos descargados.\nDescarga videos en 1080p o 720p desde la pestaña Descargas."
+                android:textColor="@color/text_muted"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- ======================================================== -->
+        <!-- PESTAÑA 4: AJUSTES (Configuración de OmniVault)          -->
+        <!-- ======================================================== -->
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/scrollTabSettings"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:visibility="gone">
+
             <LinearLayout
                 android:id="@+id/layoutTabSettings"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:visibility="gone">
+                android:paddingHorizontal="16dp"
+                android:paddingBottom="24dp">
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -1113,9 +1145,9 @@
                 </LinearLayout>
 
             </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
 
-        </LinearLayout>
-    </androidx.core.widget.NestedScrollView>
+    </FrameLayout>
 
     <!-- ============================================================ -->
     <!-- BARRA DE NAVEGACIÓN INFERIOR (4 PESTAÑAS: Descargas, Música, Videos, Ajustes) -->

@@ -55,8 +55,8 @@ class VideoAdapter(
             SortOption.MOST_PLAYED -> filtered.sortedByDescending { it.playCount }
             SortOption.NAME_ASC -> filtered.sortedBy { it.title.lowercase() }
             SortOption.NAME_DESC -> filtered.sortedByDescending { it.title.lowercase() }
-            SortOption.SIZE_DESC -> filtered.sortedByDescending { File(it.localFilePath ?: "").length() }
-            SortOption.SIZE_ASC -> filtered.sortedBy { File(it.localFilePath ?: "").length() }
+            SortOption.SIZE_DESC -> filtered.sortedByDescending { if (it.fileSizeBytes > 0) it.fileSizeBytes else File(it.localFilePath ?: "").length() }
+            SortOption.SIZE_ASC -> filtered.sortedBy { if (it.fileSizeBytes > 0) it.fileSizeBytes else File(it.localFilePath ?: "").length() }
         }
 
         items.clear()
@@ -82,47 +82,33 @@ class VideoAdapter(
             val resolution = if (item.format == MediaFormat.MP4_1080) "1080p FHD" else "720p HD"
             binding.tvVideoResolutionBadge.text = resolution
 
-            val file = item.localFilePath?.let { File(it) }
             val sizeMb = if (item.fileSizeFormatted.isNotBlank()) {
                 item.fileSizeFormatted
-            } else if (file != null && file.exists()) {
-                String.format("%.1f MB", file.length() / (1024f * 1024f))
+            } else if (item.fileSizeBytes > 0) {
+                String.format("%.1f MB", item.fileSizeBytes / (1024f * 1024f))
             } else {
                 "Descargado"
             }
             binding.tvVideoSubtitle.text = "${item.platform.displayName} • MP4 • $sizeMb"
 
-            // Duración formateada desde el archivo local o etiqueta de calidad
-            var durationText = if (item.format == MediaFormat.MP4_1080) "1080p" else "720p"
-            if (file != null && file.exists()) {
-                try {
-                    val retriever = android.media.MediaMetadataRetriever()
-                    retriever.setDataSource(file.absolutePath)
-                    val timeStr = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
-                    val timeMs = timeStr?.toLongOrNull() ?: 0L
-                    if (timeMs > 0) {
-                        val totalSec = timeMs / 1000
-                        durationText = String.format("%02d:%02d", totalSec / 60, totalSec % 60)
-                    }
-                    retriever.release()
-                } catch (_: Exception) {}
+            // Duración formateada desde metadatos calculados en el escaneo
+            val durationText = if (item.durationFormatted.isNotBlank()) {
+                item.durationFormatted
+            } else if (item.format == MediaFormat.MP4_1080) {
+                "1080p FHD"
+            } else {
+                "720p HD"
             }
             binding.tvVideoDuration.text = durationText
 
-            // Carga de Miniatura con Coil
-            val thumb = item.thumbnailUrl
+            // Carga de Miniatura de Video con Coil (tamaño acotado 360x202 para reproducción fluida)
+            val thumb = item.localFilePath ?: item.thumbnailUrl
             if (!thumb.isNullOrBlank()) {
-                val f = File(thumb)
-                if (f.exists()) {
-                    binding.imgVideoThumbnail.load(f) {
-                        crossfade(true)
-                        error(R.mipmap.ic_launcher)
-                    }
-                } else {
-                    binding.imgVideoThumbnail.load(thumb) {
-                        crossfade(true)
-                        error(R.mipmap.ic_launcher)
-                    }
+                val model: Any = if (thumb.startsWith("http")) thumb else File(thumb)
+                binding.imgVideoThumbnail.load(model) {
+                    crossfade(true)
+                    size(360, 202)
+                    error(R.mipmap.ic_launcher)
                 }
             } else {
                 binding.imgVideoThumbnail.setImageResource(R.mipmap.ic_launcher)

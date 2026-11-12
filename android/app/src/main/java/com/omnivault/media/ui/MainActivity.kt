@@ -106,7 +106,12 @@ class MainActivity : AppCompatActivity() {
             val statusBar = insets.getInsets(WindowInsetsCompat.Type.statusBars())
             val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
             val topInset = maxOf(statusBar.top, cutout.top)
-            binding.mainScrollView.setPadding(0, topInset, 0, 0)
+            binding.layoutTopHeader.setPadding(
+                binding.layoutTopHeader.paddingLeft,
+                topInset + 4,
+                binding.layoutTopHeader.paddingRight,
+                binding.layoutTopHeader.paddingBottom
+            )
             insets
         }
 
@@ -897,9 +902,11 @@ class MainActivity : AppCompatActivity() {
         val cyan = ContextCompat.getColor(this, R.color.vault_cyan)
         val muted = ContextCompat.getColor(this, R.color.text_muted)
 
+        binding.mainScrollView.visibility = if (index == 0) View.VISIBLE else View.GONE
         binding.layoutTabDownload.visibility = if (index == 0) View.VISIBLE else View.GONE
         binding.layoutTabMusic.visibility = if (index == 1) View.VISIBLE else View.GONE
         binding.layoutTabVideos.visibility = if (index == 2) View.VISIBLE else View.GONE
+        binding.scrollTabSettings.visibility = if (index == 3) View.VISIBLE else View.GONE
         binding.layoutTabSettings.visibility = if (index == 3) View.VISIBLE else View.GONE
 
         binding.iconNavDownload.setColorFilter(if (index == 0) cyan else muted)

@@ -25,6 +25,8 @@ data class DownloadItem(
     var errorReason: String? = null,
     var localFilePath: String? = null,
     var fileSizeFormatted: String = "",
+    var fileSizeBytes: Long = 0L,
+    var durationFormatted: String = "",
     var thumbnailUrl: String? = null,
     var artist: String? = null,
     var playCount: Int = 0,

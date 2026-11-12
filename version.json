@@ -1,13 +1,13 @@
 {
-  "version": "2.3.2",
-  "version_code": 232,
+  "version": "2.3.3",
+  "version_code": 233,
   "release_date": "2026-11-12",
-  "title": "OmniVault v2.3.2 — Video Fix, Playlists, Ordenamiento & Escaneo Total de Medios",
-  "changelog": "🎬 Solución definitiva para descarga de videos 1080p y 720p con filtrado AVC1/H.264 y muxer nativo resiliente\n📱 Escaneo automático de toda la música y videos almacenados en el teléfono mediante MediaStore con permisos automáticos\n📋 Soporte completo de Playlists personalizadas en la pestaña Música (crear, gestionar y reproducir listas)\n⚡ Ordenamiento avanzado en Música y Videos (Más reciente, Más reproducidas, A-Z, Z-A y Tamaño)\n✨ Estandarización inteligente de nombres de archivos eliminando etiquetas molestas ([Official Video], [4K], etc.)",
+  "title": "OmniVault v2.3.3 — Optimización Extrema para Bibliotecas Masivas (+2000 Canciones y +500 Videos)",
+  "changelog": "🚀 Virtualización completa de RecyclerViews: navegación instantánea y sin cierres con miles de archivos locales\n💾 SharedPreferences ultraligero: prevención de bloqueos de memoria y OOM mediante indexación directa por MediaStore\n⚡ Decodificación asíncrona de miniaturas con Coil Video Frame Decoder y límites estrictos de caché\n🎯 Comparaciones O(1) en memoria para ordenamiento instantáneo por tamaño y fecha sin accesos repetitivos a disco\n🛡️ Inserciones Room por lotes seguros (chunked) evitando límites de variables SQLite",
   "android": {
-    "version": "2.3.2",
-    "version_code": 232,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.3.2/OmniVault-v2.3.2-Android.apk",
+    "version": "2.3.3",
+    "version_code": 233,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.3.3/OmniVault-v2.3.3-Android.apk",
     "min_version_code": 201
   },
   "windows": {

@@ -313,6 +313,7 @@ class DownloadManager private constructor(private val context: Context) {
             item.progress = 100
             item.status = DownloadStatus.COMPLETED
             item.localFilePath = finalOutputFile.absolutePath
+            item.fileSizeBytes = finalOutputFile.length()
             item.fileSizeFormatted = StorageHelper.formatFileSize(finalOutputFile.length())
 
             activeTasks.remove(item.id)
@@ -363,21 +364,26 @@ class DownloadManager private constructor(private val context: Context) {
         onHistoryUpdatedListener?.invoke(historyList)
     }
 
-    suspend fun syncWithDeviceMedia(context: Context): Pair<Int, Int> {
+    suspend fun syncWithDeviceMedia(context: Context): Pair<Int, Int> = withContext(Dispatchers.IO) {
         val audios = com.omnivault.media.data.LocalMediaScanner.scanDeviceAudio(context)
         val videos = com.omnivault.media.data.LocalMediaScanner.scanDeviceVideo(context)
 
-        val existingPaths = historyList.mapNotNull { it.localFilePath }.toSet()
+        val existingPaths = synchronized(historyList) {
+            historyList.mapNotNull { it.localFilePath }.toSet()
+        }
         val newAudios = audios.filter { it.localFilePath !in existingPaths }
         val newVideos = videos.filter { it.localFilePath !in existingPaths }
 
         if (newAudios.isNotEmpty() || newVideos.isNotEmpty()) {
-            historyList.addAll(newAudios)
-            historyList.addAll(newVideos)
-            saveHistory()
-            onHistoryUpdatedListener?.invoke(historyList)
+            synchronized(historyList) {
+                historyList.addAll(newAudios)
+                historyList.addAll(newVideos)
+            }
+            withContext(Dispatchers.Main) {
+                onHistoryUpdatedListener?.invoke(historyList.toList())
+            }
         }
-        return Pair(audios.size, videos.size)
+        Pair(audios.size, videos.size)
     }
 
     fun recordPlay(item: DownloadItem) {
@@ -406,7 +412,9 @@ class DownloadManager private constructor(private val context: Context) {
     }
 
     private fun saveHistory() {
-        val json = gson.toJson(historyList)
+        // Guardar solo las descargas realizadas desde la app para mantener SharedPreferences ultraligero (< 50 KB)
+        val downloadsOnly = historyList.filter { !it.id.startsWith("local_") }
+        val json = gson.toJson(downloadsOnly)
         prefs.edit().putString("download_history", json).apply()
     }
 

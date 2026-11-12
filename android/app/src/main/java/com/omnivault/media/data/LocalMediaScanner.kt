@@ -73,11 +73,15 @@ object LocalMediaScanner {
                     if (!file.exists() || file.length() == 0L) continue
 
                     val sArtworkUri = Uri.parse("content://media/external/audio/albumart")
-                    val coverUri = ContentUris.withAppendedId(sArtworkUri, albumId).toString()
+                    val coverUri = if (albumId > 0) ContentUris.withAppendedId(sArtworkUri, albumId).toString() else null
 
                     val cleanArtist = if (artist == "<unknown>" || artist.isBlank()) "Desconocido" else artist
                     val isM4a = path.endsWith(".m4a", ignoreCase = true)
                     val format = if (isM4a) MediaFormat.M4A else MediaFormat.MP3_320
+                    val durFormatted = if (duration > 0) {
+                        val sec = duration / 1000
+                        String.format("%02d:%02d", sec / 60, sec % 60)
+                    } else ""
 
                     val downloadItem = DownloadItem(
                         id = "local_audio_$id",
@@ -90,6 +94,8 @@ object LocalMediaScanner {
                         status = DownloadStatus.COMPLETED,
                         localFilePath = path,
                         fileSizeFormatted = StorageHelper.formatFileSize(sizeBytes),
+                        fileSizeBytes = sizeBytes,
+                        durationFormatted = durFormatted,
                         thumbnailUrl = coverUri,
                         artist = cleanArtist,
                         timestamp = if (dateAddedSec > 0) dateAddedSec * 1000 else file.lastModified()
@@ -113,11 +119,13 @@ object LocalMediaScanner {
             Log.e(TAG, "Error escaneando MediaStore de audio", e)
         }
 
-        // Persistir en Room
+        // Persistir en Room en lotes seguros de 100 para no exceder los límites de parámetros SQL de Android
         try {
             if (trackEntities.isNotEmpty()) {
                 val db = AppDatabase.getInstance(context)
-                db.trackDao().insertTracks(trackEntities)
+                trackEntities.chunked(100).forEach { chunk ->
+                    db.trackDao().insertTracks(chunk)
+                }
             }
         } catch (_: Exception) {}
 
@@ -156,6 +164,7 @@ object LocalMediaScanner {
                 val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.TITLE)
                 val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATA)
                 val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+                val durCol = cursor.getColumnIndex(MediaStore.Video.Media.DURATION)
                 val dateCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
                 val resCol = cursor.getColumnIndex(MediaStore.Video.Media.RESOLUTION)
 
@@ -166,6 +175,7 @@ object LocalMediaScanner {
                     val sizeBytes = cursor.getLong(sizeCol)
                     val dateAddedSec = cursor.getLong(dateCol)
                     val resolution = if (resCol != -1) cursor.getString(resCol) ?: "" else ""
+                    val durMs = if (durCol != -1) cursor.getLong(durCol) else 0L
 
                     val file = File(path)
                     if (!file.exists() || file.length() == 0L) continue
@@ -176,8 +186,14 @@ object LocalMediaScanner {
                         MediaFormat.MP4_720
                     }
 
-                    // URI de contenido de video para que Coil cargue la miniatura directamente
-                    val videoUri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id).toString()
+                    val durFormatted = if (durMs > 0) {
+                        val totalSec = durMs / 1000
+                        String.format("%02d:%02d", totalSec / 60, totalSec % 60)
+                    } else if (format == MediaFormat.MP4_1080) {
+                        "1080p"
+                    } else {
+                        "720p"
+                    }
 
                     val downloadItem = DownloadItem(
                         id = "local_video_$id",
@@ -190,7 +206,9 @@ object LocalMediaScanner {
                         status = DownloadStatus.COMPLETED,
                         localFilePath = path,
                         fileSizeFormatted = StorageHelper.formatFileSize(sizeBytes),
-                        thumbnailUrl = videoUri,
+                        fileSizeBytes = sizeBytes,
+                        durationFormatted = durFormatted,
+                        thumbnailUrl = path,
                         artist = "Dispositivo",
                         timestamp = if (dateAddedSec > 0) dateAddedSec * 1000 else file.lastModified()
                     )
