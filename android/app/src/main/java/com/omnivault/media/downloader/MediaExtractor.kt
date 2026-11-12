@@ -581,16 +581,18 @@ object MediaExtractor {
                                     }
                                 }
 
-                                if (v1080Url != null && aUrl != null) {
+                                val finalVUrl = v1080Url
+                                val finalAUrl = aUrl
+                                if (finalVUrl != null && finalAUrl != null) {
                                     return ExtractedMediaInfo(
                                         title = title,
-                                        directStreamUrl = v1080Url,
+                                        directStreamUrl = finalVUrl,
                                         format = requestedFormat,
                                         durationSeconds = lengthSec,
                                         author = author,
                                         thumbnailUrl = thumbUrl,
                                         requestHeaders = mapOf("User-Agent" to YT_USER_AGENT),
-                                        audioStreamUrl = aUrl
+                                        audioStreamUrl = finalAUrl
                                     )
                                 }
                             }
@@ -670,13 +672,15 @@ object MediaExtractor {
                                 }
                             }
                             val aUrl = if (audios[0].isJsonObject && audios[0].asJsonObject.has("url") && !audios[0].asJsonObject.get("url").isJsonNull) audios[0].asJsonObject.get("url").asString else null
-                            if (v1080Url != null && aUrl != null) {
+                            val finalVUrl = v1080Url
+                            val finalAUrl = aUrl
+                            if (finalVUrl != null && finalAUrl != null) {
                                 return ExtractedMediaInfo(
                                     title = title,
-                                    directStreamUrl = v1080Url,
+                                    directStreamUrl = finalVUrl,
                                     format = requestedFormat,
                                     thumbnailUrl = thumbUrl,
-                                    audioStreamUrl = aUrl
+                                    audioStreamUrl = finalAUrl
                                 )
                             }
                         }

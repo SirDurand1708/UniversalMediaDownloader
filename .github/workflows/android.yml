@@ -28,7 +28,4 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease 2>&1 | tee ../build_android.log || {
-            echo "::error::$(tail -n 35 ../build_android.log | tr '\n' ' ')"
-            exit 1
-          }
+          ./gradlew assembleRelease
