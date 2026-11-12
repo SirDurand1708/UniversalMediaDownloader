@@ -7,6 +7,7 @@ import coil.load
 import com.omnivault.media.R
 import com.omnivault.media.databinding.ItemVideoCardBinding
 import com.omnivault.media.model.DownloadItem
+import com.omnivault.media.model.MediaFormat
 import java.io.File
 
 class VideoAdapter(
