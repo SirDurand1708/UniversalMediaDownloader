@@ -81,8 +81,6 @@ object StorageHelper {
         val cleaned = FilenameStandardizer.standardizeTitle(name)
         return cleaned.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
     }
-        return name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
-    }
 
     fun scanMediaFile(context: Context, file: File, mimeType: String) {
         if (!file.exists()) return
