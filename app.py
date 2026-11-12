@@ -99,7 +99,7 @@ class OmniVaultApp(ctk.CTk):
         self.theme_accent = themes.get_theme(self.config.get("accent_theme", "violet"))
 
         # Servicios y Motores
-        self.downloader = DownloaderEngine()
+        self.downloader = DownloaderEngine(config=self.config)
         self.history = HistoryManager()
         self.queue_manager = QueueManager(
             self.downloader,
@@ -2314,6 +2314,38 @@ class OmniVaultApp(ctk.CTk):
         )
         norm_sw.pack(anchor="w", padx=14, pady=(2, 6))
 
+        # Control de Ancho de Banda y Límite de Velocidad
+        rate_row = ctk.CTkFrame(box2, fg_color="transparent")
+        rate_row.pack(fill="x", padx=14, pady=(4, 6))
+
+        ctk.CTkLabel(
+            rate_row,
+            text="Control de ancho de banda (Límite de velocidad):",
+            font=ctk.CTkFont(size=11),
+            text_color=theme.TEXT_PRIMARY
+        ).pack(side="left")
+
+        current_rate = self.config.get("max_download_rate", 0)
+        rate_label_map = {
+            0: "Ilimitada (Máxima velocidad)",
+            2048: "2 MB/s (Ahorro de red)",
+            5120: "5 MB/s (Equilibrado)",
+            10240: "10 MB/s (Rápido)",
+            25600: "25 MB/s (Ultra)"
+        }
+        initial_rate_str = rate_label_map.get(current_rate, "Ilimitada (Máxima velocidad)")
+
+        self.rate_menu = ctk.CTkOptionMenu(
+            rate_row,
+            values=list(rate_label_map.values()),
+            command=self._on_download_rate_changed,
+            font=ctk.CTkFont(size=11),
+            width=210,
+            height=28
+        )
+        self.rate_menu.set(initial_rate_str)
+        self.rate_menu.pack(side="right")
+
         # Switch Monitoreo Automático de Canales
         self.sync_switch_var = ctk.BooleanVar(value=bool(self.config.get("sync_channels_auto", True)))
         sync_sw = ctk.CTkSwitch(
@@ -2815,6 +2847,17 @@ class OmniVaultApp(ctk.CTk):
     def _on_normalize_toggle(self):
         val = self.norm_switch_var.get()
         self.config.set("normalize_audio", val)
+
+    def _on_download_rate_changed(self, choice: str):
+        rev_map = {
+            "Ilimitada (Máxima velocidad)": 0,
+            "2 MB/s (Ahorro de red)": 2048,
+            "5 MB/s (Equilibrado)": 5120,
+            "10 MB/s (Rápido)": 10240,
+            "25 MB/s (Ultra)": 25600
+        }
+        val = rev_map.get(choice, 0)
+        self.config.set("max_download_rate", val)
 
     def _on_sync_toggle(self):
         val = self.sync_switch_var.get()

@@ -621,9 +621,10 @@ def _fetch_tiktok_api(url: str) -> Optional[Dict[str, Any]]:
 
 
 class DownloaderEngine:
-    def __init__(self):
+    def __init__(self, config=None):
         self._cancel_flags: Dict[str, bool] = {}
         self._lock = threading.Lock()
+        self.config = config
 
     def cancel_task(self, task_id: str):
         with self._lock:
@@ -745,22 +746,34 @@ class DownloaderEngine:
             'socket_timeout': 15,
         }
 
+        # Límite de velocidad de descarga configurable (Bandwidth Throttling)
+        rate_limit_kb = 0
+        if hasattr(self, 'config') and self.config:
+            try:
+                rate_limit_kb = int(self.config.get("max_download_rate", 0) or 0)
+            except Exception:
+                rate_limit_kb = 0
+
+        if rate_limit_kb > 0:
+            opts['ratelimit'] = rate_limit_kb * 1024  # Bytes por segundo
+
         # Aceleración de red con aria2c si está disponible
         if use_aria2c and is_aria2c_available():
             aria_path = _get_aria2c_path()
             opts['external_downloader'] = aria_path or 'aria2c'
-            opts['external_downloader_args'] = {
-                'aria2c': [
-                    '-s', '16',
-                    '-x', '16',
-                    '-k', '1M',
-                    '-j', '4',
-                    '--min-split-size=1M',
-                    '--file-allocation=none',
-                    '--max-connection-per-server=16',
-                    '--summary-interval=0'
-                ]
-            }
+            aria_args = [
+                '-s', '16',
+                '-x', '16',
+                '-k', '1M',
+                '-j', '4',
+                '--min-split-size=1M',
+                '--file-allocation=none',
+                '--max-connection-per-server=16',
+                '--summary-interval=0'
+            ]
+            if rate_limit_kb > 0:
+                aria_args.append(f'--max-download-limit={rate_limit_kb}K')
+            opts['external_downloader_args'] = {'aria2c': aria_args}
 
         # Soporte de impersonate solo si curl_cffi está realmente instalado y operativo
         if is_curl_cffi_available():

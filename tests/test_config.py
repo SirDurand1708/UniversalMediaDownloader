@@ -25,6 +25,11 @@ class TestConfigManager(unittest.TestCase):
         self.assertEqual(self.cfg.get("default_format"), "mp3_320")
         self.assertEqual(self.cfg.get("accent_theme"), "violet")
         self.assertTrue(self.cfg.get("clipboard_watch"))
+        self.assertEqual(self.cfg.get("max_download_rate"), 0)
+
+    def test_max_download_rate_setting(self):
+        self.cfg.set("max_download_rate", 5120)
+        self.assertEqual(self.cfg.get("max_download_rate"), 5120)
 
     def test_set_and_save(self):
         self.cfg.set("accent_theme", "emerald")

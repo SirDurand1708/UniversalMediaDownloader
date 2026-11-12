@@ -34,9 +34,12 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: 📦 Instalar Inno Setup Compiler
+      - name: 📦 Instalar Inno Setup Compiler y Binarios Portables (FFmpeg + Aria2c)
         run: |
-          choco install innosetup --no-progress --no-color
+          choco install innosetup ffmpeg aria2 --no-progress --no-color
+          mkdir -Force bin
+          if (Test-Path "C:\ProgramData\chocolatey\bin\ffmpeg.exe") { copy C:\ProgramData\chocolatey\bin\ffmpeg.exe bin\ }
+          if (Test-Path "C:\ProgramData\chocolatey\bin\aria2c.exe") { copy C:\ProgramData\chocolatey\bin\aria2c.exe bin\ }
 
       - name: 📚 Instalar dependencias de Python
         run: |

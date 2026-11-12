@@ -20,6 +20,12 @@ def build():
     print("[*] Compilador Oficial de OmniVault Desktop (.EXE)")
     print("=" * 60)
 
+    try:
+        from package_release import ensure_portable_binaries
+        ensure_portable_binaries(base_dir)
+    except Exception:
+        pass
+
     # Verificar PyInstaller
     try:
         import PyInstaller

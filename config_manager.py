@@ -51,6 +51,7 @@ class ConfigManager:
             "close_action": "minimize",
             "tray_notified_on_close": False,
             "on_finish_action": "none",
+            "max_download_rate": 0,
             "sync_channels_auto": True,
             "sync_channels_interval_min": 30,
             "floating_hud_enabled": False,

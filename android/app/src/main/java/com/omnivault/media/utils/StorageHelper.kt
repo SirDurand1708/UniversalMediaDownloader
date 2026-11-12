@@ -57,14 +57,29 @@ object StorageHelper {
     }
 
     fun scanMediaFile(context: Context, file: File, mimeType: String) {
+        if (!file.exists()) return
         try {
+            val appContext = context.applicationContext
+
+            // 1. Notificación principal mediante MediaScannerConnection
             MediaScannerConnection.scanFile(
-                context.applicationContext,
+                appContext,
                 arrayOf(file.absolutePath),
-                arrayOf(mimeType),
-                null
-            )
-        } catch (_: Exception) {}
+                arrayOf(mimeType)
+            ) { path, uri ->
+                android.util.Log.i("StorageHelper", "Media indexed in MediaStore: $path -> $uri")
+            }
+
+            // 2. Broadcast de difusión para compatibilidad con reproductores de música de terceros
+            try {
+                val mediaScanIntent = android.content.Intent(android.content.Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
+                mediaScanIntent.data = android.net.Uri.fromFile(file)
+                appContext.sendBroadcast(mediaScanIntent)
+            } catch (_: Exception) {}
+
+        } catch (e: Exception) {
+            android.util.Log.w("StorageHelper", "Error scanning media file: ${e.message}")
+        }
     }
 
     fun formatFileSize(bytes: Long): String {

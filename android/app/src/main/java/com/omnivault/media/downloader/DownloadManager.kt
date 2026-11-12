@@ -11,6 +11,7 @@ import com.omnivault.media.model.MediaFormat
 import com.omnivault.media.utils.AudioExtractor
 import com.omnivault.media.utils.CoverArtHelper
 import com.omnivault.media.utils.LyricsHelper
+import com.omnivault.media.utils.MediaMuxerHelper
 import com.omnivault.media.utils.NotificationHelper
 import com.omnivault.media.utils.StorageHelper
 import kotlinx.coroutines.*
@@ -109,75 +110,81 @@ class DownloadManager private constructor(private val context: Context) {
             val cleanTitle = StorageHelper.sanitizeFilename(info.title)
 
             val tempDownloadFile = File(context.cacheDir, "temp_stream_${item.id}.tmp")
+            val tempAudioFile = File(context.cacheDir, "temp_audio_${item.id}.tmp")
             if (tempDownloadFile.exists()) tempDownloadFile.delete()
+            if (tempAudioFile.exists()) tempAudioFile.delete()
 
-            // 3. Descargar flujo mediante OkHttp con seguimiento de progreso
-            val reqBuilder = Request.Builder()
-                .url(info.directStreamUrl)
-                .header("User-Agent", "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+            val hasSeparateAudio = !info.audioStreamUrl.isNullOrBlank()
+            val mainStreamMaxProgress = if (hasSeparateAudio) 70 else 100
 
-            for ((k, v) in info.requestHeaders) {
-                reqBuilder.header(k, v)
-            }
-            val request = reqBuilder.build()
+            // Helper modular para descargar flujos de red con cálculo de velocidad en MB/s
+            fun downloadStreamInternal(streamUrl: String, targetFile: File, startPct: Int, endPct: Int) {
+                val reqBuilder = Request.Builder()
+                    .url(streamUrl)
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
 
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    throw Exception("Servidor respondió con código HTTP: ${response.code}")
+                for ((k, v) in info.requestHeaders) {
+                    reqBuilder.header(k, v)
                 }
+                val request = reqBuilder.build()
 
-                val contentType = response.header("Content-Type") ?: ""
-                if (contentType.contains("text/html", ignoreCase = true)) {
-                    throw Exception("El enlace proporcionó una página web en lugar de un flujo multimedia.")
-                }
-
-                val body = response.body ?: throw Exception("Cuerpo de respuesta vacío")
-                val totalBytes = body.contentLength()
-                val inputStream = BufferedInputStream(body.byteStream(), 65536)
-                val outputStream = BufferedOutputStream(FileOutputStream(tempDownloadFile), 65536)
-
-                val buffer = ByteArray(65536)
-                var bytesRead: Int
-                var totalRead = 0L
-                var lastTime = System.currentTimeMillis()
-                var lastBytes = 0L
-
-                // Validar el primer bloque
-                val initialRead = inputStream.read(buffer)
-                if (initialRead <= 0) {
-                    throw Exception("El flujo descargado está vacío.")
-                }
-                val previewStr = String(buffer, 0, minOf(initialRead, 80), Charsets.UTF_8).lowercase()
-                if (previewStr.contains("<!doctype") || previewStr.contains("<html")) {
-                    throw Exception("El enlace retornó HTML en lugar de un archivo multimedia válido.")
-                }
-                outputStream.write(buffer, 0, initialRead)
-                totalRead += initialRead
-
-                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                    outputStream.write(buffer, 0, bytesRead)
-                    totalRead += bytesRead
-
-                    val now = System.currentTimeMillis()
-                    val timeDiff = now - lastTime
-                    if (timeDiff >= 400) {
-                        val speedBytesPerSec = ((totalRead - lastBytes) * 1000.0) / timeDiff
-                        item.speedText = String.format("%.2f MB/s", speedBytesPerSec / (1024 * 1024))
-                        if (totalBytes > 0) {
-                            item.progress = ((totalRead * 100) / totalBytes).toInt().coerceIn(1, 99)
-                        }
-                        lastTime = now
-                        lastBytes = totalRead
-                        notifyUpdate(item)
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        throw Exception("Servidor respondió con código HTTP: ${response.code}")
                     }
-                }
 
-                outputStream.flush()
-                outputStream.close()
-                inputStream.close()
+                    val contentType = response.header("Content-Type") ?: ""
+                    if (contentType.contains("text/html", ignoreCase = true)) {
+                        throw Exception("El enlace proporcionó una página web en lugar de un flujo multimedia.")
+                    }
+
+                    val body = response.body ?: throw Exception("Cuerpo de respuesta vacío")
+                    val totalBytes = body.contentLength()
+                    val inputStream = BufferedInputStream(body.byteStream(), 65536)
+                    val outputStream = BufferedOutputStream(FileOutputStream(targetFile), 65536)
+
+                    val buffer = ByteArray(65536)
+                    var bytesRead: Int
+                    var totalRead = 0L
+                    var lastTime = System.currentTimeMillis()
+                    var lastBytes = 0L
+
+                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                        outputStream.write(buffer, 0, bytesRead)
+                        totalRead += bytesRead
+
+                        val now = System.currentTimeMillis()
+                        val timeDiff = now - lastTime
+                        if (timeDiff >= 400) {
+                            val speedBytesPerSec = ((totalRead - lastBytes) * 1000.0) / timeDiff
+                            item.speedText = String.format("%.2f MB/s", speedBytesPerSec / (1024 * 1024))
+                            if (totalBytes > 0) {
+                                val ratio = (totalRead.toDouble() / totalBytes).coerceIn(0.0, 1.0)
+                                item.progress = (startPct + ratio * (endPct - startPct)).toInt().coerceIn(1, 99)
+                            }
+                            lastTime = now
+                            lastBytes = totalRead
+                            notifyUpdate(item)
+                        }
+                    }
+
+                    outputStream.flush()
+                    outputStream.close()
+                    inputStream.close()
+                }
             }
 
-            // 4. Procesamiento y etiquetado en staging (caché interna antes de publicar)
+            // Descarga de flujo principal (video o audio)
+            downloadStreamInternal(info.directStreamUrl, tempDownloadFile, 1, mainStreamMaxProgress)
+
+            // Descarga de pista complementaria de audio DASH si es video FHD 1080p
+            if (hasSeparateAudio) {
+                item.speedText = "Descargando audio HQ…"
+                notifyUpdate(item)
+                downloadStreamInternal(info.audioStreamUrl!!, tempAudioFile, 70, 90)
+            }
+
+            // 4. Procesamiento y empaquetado en staging
             val isMp3Stream = info.directStreamUrl.contains(".mp3", ignoreCase = true) || tempDownloadFile.name.endsWith(".mp3", ignoreCase = true)
             val extension = if (item.format.isAudio) {
                 if (isMp3Stream) "mp3" else "m4a"
@@ -189,7 +196,20 @@ class DownloadManager private constructor(private val context: Context) {
             if (stagedFile.exists()) stagedFile.delete()
 
             val finalMimeType: String
-            if (item.format.isAudio) {
+            if (hasSeparateAudio) {
+                // Remuxing nativo DASH en Android para video 1080p Full HD
+                item.status = DownloadStatus.PROCESSING
+                item.speedText = "Remuxing 1080p FHD…"
+                notifyUpdate(item)
+                val muxed = MediaMuxerHelper.muxVideoAndAudio(tempDownloadFile, tempAudioFile, stagedFile)
+                tempDownloadFile.delete()
+                tempAudioFile.delete()
+
+                if (!muxed || !stagedFile.exists() || stagedFile.length() == 0L) {
+                    tempDownloadFile.copyTo(stagedFile, overwrite = true)
+                }
+                finalMimeType = "video/mp4"
+            } else if (item.format.isAudio) {
                 if (isMp3Stream) {
                     tempDownloadFile.copyTo(stagedFile, overwrite = true)
                     tempDownloadFile.delete()

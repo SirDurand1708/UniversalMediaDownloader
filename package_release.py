@@ -16,7 +16,7 @@ if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
     except Exception:
         pass
 
-DEFAULT_VERSION = "2.1.0"
+DEFAULT_VERSION = "2.2.0"
 
 def get_release_version() -> str:
     """Obtiene la versión oficial de forma dinámica desde argumentos CLI, entorno CI/CD o version.json."""
@@ -48,6 +48,52 @@ def get_release_version() -> str:
     return DEFAULT_VERSION
 
 VERSION = get_release_version()
+
+def ensure_portable_binaries(base_dir: str):
+    """
+    Localiza y copia los binarios de FFmpeg y Aria2c a la carpeta bin/ del proyecto
+    para que se incluyan automáticamente en el paquete portátil (.zip) y en el instalador (.exe).
+    """
+    bin_dir = os.path.join(base_dir, "bin")
+    os.makedirs(bin_dir, exist_ok=True)
+
+    # 1. FFmpeg
+    ffmpeg_target = os.path.join(bin_dir, "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg")
+    if not os.path.isfile(ffmpeg_target):
+        system_ff = shutil.which("ffmpeg")
+        if not system_ff:
+            cand_paths = [
+                os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\WinGet\Links\ffmpeg.exe"),
+                os.path.expandvars(r"%ProgramData%\chocolatey\bin\ffmpeg.exe"),
+                os.path.expanduser(r"~\scoop\shims\ffmpeg.exe")
+            ]
+            system_ff = next((p for p in cand_paths if os.path.isfile(p)), None)
+
+        if system_ff and os.path.isfile(system_ff):
+            try:
+                shutil.copy2(system_ff, ffmpeg_target)
+                print(f"[*] [OK] FFmpeg portable integrado en bin/ ({system_ff})")
+            except Exception as e:
+                print(f"[!] No se pudo copiar FFmpeg: {e}")
+
+    # 2. Aria2c
+    aria_target = os.path.join(bin_dir, "aria2c.exe" if sys.platform == "win32" else "aria2c")
+    if not os.path.isfile(aria_target):
+        system_aria = shutil.which("aria2c")
+        if not system_aria:
+            cand_paths = [
+                os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\WinGet\Links\aria2c.exe"),
+                os.path.expandvars(r"%ProgramData%\chocolatey\bin\aria2c.exe"),
+                os.path.expanduser(r"~\scoop\shims\aria2c.exe")
+            ]
+            system_aria = next((p for p in cand_paths if os.path.isfile(p)), None)
+
+        if system_aria and os.path.isfile(system_aria):
+            try:
+                shutil.copy2(system_aria, aria_target)
+                print(f"[*] [OK] Aria2c portable integrado en bin/ ({system_aria})")
+            except Exception as e:
+                print(f"[!] No se pudo copiar Aria2c: {e}")
 
 def calculate_sha256(filepath: str) -> str:
     """Calcula el hash SHA-256 de un archivo en bloques de 64KB."""
@@ -130,6 +176,9 @@ def main():
     print("=" * 70)
     print(f"✦ OMNIVAULT DESKTOP v{VERSION} - EMPAQUETADOR OFICIAL DE LANZAMIENTOS")
     print("=" * 70)
+
+    # 0. Asegurar binarios portables en bin/
+    ensure_portable_binaries(base_dir)
 
     # 1. Compilar con PyInstaller si dist/OmniVault no existe o si se solicita
     if not os.path.isfile(os.path.join(app_dir, "OmniVault.exe")):

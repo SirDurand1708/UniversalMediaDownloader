@@ -23,7 +23,8 @@ data class ExtractedMediaInfo(
     val durationSeconds: Long = 0,
     val author: String = "",
     val thumbnailUrl: String = "",
-    val requestHeaders: Map<String, String> = emptyMap()
+    val requestHeaders: Map<String, String> = emptyMap(),
+    val audioStreamUrl: String? = null
 )
 
 data class MediaPreview(
@@ -555,6 +556,46 @@ object MediaExtractor {
                     val streaming = root.getAsJsonObject("streamingData")
 
                     if (streaming != null) {
+                        // Soporte para 1080p Full HD real mediante combinación de pistas DASH nativas
+                        if (requestedFormat == MediaFormat.MP4_1080) {
+                            val adaptive = streaming.getAsJsonArray("adaptiveFormats")
+                            if (adaptive != null) {
+                                var v1080Url: String? = null
+                                var aUrl: String? = null
+
+                                for (elem in adaptive) {
+                                    val obj = elem.asJsonObject
+                                    val mime = obj.get("mimeType")?.asString ?: ""
+                                    val url = if (obj.has("url")) obj.get("url").asString else null
+
+                                    if (url != null && v1080Url == null && mime.startsWith("video/mp4")) {
+                                        val height = if (obj.has("height")) obj.get("height").asInt else 0
+                                        val quality = if (obj.has("qualityLabel")) obj.get("qualityLabel").asString else ""
+                                        if (height >= 1080 || quality.contains("1080")) {
+                                            v1080Url = url
+                                        }
+                                    }
+
+                                    if (url != null && aUrl == null && mime.startsWith("audio/mp4")) {
+                                        aUrl = url
+                                    }
+                                }
+
+                                if (v1080Url != null && aUrl != null) {
+                                    return ExtractedMediaInfo(
+                                        title = title,
+                                        directStreamUrl = v1080Url,
+                                        format = requestedFormat,
+                                        durationSeconds = lengthSec,
+                                        author = author,
+                                        thumbnailUrl = thumbUrl,
+                                        requestHeaders = mapOf("User-Agent" to YT_USER_AGENT),
+                                        audioStreamUrl = aUrl
+                                    )
+                                }
+                            }
+                        }
+
                         // Los flujos progresivos (formats) contienen audio AAC + video MP4 sin restricciones ni errores 403
                         val formats = streaming.getAsJsonArray("formats")
                         if (formats != null && formats.size() > 0) {
@@ -613,6 +654,33 @@ object MediaExtractor {
                         }
 
                         val videos = root.getAsJsonArray("videoStreams")
+                        val audios = root.getAsJsonArray("audioStreams")
+
+                        // 1080p DASH con audio separado en Piped
+                        if (requestedFormat == MediaFormat.MP4_1080 && videos != null && audios != null && audios.size() > 0) {
+                            var v1080Url: String? = null
+                            for (elem in videos) {
+                                val obj = elem.asJsonObject
+                                val q = if (obj.has("quality")) obj.get("quality").asString else ""
+                                val fmt = if (obj.has("format")) obj.get("format").asString else ""
+                                val sUrl = if (obj.has("url")) obj.get("url").asString else ""
+                                if (q.contains("1080") && fmt.contains("mp4", ignoreCase = true) && sUrl.isNotBlank()) {
+                                    v1080Url = sUrl
+                                    break
+                                }
+                            }
+                            val aUrl = if (audios[0].isJsonObject && audios[0].asJsonObject.has("url")) audios[0].asJsonObject.get("url").asString else null
+                            if (v1080Url != null && aUrl != null) {
+                                return ExtractedMediaInfo(
+                                    title = title,
+                                    directStreamUrl = v1080Url,
+                                    format = requestedFormat,
+                                    thumbnailUrl = thumbUrl,
+                                    audioStreamUrl = aUrl
+                                )
+                            }
+                        }
+
                         if (videos != null && videos.size() > 0) {
                             for (elem in videos) {
                                 val obj = elem.asJsonObject
