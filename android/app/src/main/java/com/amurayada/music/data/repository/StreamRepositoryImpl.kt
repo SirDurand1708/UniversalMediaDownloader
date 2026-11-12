@@ -72,11 +72,6 @@ class StreamRepositoryImpl : StreamRepository {
                     val uploader = item.uploaderName?.lowercase() ?: ""
                     var score = 0
                     
-                .map { item ->
-                    val name = item.name.lowercase()
-                    val uploader = item.uploaderName?.lowercase() ?: ""
-                    var score = 0
-                    
                     // 1. Similitud de Título
                     val similarity = calculateTitleSimilarity(song.title, item.name)
                     if (similarity < 0.5) score -= 150 
@@ -108,6 +103,7 @@ class StreamRepositoryImpl : StreamRepository {
                     
                     if (isTopic || isProvided) score -= 1000 
                     
+                    Pair(item, score)
                 }
                 .filter { it.second > 40 } // Umbral más bajo ya que la oficialidad no es obligatoria
                 .sortedByDescending { it.second }
