@@ -28,4 +28,12 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace
+          set +e
+          ./gradlew assembleRelease --stacktrace > ../gradle_full.log 2>&1
+          GRADLE_EXIT=$?
+          if [ $GRADLE_EXIT -ne 0 ]; then
+            ERR_SNIPPET=$(grep -E "(FAILURE:|What went wrong:|Execution failed|Caused by:|e: )" -A 5 ../gradle_full.log | head -n 25 | tr '\n' ' | ')
+            echo "::error title=Gradle Error::$ERR_SNIPPET"
+            tail -n 50 ../gradle_full.log
+            exit $GRADLE_EXIT
+          fi
