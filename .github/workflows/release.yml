@@ -87,24 +87,18 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace 2>&1 | tee ../build_release.log || {
-            echo "### ❌ Gradle Release Build Error Log" >> $GITHUB_STEP_SUMMARY
-            echo '```text' >> $GITHUB_STEP_SUMMARY
-            tail -n 80 ../build_release.log >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            exit 1
-          }
+          ./gradlew assembleRelease --stacktrace
           mkdir -p ../dist/Releases
           TAG_VAL="${{ github.ref_name }}"
           if [ -z "$TAG_VAL" ] || [ "$TAG_VAL" = "refs/heads/main" ]; then
             TAG_VAL="${{ inputs.tag_name }}"
           fi
           if [ -z "$TAG_VAL" ]; then
-            TAG_VAL="v2.2.0"
+            TAG_VAL="v2.5.0"
           fi
-          APK_FILE=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          cp "$APK_FILE" ../dist/Releases/AuraPlayer-${TAG_VAL}-Android.apk
-          cp "$APK_FILE" ../dist/Releases/OmniVault-${TAG_VAL}-Android.apk
+          cp app/build/outputs/apk/release/*.apk ../dist/Releases/OmniVault-${TAG_VAL}-Android.apk
+          cp ../dist/Releases/OmniVault-${TAG_VAL}-Android.apk ../dist/Releases/AuraPlayer-${TAG_VAL}-Android.apk
+          ls -la ../dist/Releases
 
       - name: 📤 Subir artefacto de Android
         uses: actions/upload-artifact@v4
