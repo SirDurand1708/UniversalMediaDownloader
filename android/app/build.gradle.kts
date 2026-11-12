@@ -16,12 +16,12 @@ if (localPropertiesFile.exists()) {
 
 android {
     namespace = "com.amurayada.music"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.omnivault.media"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 240
         versionName = "2.4.0"
 
@@ -82,10 +82,6 @@ android {
     }
     buildFeatures {
         compose = true
-    }
-    composeCompiler {
-        enableStrongSkippingMode = true
-        enableIntrinsicRemember = true
     }
 }
 
