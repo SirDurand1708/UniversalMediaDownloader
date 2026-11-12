@@ -9,6 +9,7 @@ class OmniVaultApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         NotificationHelper.createNotificationChannels(this)
+        com.omnivault.media.player.AudioPlayerManager.init(this)
 
         val prefs = getSharedPreferences("omnivault_prefs", Context.MODE_PRIVATE)
         val autoClipboard = prefs.getBoolean("auto_clipboard_detection", true)

@@ -1,13 +1,13 @@
 {
-  "version": "2.2.0",
-  "version_code": 220,
-  "release_date": "2026-11-11",
-  "title": "OmniVault v2.2.0 — Real 1080p FHD Muxing, Portable Binaries & Bandwidth Throttling",
-  "changelog": "🎬 Remuxing nativo 1080p FHD en Android: Combinación atómica de video y audio DASH de alta calidad usando MediaExtractor y MediaMuxer sin inflar el APK\n📦 Binarios portables en Windows: Inclusión automática de FFmpeg y Aria2c en el instalador y paquete portable para que funcionen de fábrica sin instalar nada adicional\n📶 Control de ancho de banda en PC: Nuevo selector de límite de velocidad (Bandwidth Throttling) para descargar sin saturar la red\n📱 Indexación inmediata en Android 13/14: Refresco instantáneo en MediaStore y reproductores de música de terceros (Spotify, VLC, Poweramp)\n🛡️ Detección de versiones desacoplada: Actualizaciones independientes entre Android y PC sin falsas alertas",
+  "version": "2.3.0",
+  "version_code": 230,
+  "release_date": "2026-11-12",
+  "title": "OmniVault v2.3.0 — Lark Player Music Engine & Cosmic Redesign",
+  "changelog": "🎵 Reproductor estilo Lark Player con AndroidX Media3 (ExoPlayer)\n🔊 Super Volumen hasta 300% con LoudnessEnhancer y limitador anti-distorsión\n🎨 Rediseño visual Prismatic Aurora basado en el logotipo oficial (Cian Neón y Púrpura)\n🎛️ Ecualizador por hardware de 5 bandas, Bass Boost y sonido envolvente 3D\n📂 Biblioteca local integrada con Room SQLite y escáner automático de MediaStore\n🖼️ Carga eficiente de carátulas con Coil y atmósfera adaptativa con Palette API\n📱 Notificación multimedia estándar de Android 13/14 con reproducción en segundo plano",
   "android": {
-    "version": "2.2.0",
-    "version_code": 220,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.2.0/OmniVault-v2.2.0-Android.apk",
+    "version": "2.3.0",
+    "version_code": 230,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.3.0/OmniVault-v2.3.0-Android.apk",
     "min_version_code": 201
   },
   "windows": {

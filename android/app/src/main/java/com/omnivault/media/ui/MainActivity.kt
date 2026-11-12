@@ -3,6 +3,7 @@ package com.omnivault.media.ui
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
@@ -17,12 +18,15 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.core.widget.NestedScrollView
 import androidx.lifecycle.lifecycleScope
+import androidx.palette.graphics.Palette
 import androidx.recyclerview.widget.LinearLayoutManager
+import coil.load
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.imageview.ShapeableImageView
 import com.omnivault.media.R
+import com.omnivault.media.data.LocalMediaScanner
 import com.omnivault.media.databinding.ActivityMainBinding
 import com.omnivault.media.downloader.DownloadManager
 import com.omnivault.media.downloader.MediaExtractor
@@ -115,6 +119,11 @@ class MainActivity : AppCompatActivity() {
         setIntent(intent)
         handlePreloadedUrl(intent)
         handleUpdateIntent(intent)
+
+        // Escaneo inicial de música local en segundo plano (Room + MediaStore)
+        lifecycleScope.launch(Dispatchers.IO) {
+            LocalMediaScanner.scanDeviceAudio(this@MainActivity)
+        }
     }
 
     private fun checkNotificationPermission() {
@@ -716,19 +725,49 @@ class MainActivity : AppCompatActivity() {
         val fabPlayPause = view.findViewById<FloatingActionButton>(R.id.fabPlayPause)
         val btnPrev = view.findViewById<ImageButton>(R.id.btnPlayerPrev)
         val btnNext = view.findViewById<ImageButton>(R.id.btnPlayerNext)
+        val btnShuffle = view.findViewById<ImageButton>(R.id.btnPlayerShuffle)
+        val btnRepeat = view.findViewById<ImageButton>(R.id.btnPlayerRepeat)
         val btnToggleLyrics = view.findViewById<MaterialButton>(R.id.btnToggleLyrics)
+        val btnToggleEqualizer = view.findViewById<MaterialButton>(R.id.btnToggleEqualizer)
         val btnShare = view.findViewById<MaterialButton>(R.id.btnFullPlayerShare)
         val scrollLyrics = view.findViewById<NestedScrollView>(R.id.scrollLyrics)
         val tvLyrics = view.findViewById<TextView>(R.id.tvLyricsContent)
 
+        // Controles de Super Volumen 300%
+        val seekBarVol = view.findViewById<SeekBar>(R.id.seekBarVolumeBoost)
+        val tvVolBadge = view.findViewById<TextView>(R.id.tvVolumeBoostBadge)
+
+        // Panel de Ecualizador
+        val layoutEq = view.findViewById<View>(R.id.layoutEqualizerPanel)
+        val seekBass = view.findViewById<SeekBar>(R.id.seekBassBoost)
+        val tvBass = view.findViewById<TextView>(R.id.tvBassBoostLabel)
+        val seekVirt = view.findViewById<SeekBar>(R.id.seekVirtualizer)
+        val tvVirt = view.findViewById<TextView>(R.id.tvVirtualizerLabel)
+
         tvTitle.text = item.title
         tvArtist.text = if (!item.artist.isNullOrBlank()) item.artist else "OmniVault Audio"
 
+        // Carga de Carátula Optimizada con Coil + Palette API para Fondo Dinámico
         val coverBitmap = getCoverBitmapForItem(item)
         if (coverBitmap != null) {
             imgCover.setImageBitmap(coverBitmap)
+            try {
+                Palette.from(coverBitmap).generate { palette ->
+                    val dominant = palette?.getDarkVibrantColor(ContextCompat.getColor(this, R.color.vault_bg_dark))
+                        ?: ContextCompat.getColor(this, R.color.vault_bg_dark)
+                    view.findViewById<View>(R.id.layoutFullPlayerRoot)?.setBackgroundColor(dominant)
+                }
+            } catch (_: Exception) {}
         } else {
-            imgCover.setImageResource(R.mipmap.ic_launcher)
+            val thumb = item.thumbnailUrl
+            if (!thumb.isNullOrBlank()) {
+                imgCover.load(File(thumb)) {
+                    crossfade(true)
+                    error(R.mipmap.ic_launcher)
+                }
+            } else {
+                imgCover.setImageResource(R.mipmap.ic_launcher)
+            }
         }
 
         val durationMs = AudioPlayerManager.getDuration()
@@ -737,6 +776,87 @@ class MainActivity : AppCompatActivity() {
         seekBar.progress = posMs
         tvTotalDuration.text = formatMs(durationMs)
         tvCurrentTime.text = formatMs(posMs)
+
+        // Control de Super Volumen (0% a 300%) con LoudnessEnhancer
+        val updateVolumeUi: (Int) -> Unit = { pct ->
+            seekBarVol.progress = pct
+            when {
+                pct <= 100 -> {
+                    tvVolBadge.text = "$pct% NORMAL"
+                    tvVolBadge.setTextColor(ContextCompat.getColor(this, R.color.vault_cyan))
+                    seekBarVol.progressTintList = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.vault_cyan))
+                    seekBarVol.thumbTintList = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.vault_cyan))
+                }
+                pct <= 200 -> {
+                    val extraDb = Math.round((pct - 100) * 0.1)
+                    tvVolBadge.text = "$pct% (+${extraDb}dB BOOST)"
+                    tvVolBadge.setTextColor(ContextCompat.getColor(this, R.color.vault_purple))
+                    seekBarVol.progressTintList = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.vault_purple))
+                    seekBarVol.thumbTintList = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.vault_purple))
+                }
+                else -> {
+                    val extraDb = Math.round((pct - 100) * 0.15)
+                    tvVolBadge.text = "$pct% SUPER BOOST (+${extraDb}dB)"
+                    tvVolBadge.setTextColor(ContextCompat.getColor(this, R.color.vault_magenta))
+                    seekBarVol.progressTintList = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.vault_magenta))
+                    seekBarVol.thumbTintList = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.vault_magenta))
+                }
+            }
+        }
+
+        updateVolumeUi(AudioPlayerManager.getVolumePercent())
+
+        seekBarVol.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    AudioPlayerManager.setVolumeBoost(progress)
+                    updateVolumeUi(progress)
+                }
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+
+        // Ecualizador y Bass Boost
+        btnToggleEqualizer.setOnClickListener {
+            layoutEq.visibility = if (layoutEq.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        }
+
+        seekBass.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    AudioPlayerManager.setBassBoost(progress.toShort())
+                    tvBass.text = "Refuerzo de Graves (Bass Boost): +${progress / 100} dB"
+                }
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+
+        seekVirt.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    AudioPlayerManager.setVirtualizer(progress.toShort())
+                    tvVirt.text = "Sonido Envolvente 3D (Virtualizer): ${progress / 10}%"
+                }
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+
+        // Shuffle y Repeat
+        btnShuffle.setOnClickListener {
+            val enabled = AudioPlayerManager.toggleShuffle()
+            btnShuffle.imageTintList = ColorStateList.valueOf(
+                ContextCompat.getColor(this, if (enabled) R.color.vault_cyan else R.color.text_muted)
+            )
+        }
+
+        btnRepeat.setOnClickListener {
+            val mode = AudioPlayerManager.toggleRepeat()
+            val color = if (mode != androidx.media3.common.Player.REPEAT_MODE_OFF) R.color.vault_cyan else R.color.text_muted
+            btnRepeat.imageTintList = ColorStateList.valueOf(ContextCompat.getColor(this, color))
+        }
 
         val updatePlayIcon = {
             if (AudioPlayerManager.isPlaying()) {
@@ -755,14 +875,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnPrev.setOnClickListener {
-            val cur = AudioPlayerManager.getCurrentPosition()
-            AudioPlayerManager.seekTo(maxOf(0, cur - 10000))
+            AudioPlayerManager.playPreviousTrack()
         }
 
         btnNext.setOnClickListener {
-            val cur = AudioPlayerManager.getCurrentPosition()
-            val total = AudioPlayerManager.getDuration()
-            AudioPlayerManager.seekTo(minOf(total, cur + 10000))
+            AudioPlayerManager.playNextTrack()
         }
 
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -802,6 +919,13 @@ class MainActivity : AppCompatActivity() {
 
         AudioPlayerManager.onStateChangedListener = { _, _ ->
             updatePlayIcon()
+        }
+
+        AudioPlayerManager.onTrackChangedListener = { newTrack ->
+            if (newTrack != null && dialog.isShowing) {
+                tvTitle.text = newTrack.title
+                tvArtist.text = newTrack.artist
+            }
         }
 
         dialog.setOnDismissListener {

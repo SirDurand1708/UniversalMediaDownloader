@@ -32,12 +32,23 @@
     <color name="badge_audio">#818CF8</color>
     <color name="badge_video">#10B981</color>
 
-    <!-- Paleta Spotify Vault (Concepto 3 Audio-First) -->
-    <color name="spotify_black">#121212</color>
-    <color name="spotify_card">#1E1E1E</color>
-    <color name="spotify_card_elevated">#282828</color>
-    <color name="spotify_green">#1DB954</color>
-    <color name="spotify_green_hover">#1ED760</color>
-    <color name="ambient_purple">#A855F7</color>
+    <!-- Paleta Oficial OmniVault — Propuesta 1: Prismatic Aurora (Logo Cósmico) -->
+    <color name="vault_cyan">#00F0FF</color>
+    <color name="vault_cyan_glow">#144059</color>
+    <color name="vault_purple">#8B5CF6</color>
+    <color name="vault_purple_dark">#6D28D9</color>
+    <color name="vault_magenta">#EC4899</color>
+    <color name="vault_magenta_boost">#F43F5E</color>
+    <color name="vault_bg_dark">#0A0C14</color>
+    <color name="vault_card">#121422</color>
+    <color name="vault_card_border">#1F2338</color>
+
+    <!-- Compatibilidad de Componentes Reemplazados (Adiós al verde plano, hola Cian Neón) -->
+    <color name="spotify_black">#0A0C14</color>
+    <color name="spotify_card">#121422</color>
+    <color name="spotify_card_elevated">#1A1D30</color>
+    <color name="spotify_green">#00F0FF</color>
+    <color name="spotify_green_hover">#38BDF8</color>
+    <color name="ambient_purple">#8B5CF6</color>
     <color name="ambient_purple_glow">#4C1D95</color>
 </resources>
