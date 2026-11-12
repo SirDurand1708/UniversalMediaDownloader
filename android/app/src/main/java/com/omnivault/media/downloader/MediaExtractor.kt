@@ -714,10 +714,11 @@ object MediaExtractor {
                                 }
                             }
                             val aUrl = if (audios[0].isJsonObject && audios[0].asJsonObject.has("url") && !audios[0].asJsonObject.get("url").isJsonNull) audios[0].asJsonObject.get("url").asString else null
-                            if (vTargetUrl != null && aUrl != null) {
+                            val finalVUrl = vTargetUrl
+                            if (finalVUrl != null && aUrl != null) {
                                 return ExtractedMediaInfo(
                                     title = title,
-                                    directStreamUrl = vTargetUrl,
+                                    directStreamUrl = finalVUrl,
                                     format = requestedFormat,
                                     thumbnailUrl = thumbUrl,
                                     audioStreamUrl = aUrl
