@@ -866,6 +866,14 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             }
         }
     }
+
+    fun pause() {
+        mediaController?.pause()
+    }
+
+    fun play() {
+        mediaController?.play()
+    }
     
     fun skipToNext() {
         mediaController?.seekToNext()
