@@ -718,6 +718,25 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     val uiEvent = _uiEvent.asSharedFlow()
 
     /**
+     * Inserta una canción justo después de la pista actual en la cola.
+     */
+    fun playNext(song: Song) {
+        viewModelScope.launch {
+            val controller = mediaController
+            val currentIdx = controller?.currentMediaItemIndex ?: -1
+            val newQueue = queue.toMutableList()
+            val nextIdx = if (currentIdx >= 0) currentIdx + 1 else newQueue.size
+            newQueue.add(nextIdx.coerceAtMost(newQueue.size), song)
+            queue = newQueue
+            controller?.let {
+                val mediaItem = createMediaItem(song)
+                it.addMediaItem(nextIdx.coerceAtMost(it.mediaItemCount), mediaItem)
+            }
+            saveQueue()
+        }
+    }
+
+    /**
      * Inicia la reproducción de una canción específica y establece la nueva cola.
      * @param song La pista que se reproducirá de inmediato.
      * @param songList La lista completa que conformará la cola de reproducción actual.

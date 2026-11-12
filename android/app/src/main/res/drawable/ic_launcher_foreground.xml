@@ -1,117 +1,51 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Glowing Aura Sound Waves & Play Emblem -->
-    <!-- SoundWave Bars Left -->
+    <!-- Sound Wave Bars Left -->
     <path
-        android:pathData="M24,44 L24,64"
+        android:pathData="M27,46 L27,62"
         android:strokeWidth="3.5"
-        android:strokeLineCap="round">
-        <aapt:attr name="android:strokeColor">
-            <gradient
-                android:startX="24"
-                android:startY="44"
-                android:endX="24"
-                android:endY="64"
-                android:type="linear">
-                <item android:offset="0.0" android:color="#00E5FF" />
-                <item android:offset="1.0" android:color="#00E676" />
-            </gradient>
-        </aapt:attr>
-    </path>
+        android:strokeColor="#00E5FF"
+        android:strokeLineCap="round" />
 
     <path
-        android:pathData="M31,36 L31,72"
+        android:pathData="M34,38 L34,70"
         android:strokeWidth="3.5"
-        android:strokeLineCap="round">
-        <aapt:attr name="android:strokeColor">
-            <gradient
-                android:startX="31"
-                android:startY="36"
-                android:endX="31"
-                android:endY="72"
-                android:type="linear">
-                <item android:offset="0.0" android:color="#00E5FF" />
-                <item android:offset="1.0" android:color="#00E676" />
-            </gradient>
-        </aapt:attr>
-    </path>
+        android:strokeColor="#00E5FF"
+        android:strokeLineCap="round" />
 
-    <!-- Aura Geometric Hexagonal Ring -->
+    <!-- Hexagonal Glowing Ring -->
     <path
-        android:pathData="M54,20 L82,36 L82,72 L54,88 L26,72 L26,36 Z"
+        android:pathData="M54,24 L80,39 L80,69 L54,84 L28,69 L28,39 Z"
         android:strokeWidth="2.5"
+        android:strokeColor="#00E5FF"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
-        android:fillColor="#00000000">
-        <aapt:attr name="android:strokeColor">
-            <gradient
-                android:startX="26"
-                android:startY="20"
-                android:endX="82"
-                android:endY="88"
-                android:type="linear">
-                <item android:offset="0.0" android:color="#00E5FF" />
-                <item android:offset="0.5" android:color="#00E676" />
-                <item android:offset="1.0" android:color="#7C4DFF" />
-            </gradient>
-        </aapt:attr>
-    </path>
+        android:fillColor="#00000000" />
 
-    <!-- Center Play Icon with Gradient -->
+    <!-- Play Emblem Triangle Center -->
     <path
-        android:pathData="M48,39 L68,54 L48,69 Z"
-        android:strokeWidth="0">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:startX="48"
-                android:startY="39"
-                android:endX="68"
-                android:endY="69"
-                android:type="linear">
-                <item android:offset="0.0" android:color="#00E676" />
-                <item android:offset="0.6" android:color="#00E5FF" />
-                <item android:offset="1.0" android:color="#FFFFFF" />
-            </gradient>
-        </aapt:attr>
-    </path>
+        android:pathData="M48,42 L66,54 L48,66 Z"
+        android:fillColor="#00E676" />
 
-    <!-- SoundWave Bars Right -->
+    <!-- Inner Core Play Highlight -->
     <path
-        android:pathData="M77,36 L77,72"
+        android:pathData="M50,47 L60,54 L50,61 Z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Sound Wave Bars Right -->
+    <path
+        android:pathData="M74,38 L74,70"
         android:strokeWidth="3.5"
-        android:strokeLineCap="round">
-        <aapt:attr name="android:strokeColor">
-            <gradient
-                android:startX="77"
-                android:startY="36"
-                android:endX="77"
-                android:endY="72"
-                android:type="linear">
-                <item android:offset="0.0" android:color="#7C4DFF" />
-                <item android:offset="1.0" android:color="#00E5FF" />
-            </gradient>
-        </aapt:attr>
-    </path>
+        android:strokeColor="#7C4DFF"
+        android:strokeLineCap="round" />
 
     <path
-        android:pathData="M84,44 L84,64"
+        android:pathData="M81,46 L81,62"
         android:strokeWidth="3.5"
-        android:strokeLineCap="round">
-        <aapt:attr name="android:strokeColor">
-            <gradient
-                android:startX="84"
-                android:startY="44"
-                android:endX="84"
-                android:endY="64"
-                android:type="linear">
-                <item android:offset="0.0" android:color="#7C4DFF" />
-                <item android:offset="1.0" android:color="#00E5FF" />
-            </gradient>
-        </aapt:attr>
-    </path>
+        android:strokeColor="#7C4DFF"
+        android:strokeLineCap="round" />
 </vector>

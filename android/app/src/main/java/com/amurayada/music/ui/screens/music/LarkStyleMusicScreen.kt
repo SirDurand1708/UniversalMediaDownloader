@@ -38,7 +38,7 @@ import com.amurayada.music.data.model.Album
 import com.amurayada.music.data.model.Artist
 import com.amurayada.music.data.model.Playlist
 import com.amurayada.music.data.model.Song
-import com.amurayada.music.ui.components.AddToPlaylistDialog
+import com.amurayada.music.ui.components.AddToPlaylistSheet
 import com.amurayada.music.ui.components.EqualizerIndicator
 import com.amurayada.music.ui.viewmodel.LibraryViewModel
 import com.amurayada.music.ui.viewmodel.PlaybackViewModel
@@ -416,11 +416,11 @@ fun LarkStyleMusicScreen(
 
     // Diálogo para añadir canción a playlist
     songForPlaylist?.let { song ->
-        AddToPlaylistDialog(
+        AddToPlaylistSheet(
             playlists = userPlaylists,
             onDismiss = { songForPlaylist = null },
             onPlaylistSelected = { playlist ->
-                libraryViewModel.addSongToPlaylist(playlist.id, song)
+                playlistViewModel.addSongToPlaylist(playlist.id, song.id)
                 songForPlaylist = null
                 Toast.makeText(context, "Añadido a ${playlist.name}", Toast.LENGTH_SHORT).show()
             },
