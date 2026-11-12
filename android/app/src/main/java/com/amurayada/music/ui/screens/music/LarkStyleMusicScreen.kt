@@ -1012,7 +1012,7 @@ private fun PlaylistsContent(
             var itemMenuExpanded by remember { mutableStateOf(false) }
             val count = if (playlist.songIds.isNotEmpty()) playlist.songIds.size else playlist.songCount
             val firstArt = remember(playlist.songIds, allSongs) {
-                allSongs.firstOrNull { playlist.songIds.contains(it.id) && !it.albumArtUri.isNullOrBlank() }?.albumArtUri
+                allSongs.firstOrNull { playlist.songIds.contains(it.id) && it.albumArtUri != null }?.albumArtUri
             }
 
             Surface(
@@ -1026,7 +1026,7 @@ private fun PlaylistsContent(
                     modifier = Modifier.padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (!firstArt.isNullOrBlank()) {
+                    if (firstArt != null) {
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
                                 .data(firstArt)
