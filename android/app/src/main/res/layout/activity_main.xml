@@ -163,7 +163,6 @@
                     app:tint="@color/text_secondary" />
             </LinearLayout>
         </LinearLayout>
-    </LinearLayout>
 
     <!-- Contenedor Principal de Pestañas -->
     <FrameLayout
