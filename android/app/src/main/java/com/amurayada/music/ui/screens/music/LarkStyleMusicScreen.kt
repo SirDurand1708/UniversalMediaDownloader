@@ -72,8 +72,8 @@ fun LarkStyleMusicScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val currentSong by playbackViewModel.currentSong.collectAsState()
-    val isPlaying by playbackViewModel.isPlaying.collectAsState()
+    val currentSong = playbackViewModel.currentSong
+    val isPlaying = playbackViewModel.playbackState is com.amurayada.music.ui.viewmodel.PlaybackState.Playing
 
     var selectedCategory by remember { mutableStateOf(LarkCategory.CANCIONES) }
     var searchQuery by remember { mutableStateOf("") }

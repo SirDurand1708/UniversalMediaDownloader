@@ -218,9 +218,9 @@ fun SettingsScreen(
                             clipboardEnabled = it
                             prefs.edit().putBoolean("clipboard_monitor_enabled", it).apply()
                             if (it) {
-                                com.omnivault.media.service.ClipboardMonitorService.start(context)
+                                com.omnivault.media.service.ClipboardMonitorService.startService(context)
                             } else {
-                                com.omnivault.media.service.ClipboardMonitorService.stop(context)
+                                com.omnivault.media.service.ClipboardMonitorService.stopService(context)
                             }
                         }
                     )
