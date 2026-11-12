@@ -55,7 +55,14 @@ class MusicApplication : Application(), ImageLoaderFactory {
         super.onCreate()
         instance = this
         
-        // 0. Initialize YouTube Music Client (SharedPreferences for visitorData persistence)
+        // 0. Initialize notification channels for background downloads and playback
+        try {
+            com.omnivault.media.utils.NotificationHelper.createNotificationChannels(this)
+        } catch (e: Exception) {
+            android.util.Log.e("MusicApp", "Failed to create notification channels", e)
+        }
+
+        // 0.1 Initialize YouTube Music Client (SharedPreferences for visitorData persistence)
         com.amurayada.music.data.youtube.YouTubeMusicClient.init(this)
         
         // 0.5 Initialize Auth Manager for authenticated API requests

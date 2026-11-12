@@ -20,8 +20,17 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val prefs = application.getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE)
+
     val searchQuery = MutableStateFlow("")
-    val sortOption = MutableStateFlow<SortOption>(SortOption.DATE_DESC)
+    val sortOption = MutableStateFlow<SortOption>(
+        SortOption.fromKey(prefs.getString("video_sort_order", SortOption.DATE_DESC.name) ?: SortOption.DATE_DESC.name)
+    )
+
+    fun setSortOption(sort: SortOption) {
+        sortOption.value = sort
+        prefs.edit().putString("video_sort_order", sort.name).apply()
+    }
 
     val videos: StateFlow<List<DownloadItem>> = combine(
         _rawVideos,

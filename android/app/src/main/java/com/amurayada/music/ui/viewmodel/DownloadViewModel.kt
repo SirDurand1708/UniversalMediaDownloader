@@ -151,7 +151,20 @@ class DownloadViewModel(
     fun startUniversalDownload(url: String, format: MediaFormat) {
         val trimmed = url.trim()
         if (trimmed.isBlank()) return
-        MediaDownloadService.startDownload(getApplication(), trimmed, format)
+
+        // 1. Asegurar canales del sistema
+        com.omnivault.media.utils.NotificationHelper.createNotificationChannels(getApplication())
+
+        // 2. Encolar directamente en DownloadManager (inicia de inmediato en memoria)
+        omniDownloadManager.enqueueDownload(trimmed, format)
+
+        // 3. Iniciar Foreground Service de forma segura (con try/catch) para persistencia en segundo plano
+        try {
+            MediaDownloadService.startDownload(getApplication(), trimmed, format)
+        } catch (e: Exception) {
+            android.util.Log.e("DownloadViewModel", "Error starting MediaDownloadService", e)
+        }
+
         urlInput.value = ""
         mediaPreview.value = null
     }

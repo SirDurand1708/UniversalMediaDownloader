@@ -217,27 +217,27 @@ fun VideosScreen(
             text = {
                 Column {
                     SortOptionRow("Más reciente (Fecha)", currentSort == SortOption.DATE_DESC) {
-                        videosViewModel.sortOption.value = SortOption.DATE_DESC
+                        videosViewModel.setSortOption(SortOption.DATE_DESC)
                         showSortDialog = false
                     }
                     SortOptionRow("Más antiguo", currentSort == SortOption.DATE_ASC) {
-                        videosViewModel.sortOption.value = SortOption.DATE_ASC
+                        videosViewModel.setSortOption(SortOption.DATE_ASC)
                         showSortDialog = false
                     }
                     SortOptionRow("Nombre: A a Z", currentSort == SortOption.NAME_ASC) {
-                        videosViewModel.sortOption.value = SortOption.NAME_ASC
+                        videosViewModel.setSortOption(SortOption.NAME_ASC)
                         showSortDialog = false
                     }
                     SortOptionRow("Nombre: Z a A", currentSort == SortOption.NAME_DESC) {
-                        videosViewModel.sortOption.value = SortOption.NAME_DESC
+                        videosViewModel.setSortOption(SortOption.NAME_DESC)
                         showSortDialog = false
                     }
                     SortOptionRow("Tamaño: Mayor a menor", currentSort == SortOption.SIZE_DESC) {
-                        videosViewModel.sortOption.value = SortOption.SIZE_DESC
+                        videosViewModel.setSortOption(SortOption.SIZE_DESC)
                         showSortDialog = false
                     }
                     SortOptionRow("Tamaño: Menor a mayor", currentSort == SortOption.SIZE_ASC) {
-                        videosViewModel.sortOption.value = SortOption.SIZE_ASC
+                        videosViewModel.setSortOption(SortOption.SIZE_ASC)
                         showSortDialog = false
                     }
                 }

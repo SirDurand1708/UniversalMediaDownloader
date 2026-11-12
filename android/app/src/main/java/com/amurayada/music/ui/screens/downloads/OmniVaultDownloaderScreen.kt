@@ -321,8 +321,13 @@ fun OmniVaultDownloaderScreen(
                     if (urlInput.isBlank()) {
                         Toast.makeText(context, "Por favor pega un enlace multimedia", Toast.LENGTH_SHORT).show()
                     } else {
-                        downloadViewModel.startUniversalDownload(urlInput, selectedFormat)
-                        Toast.makeText(context, "Descarga iniciada en segundo plano", Toast.LENGTH_SHORT).show()
+                        try {
+                            downloadViewModel.startUniversalDownload(urlInput, selectedFormat)
+                            Toast.makeText(context, "Descarga iniciada en segundo plano", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            android.util.Log.e("DownloaderScreen", "Error triggering download", e)
+                            Toast.makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 },
                 modifier = Modifier

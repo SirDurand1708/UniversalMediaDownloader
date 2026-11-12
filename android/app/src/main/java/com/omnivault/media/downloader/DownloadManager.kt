@@ -70,8 +70,16 @@ class DownloadManager private constructor(private val context: Context) {
     fun getHistory(): List<DownloadItem> = historyList.toList()
 
     fun enqueueDownload(url: String, format: MediaFormat) {
+        val cleanUrl = url.trim()
+        val alreadyActive = activeTasks.values.any { 
+            it.url == cleanUrl && it.format == format && it.status != DownloadStatus.ERROR && it.status != DownloadStatus.CANCELLED 
+        }
+        if (alreadyActive) {
+            return
+        }
+
         val item = DownloadItem(
-            url = url,
+            url = cleanUrl,
             format = format,
             status = DownloadStatus.FETCHING_METADATA
         )

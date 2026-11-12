@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.amurayada.music.data.model.Album
 import com.amurayada.music.data.model.Artist
 import com.amurayada.music.data.model.Song
+import com.amurayada.music.data.model.SongSort
 import com.amurayada.music.data.repository.MediaRepository
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -94,6 +95,18 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         
     var userPlaylists by mutableStateOf<List<com.amurayada.music.data.model.Playlist>>(emptyList())
         private set
+
+    private val prefs = getApplication<Application>().getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE)
+
+    var songSortOrder by mutableStateOf(
+        SongSort.fromKey(prefs.getString("song_sort_order", SongSort.RECENT.name))
+    )
+        private set
+
+    fun setSongSort(sort: SongSort) {
+        songSortOrder = sort
+        prefs.edit().putString("song_sort_order", sort.name).apply()
+    }
 
     var isLoading by mutableStateOf(false)
         private set

@@ -91,10 +91,11 @@ object NotificationHelper {
      * Requerida por Android 8+ antes de cualquier trabajo asíncrono.
      */
     fun buildForegroundServiceNotification(context: Context): NotificationCompat.Builder {
+        createNotificationChannels(context)
         val openPendingIntent = openMainActivityPendingIntent(context, 300)
         return NotificationCompat.Builder(context, CHANNEL_DOWNLOADS_ID)
             .setSmallIcon(R.drawable.ic_notification_download)
-            .setContentTitle("OmniVault")
+            .setContentTitle("Aura Player")
             .setContentText("Listo para descargar…")
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setOngoing(true)
@@ -118,6 +119,7 @@ object NotificationHelper {
         speed: String,
         indeterminate: Boolean = false
     ): NotificationCompat.Builder {
+        createNotificationChannels(context)
         val openPendingIntent = openMainActivityPendingIntent(context, 301)
 
         val progressText = when {
@@ -146,6 +148,7 @@ object NotificationHelper {
      * Cada descarga tiene su propia notificación con ID único.
      */
     fun buildProgressNotification(context: Context, item: DownloadItem): NotificationCompat.Builder {
+        createNotificationChannels(context)
         val cancelIntent = Intent(context, MediaDownloadService::class.java).apply {
             action = MediaDownloadService.ACTION_CANCEL_DOWNLOAD
             putExtra(MediaDownloadService.EXTRA_TASK_ID, item.id)
@@ -184,6 +187,7 @@ object NotificationHelper {
      * Muestra la notificación de descarga completada con botones de Reproducir y Compartir.
      */
     fun showCompletedNotification(context: Context, item: DownloadItem) {
+        createNotificationChannels(context)
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val notifId = NOTIFICATION_ID_BASE + Math.abs(item.id.hashCode() % 1000)
 
@@ -252,6 +256,7 @@ object NotificationHelper {
      * Muestra la notificación de error en caso de fallo.
      */
     fun showErrorNotification(context: Context, item: DownloadItem) {
+        createNotificationChannels(context)
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val notifId = NOTIFICATION_ID_BASE + Math.abs(item.id.hashCode() % 1000)
 
@@ -279,6 +284,7 @@ object NotificationHelper {
      * Muestra la notificación interactiva estilo Snaptube cuando se copia un enlace.
      */
     fun showClipboardDetectedNotification(context: Context, detectedUrl: String) {
+        createNotificationChannels(context)
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         val openIntent = Intent(context, MainActivity::class.java).apply {

@@ -39,6 +39,7 @@ import com.amurayada.music.data.model.Artist
 import com.amurayada.music.data.model.PlaybackState
 import com.amurayada.music.data.model.Playlist
 import com.amurayada.music.data.model.Song
+import com.amurayada.music.data.model.SongSort
 import com.amurayada.music.ui.components.AddToPlaylistSheet
 import com.amurayada.music.ui.components.EqualizerIndicator
 import com.amurayada.music.ui.viewmodel.LibraryViewModel
@@ -53,14 +54,6 @@ enum class LarkCategory(val label: String) {
     CARPETAS("Carpetas"),
     ALBUMES("Álbumes"),
     ARTISTAS("Artistas")
-}
-
-enum class SongSort(val label: String) {
-    RECENT("Más reciente (Fecha)"),
-    NAME_ASC("Título: A a Z"),
-    NAME_DESC("Título: Z a A"),
-    ARTIST_ASC("Artista: A a Z"),
-    DURATION_DESC("Mayor duración")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -79,7 +72,7 @@ fun LarkStyleMusicScreen(
     var selectedCategory by remember { mutableStateOf(LarkCategory.CANCIONES) }
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
-    var currentSort by remember { mutableStateOf(SongSort.NAME_ASC) }
+    val currentSort = libraryViewModel.songSortOrder
     var showSortDialog by remember { mutableStateOf(false) }
     var songForPlaylist by remember { mutableStateOf<Song?>(null) }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
@@ -388,7 +381,7 @@ fun LarkStyleMusicScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    currentSort = sort
+                                    libraryViewModel.setSongSort(sort)
                                     showSortDialog = false
                                 }
                                 .padding(vertical = 12.dp, horizontal = 8.dp),
@@ -397,7 +390,7 @@ fun LarkStyleMusicScreen(
                             RadioButton(
                                 selected = currentSort == sort,
                                 onClick = {
-                                    currentSort = sort
+                                    libraryViewModel.setSongSort(sort)
                                     showSortDialog = false
                                 }
                             )

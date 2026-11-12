@@ -42,15 +42,23 @@ class MediaDownloadService : Service() {
 
         /** Lanza el servicio en segundo plano de forma segura para Android 8+ */
         fun startDownload(context: Context, url: String, format: MediaFormat) {
+            NotificationHelper.createNotificationChannels(context)
             val intent = Intent(context, MediaDownloadService::class.java).apply {
                 action = ACTION_START_DOWNLOAD
                 putExtra(EXTRA_URL, url)
                 putExtra(EXTRA_FORMAT, format.name)
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("MediaDownloadService", "startForegroundService failed, falling back to startService", e)
+                try {
+                    context.startService(intent)
+                } catch (_: Exception) {}
             }
         }
 
@@ -75,11 +83,18 @@ class MediaDownloadService : Service() {
     override fun onCreate() {
         super.onCreate()
 
-        // 1. Iniciar inmediatamente como Foreground Service para cumplir con Android 8/14+
-        val initialNotif = NotificationHelper.buildForegroundServiceNotification(this).build()
-        promoteToForeground(initialNotif)
+        // 1. Iniciar canales de notificación para evitar RemoteServiceException en Android 8+
+        NotificationHelper.createNotificationChannels(this)
 
-        // 2. Inicializar WakeLock para descargas con pantalla bloqueada
+        // 2. Iniciar inmediatamente como Foreground Service para cumplir con Android 8/14+
+        try {
+            val initialNotif = NotificationHelper.buildForegroundServiceNotification(this).build()
+            promoteToForeground(initialNotif)
+        } catch (e: Exception) {
+            android.util.Log.e("MediaDownloadService", "Error posting initial notification", e)
+        }
+
+        // 3. Inicializar WakeLock para descargas con pantalla bloqueada
         try {
             val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
             wakeLock = powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKELOCK_TAG)?.apply {
@@ -190,6 +205,7 @@ class MediaDownloadService : Service() {
      * En Android 14+ (API 34) especifica ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC.
      */
     private fun promoteToForeground(notification: android.app.Notification) {
+        NotificationHelper.createNotificationChannels(this)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(
@@ -200,10 +216,8 @@ class MediaDownloadService : Service() {
             } else {
                 startForeground(FOREGROUND_SERVICE_NOTIF_ID, notification)
             }
-        } catch (_: Exception) {
-            try {
-                startForeground(FOREGROUND_SERVICE_NOTIF_ID, notification)
-            } catch (_: Exception) {}
+        } catch (e: Exception) {
+            android.util.Log.e("MediaDownloadService", "promoteToForeground error", e)
         }
     }
 

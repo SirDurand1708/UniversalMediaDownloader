@@ -59,13 +59,25 @@ class ClipboardMonitorService : Service(), ClipboardManager.OnPrimaryClipChanged
 
         val notification = NotificationCompat.Builder(this, NotificationHelper.CHANNEL_DOWNLOADS_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("OmniVault Activo")
+            .setContentTitle("Aura Player Activo")
             .setContentText("Supervisando enlaces copiados estilo Snaptube...")
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setOngoing(true)
             .build()
 
-        startForeground(FOREGROUND_NOTIFICATION_ID, notification)
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                startForeground(
+                    FOREGROUND_NOTIFICATION_ID,
+                    notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                )
+            } else {
+                startForeground(FOREGROUND_NOTIFICATION_ID, notification)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ClipboardMonitor", "startForeground error", e)
+        }
     }
 
     override fun onPrimaryClipChanged() {

@@ -128,6 +128,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         
         // Aplicar modo inmersivo de pantalla completa
+        try {
+            com.omnivault.media.utils.NotificationHelper.createNotificationChannels(this)
+        } catch (_: Exception) {}
         setupFullScreen()
         handleSharedIntent(intent)
         

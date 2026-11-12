@@ -1,19 +1,19 @@
 {
-  "version": "2.5.0",
-  "version_code": 250,
+  "version": "2.5.1",
+  "version_code": 251,
   "release_date": "2026-11-12",
-  "title": "Aura Player v2.5.0 — Nueva Identidad, Descarga de YouTube Blindada y Biblioteca Lark Style",
-  "changelog": "✨ Nueva identidad y marca oficial: Aura Player\n⚡ Descarga de YouTube 100% garantizada mediante NewPipeExtractor nativo (Audio M4A/MP3 y Video hasta 1080p FHD)\n🎵 Pestaña Música completamente rediseñada estilo Lark Player: canciones locales en fila vertical con insignia [LETRAS], categorías y ordenamiento rápido\n🚫 Pestaña Descargas simplificada y limpia (eliminada la sección de archivos acumulados)\n⏹️ Mini reproductor con botón de cierre (✕) para quitarlo en cualquier momento\n🔊 Super Volumen al 300% con LoudnessEnhancer por hardware",
+  "title": "Aura Player v2.5.1 — Fix de Descargas en Segundo Plano y Orden Persistente de Música",
+  "changelog": "🛡️ Corrección crítica del cierre inesperado (crash) al pulsar Descargar mediante inicialización segura de canales de notificación y Foreground Service\n⚡ Motor de descargas desacoplado: inicio inmediato en memoria y resguardo con WakeLock\n🔄 Orden predeterminado de canciones en 'Más reciente (Fecha)', persistente al cambiar de pestaña y al reiniciar la app\n🎬 Orden persistente también en la pestaña de Videos",
   "android": {
-    "version": "2.5.0",
-    "version_code": 250,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.0/AuraPlayer-v2.5.0-Android.apk",
+    "version": "2.5.1",
+    "version_code": 251,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.1/AuraPlayer-v2.5.1-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.0",
-    "version_code": 250,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.0/AuraPlayer-v2.5.0-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.0/AuraPlayer-v2.5.0-Windows-x64-Portable.zip"
+    "version": "2.5.1",
+    "version_code": 251,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.1/AuraPlayer-v2.5.1-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.1/AuraPlayer-v2.5.1-Windows-x64-Portable.zip"
   }
 }
