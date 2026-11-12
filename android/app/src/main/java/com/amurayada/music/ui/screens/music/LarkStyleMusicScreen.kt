@@ -4,6 +4,7 @@ import android.content.Intent
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -77,9 +78,20 @@ fun LarkStyleMusicScreen(
     var songForPlaylist by remember { mutableStateOf<Song?>(null) }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
+    var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
+    var playlistToRename by remember { mutableStateOf<Playlist?>(null) }
+    var renamePlaylistText by remember { mutableStateOf("") }
+    var playlistToDelete by remember { mutableStateOf<Playlist?>(null) }
+    var songToDelete by remember { mutableStateOf<Song?>(null) }
 
-    val rawSongs = libraryViewModel.songs
-    val userPlaylists = libraryViewModel.userPlaylists
+    val rawSongs = remember(libraryViewModel.songs, libraryViewModel.hiddenSongIds) {
+        libraryViewModel.songs.filter { !libraryViewModel.hiddenSongIds.contains(it.id) }
+    }
+    val playlists by playlistViewModel.playlists.collectAsState()
+
+    BackHandler(enabled = selectedPlaylist != null) {
+        selectedPlaylist = null
+    }
 
     // Filtrar y ordenar canciones locales
     val displayedSongs = remember(rawSongs, searchQuery, currentSort) {
@@ -316,19 +328,68 @@ fun LarkStyleMusicScreen(
                                 Toast.makeText(context, "Error al compartir: ${e.message}", Toast.LENGTH_SHORT).show()
                             }
                         }
+                    },
+                    onHide = { song ->
+                        libraryViewModel.hideSong(song.id)
+                        Toast.makeText(context, "Canción ocultada de la biblioteca", Toast.LENGTH_SHORT).show()
+                    },
+                    onDelete = { song ->
+                        songToDelete = song
                     }
                 )
             }
 
             LarkCategory.PLAYLISTS -> {
-                PlaylistsContent(
-                    playlists = userPlaylists,
-                    onCreatePlaylist = { showCreatePlaylistDialog = true },
-                    onPlaylistClick = { playlist ->
-                        // Navegación / reproducción de playlist
-                        Toast.makeText(context, "Playlist: ${playlist.name}", Toast.LENGTH_SHORT).show()
+                if (selectedPlaylist == null) {
+                    PlaylistsContent(
+                        playlists = playlists,
+                        allSongs = rawSongs,
+                        onCreatePlaylist = { showCreatePlaylistDialog = true },
+                        onPlaylistClick = { playlist ->
+                            selectedPlaylist = playlist
+                        },
+                        onPlayPlaylist = { playlist ->
+                            val pSongs = rawSongs.filter { playlist.songIds.contains(it.id) }
+                            if (pSongs.isNotEmpty()) {
+                                playbackViewModel.playSong(pSongs.first(), pSongs)
+                                Toast.makeText(context, "Reproduciendo ${playlist.name}", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "La playlist está vacía", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onRenamePlaylist = { playlist ->
+                            playlistToRename = playlist
+                            renamePlaylistText = playlist.name
+                        },
+                        onDeletePlaylist = { playlist ->
+                            playlistToDelete = playlist
+                        }
+                    )
+                } else {
+                    val currentPl = playlists.find { it.id == selectedPlaylist?.id } ?: selectedPlaylist!!
+                    val playlistSongs = remember(currentPl, rawSongs) {
+                        val ids = currentPl.songIds.toSet()
+                        rawSongs.filter { ids.contains(it.id) }
                     }
-                )
+                    com.amurayada.music.ui.screens.playlist.PlaylistDetailScreen(
+                        playlist = currentPl,
+                        songs = playlistSongs,
+                        allSongs = rawSongs,
+                        onBackClick = { selectedPlaylist = null },
+                        onSongClick = { song -> playbackViewModel.playSong(song, playlistSongs) },
+                        onRemoveSong = { songId -> playlistViewModel.removeSongFromPlaylist(currentPl.id, songId) },
+                        onAddSong = { song -> playlistViewModel.addSongToPlaylist(currentPl.id, song.id) },
+                        onPlayAll = {
+                            if (playlistSongs.isNotEmpty()) playbackViewModel.playSong(playlistSongs.first(), playlistSongs)
+                        },
+                        onShuffle = {
+                            if (playlistSongs.isNotEmpty()) {
+                                val sh = playlistSongs.shuffled()
+                                playbackViewModel.playSong(sh.first(), sh)
+                            }
+                        }
+                    )
+                }
             }
 
             LarkCategory.CARPETAS -> {
@@ -411,7 +472,7 @@ fun LarkStyleMusicScreen(
     // Diálogo para añadir canción a playlist
     songForPlaylist?.let { song ->
         AddToPlaylistSheet(
-            playlists = userPlaylists,
+            playlists = playlists,
             onDismiss = { songForPlaylist = null },
             onPlaylistSelected = { playlist ->
                 playlistViewModel.addSongToPlaylist(playlist.id, song.id)
@@ -449,6 +510,7 @@ fun LarkStyleMusicScreen(
                             playlistViewModel.createPlaylist(newPlaylistName.trim())
                             libraryViewModel.loadLibrary()
                             showCreatePlaylistDialog = false
+                            Toast.makeText(context, "Playlist \"$newPlaylistName\" creada", Toast.LENGTH_SHORT).show()
                             newPlaylistName = ""
                         }
                     }
@@ -458,6 +520,101 @@ fun LarkStyleMusicScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showCreatePlaylistDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // Diálogo para renombrar playlist
+    playlistToRename?.let { pl ->
+        AlertDialog(
+            onDismissRequest = { playlistToRename = null },
+            title = { Text("Renombrar Playlist", fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = renamePlaylistText,
+                    onValueChange = { renamePlaylistText = it },
+                    label = { Text("Nuevo nombre") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (renamePlaylistText.isNotBlank()) {
+                            playlistViewModel.renamePlaylist(pl.id, renamePlaylistText.trim())
+                            playlistToRename = null
+                            Toast.makeText(context, "Playlist renombrada", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                ) {
+                    Text("Guardar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { playlistToRename = null }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // Diálogo para eliminar playlist
+    playlistToDelete?.let { pl ->
+        AlertDialog(
+            onDismissRequest = { playlistToDelete = null },
+            title = { Text("¿Eliminar Playlist?", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("¿Deseas eliminar la playlist \"${pl.name}\"? Las canciones originales no se borrarán de tu dispositivo.")
+            },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3333)),
+                    onClick = {
+                        val name = pl.name
+                        playlistViewModel.deletePlaylist(pl.id)
+                        if (selectedPlaylist?.id == pl.id) selectedPlaylist = null
+                        playlistToDelete = null
+                        Toast.makeText(context, "Playlist \"$name\" eliminada", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Text("Eliminar", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { playlistToDelete = null }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // Diálogo para eliminar canción del almacenamiento local
+    songToDelete?.let { song ->
+        AlertDialog(
+            onDismissRequest = { songToDelete = null },
+            title = { Text("¿Eliminar canción del dispositivo?", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("Se eliminará permanentemente \"${song.title}\" de la memoria de tu dispositivo. Esta acción no se puede deshacer.")
+            },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3333)),
+                    onClick = {
+                        val title = song.title
+                        libraryViewModel.deleteSong(song, context) {
+                            Toast.makeText(context, "Canción eliminada: $title", Toast.LENGTH_SHORT).show()
+                        }
+                        songToDelete = null
+                    }
+                ) {
+                    Text("Eliminar", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { songToDelete = null }) {
                     Text("Cancelar")
                 }
             }
@@ -479,7 +636,9 @@ private fun SongsListContent(
     onPlayNext: (Song) -> Unit,
     onAddToPlaylist: (Song) -> Unit,
     onStandardize: (Song) -> Unit,
-    onShare: (Song) -> Unit
+    onShare: (Song) -> Unit,
+    onHide: (Song) -> Unit,
+    onDelete: (Song) -> Unit
 ) {
     if (songs.isEmpty()) {
         Box(
@@ -562,7 +721,9 @@ private fun SongsListContent(
                 onPlayNext = { onPlayNext(song) },
                 onAddToPlaylist = { onAddToPlaylist(song) },
                 onStandardize = { onStandardize(song) },
-                onShare = { onShare(song) }
+                onShare = { onShare(song) },
+                onHide = { onHide(song) },
+                onDelete = { onDelete(song) }
             )
         }
     }
@@ -580,7 +741,9 @@ private fun LarkSongRow(
     onPlayNext: () -> Unit,
     onAddToPlaylist: () -> Unit,
     onStandardize: () -> Unit,
-    onShare: () -> Unit
+    onShare: () -> Unit,
+    onHide: () -> Unit,
+    onDelete: () -> Unit
 ) {
     val context = LocalContext.current
     var menuExpanded by remember { mutableStateOf(false) }
@@ -750,6 +913,22 @@ private fun LarkSongRow(
                         onShare()
                     }
                 )
+                DropdownMenuItem(
+                    text = { Text("Ocultar") },
+                    leadingIcon = { Icon(Icons.Rounded.VisibilityOff, contentDescription = null) },
+                    onClick = {
+                        menuExpanded = false
+                        onHide()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Eliminar", color = Color(0xFFFF5252)) },
+                    leadingIcon = { Icon(Icons.Rounded.Delete, contentDescription = null, tint = Color(0xFFFF5252)) },
+                    onClick = {
+                        menuExpanded = false
+                        onDelete()
+                    }
+                )
             }
         }
     }
@@ -761,8 +940,12 @@ private fun LarkSongRow(
 @Composable
 private fun PlaylistsContent(
     playlists: List<Playlist>,
+    allSongs: List<Song>,
     onCreatePlaylist: () -> Unit,
-    onPlaylistClick: (Playlist) -> Unit
+    onPlaylistClick: (Playlist) -> Unit,
+    onPlayPlaylist: (Playlist) -> Unit,
+    onRenamePlaylist: (Playlist) -> Unit,
+    onDeletePlaylist: (Playlist) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -799,7 +982,39 @@ private fun PlaylistsContent(
             }
         }
 
-        items(playlists) { playlist ->
+        if (playlists.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Rounded.QueueMusic,
+                            contentDescription = null,
+                            modifier = Modifier.size(56.dp),
+                            tint = Color.Gray.copy(alpha = 0.4f)
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            text = "No tienes playlists todavía",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray
+                        )
+                    }
+                }
+            }
+        }
+
+        items(playlists, key = { it.id }) { playlist ->
+            var itemMenuExpanded by remember { mutableStateOf(false) }
+            val count = if (playlist.songIds.isNotEmpty()) playlist.songIds.size else playlist.songCount
+            val firstArt = remember(playlist.songIds, allSongs) {
+                allSongs.firstOrNull { playlist.songIds.contains(it.id) && !it.albumArtUri.isNullOrBlank() }?.albumArtUri
+            }
+
             Surface(
                 onClick = { onPlaylistClick(playlist) },
                 color = Color(0xFF141923).copy(alpha = 0.7f),
@@ -811,19 +1026,74 @@ private fun PlaylistsContent(
                     modifier = Modifier.padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color.DarkGray),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Rounded.QueueMusic, contentDescription = null, tint = Color.White)
+                    if (!firstArt.isNullOrBlank()) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(firstArt)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF1E2838)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Rounded.QueueMusic, contentDescription = null, tint = Color(0xFF00E5FF))
+                        }
                     }
                     Spacer(Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(playlist.name, fontWeight = FontWeight.SemiBold, color = Color.White)
-                        Text("${playlist.songCount} canciones", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text("$count canciones", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    }
+
+                    Box {
+                        IconButton(onClick = { itemMenuExpanded = true }, modifier = Modifier.size(36.dp)) {
+                            Icon(
+                                Icons.Rounded.MoreVert,
+                                contentDescription = "Opciones",
+                                tint = Color.White.copy(alpha = 0.6f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = itemMenuExpanded,
+                            onDismissRequest = { itemMenuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Reproducir") },
+                                leadingIcon = { Icon(Icons.Rounded.PlayArrow, contentDescription = null) },
+                                onClick = {
+                                    itemMenuExpanded = false
+                                    onPlayPlaylist(playlist)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Renombrar") },
+                                leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
+                                onClick = {
+                                    itemMenuExpanded = false
+                                    onRenamePlaylist(playlist)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Eliminar playlist", color = Color(0xFFFF5252)) },
+                                leadingIcon = { Icon(Icons.Rounded.Delete, contentDescription = null, tint = Color(0xFFFF5252)) },
+                                onClick = {
+                                    itemMenuExpanded = false
+                                    onDeletePlaylist(playlist)
+                                }
+                            )
+                        }
                     }
                 }
             }

@@ -28,7 +28,9 @@ data class ExtractedMediaInfo(
     val author: String = "",
     val thumbnailUrl: String = "",
     val requestHeaders: Map<String, String> = emptyMap(),
-    val audioStreamUrl: String? = null
+    val audioStreamUrl: String? = null,
+    val backupStreamUrls: List<String> = emptyList(),
+    val backupAudioUrls: List<String> = emptyList()
 )
 
 data class MediaPreview(
@@ -602,6 +604,8 @@ object MediaExtractor {
                     ?: audioList.maxByOrNull { it.averageBitrate }
 
                 if (bestVideoOnly != null && bestAudio != null) {
+                    val backupVideos = videoOnlyList.map { it.content }.filter { it != bestVideoOnly.content }
+                    val backupAudios = audioList.map { it.content }.filter { it != bestAudio.content }
                     return ExtractedMediaInfo(
                         title = title,
                         directStreamUrl = bestVideoOnly.content,
@@ -609,8 +613,14 @@ object MediaExtractor {
                         durationSeconds = lengthSec,
                         author = author,
                         thumbnailUrl = bestThumb,
-                        requestHeaders = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"),
-                        audioStreamUrl = bestAudio.content
+                        requestHeaders = mapOf(
+                            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                            "Referer" to "https://www.youtube.com/",
+                            "Origin" to "https://www.youtube.com"
+                        ),
+                        audioStreamUrl = bestAudio.content,
+                        backupStreamUrls = backupVideos,
+                        backupAudioUrls = backupAudios
                     )
                 } else if (bestMuxed != null) {
                     return ExtractedMediaInfo(
@@ -620,7 +630,11 @@ object MediaExtractor {
                         durationSeconds = lengthSec,
                         author = author,
                         thumbnailUrl = bestThumb,
-                        requestHeaders = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                        requestHeaders = mapOf(
+                            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                            "Referer" to "https://www.youtube.com/",
+                            "Origin" to "https://www.youtube.com"
+                        )
                     )
                 }
             } else {
@@ -632,6 +646,7 @@ object MediaExtractor {
                     ?: audioList.maxByOrNull { it.averageBitrate }
 
                 if (bestAudio != null) {
+                    val backups = audioList.map { it.content }.filter { it != bestAudio.content }
                     return ExtractedMediaInfo(
                         title = title,
                         directStreamUrl = bestAudio.content,
@@ -639,7 +654,12 @@ object MediaExtractor {
                         durationSeconds = lengthSec,
                         author = author,
                         thumbnailUrl = bestThumb,
-                        requestHeaders = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                        requestHeaders = mapOf(
+                            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                            "Referer" to "https://www.youtube.com/",
+                            "Origin" to "https://www.youtube.com"
+                        ),
+                        backupStreamUrls = backups
                     )
                 }
             }
@@ -734,6 +754,11 @@ object MediaExtractor {
                                 val finalVUrl = vTargetUrl
                                 val finalAUrl = aUrl
                                 if (finalVUrl != null && finalAUrl != null) {
+                                    val progBackups = mutableListOf<String>()
+                                    streaming.getAsJsonArray("formats")?.forEach { elem ->
+                                        val u = elem.asJsonObject.get("url")?.asString
+                                        if (!u.isNullOrBlank()) progBackups.add(u)
+                                    }
                                     return ExtractedMediaInfo(
                                         title = title,
                                         directStreamUrl = finalVUrl,
@@ -741,8 +766,13 @@ object MediaExtractor {
                                         durationSeconds = lengthSec,
                                         author = author,
                                         thumbnailUrl = thumbUrl,
-                                        requestHeaders = mapOf("User-Agent" to YT_USER_AGENT),
-                                        audioStreamUrl = finalAUrl
+                                        requestHeaders = mapOf(
+                                            "User-Agent" to YT_USER_AGENT,
+                                            "Referer" to "https://www.youtube.com/",
+                                            "Origin" to "https://www.youtube.com"
+                                        ),
+                                        audioStreamUrl = finalAUrl,
+                                        backupStreamUrls = progBackups
                                     )
                                 }
                             }
@@ -751,42 +781,70 @@ object MediaExtractor {
                         // Para audio (M4A / MP3): seleccionar la mejor pista de audio AAC
                         if (requestedFormat.isAudio) {
                             val adaptive = streaming.getAsJsonArray("adaptiveFormats")
+                            val audioCandidates = mutableListOf<String>()
                             if (adaptive != null) {
                                 for (elem in adaptive) {
                                     val obj = elem.asJsonObject
                                     val mime = if (obj.has("mimeType") && !obj.get("mimeType").isJsonNull) obj.get("mimeType").asString else ""
                                     val url = if (obj.has("url") && !obj.get("url").isJsonNull) obj.get("url").asString else null
-                                    if (url != null && mime.startsWith("audio/mp4")) {
-                                        return ExtractedMediaInfo(
-                                            title = title,
-                                            directStreamUrl = url,
-                                            format = requestedFormat,
-                                            durationSeconds = lengthSec,
-                                            author = author,
-                                            thumbnailUrl = thumbUrl,
-                                            requestHeaders = mapOf("User-Agent" to YT_USER_AGENT)
-                                        )
+                                    if (url != null && (mime.startsWith("audio/mp4") || mime.startsWith("audio/webm"))) {
+                                        audioCandidates.add(url)
                                     }
                                 }
+                            }
+
+                            // Añadir también URLs progresivas de formatos completos como respaldo
+                            val progBackups = mutableListOf<String>()
+                            streaming.getAsJsonArray("formats")?.forEach { elem ->
+                                val u = elem.asJsonObject.get("url")?.asString
+                                if (!u.isNullOrBlank()) progBackups.add(u)
+                            }
+
+                            if (audioCandidates.isNotEmpty()) {
+                                val primaryAudio = audioCandidates.first()
+                                val backupAudios = audioCandidates.drop(1) + progBackups
+                                return ExtractedMediaInfo(
+                                    title = title,
+                                    directStreamUrl = primaryAudio,
+                                    format = requestedFormat,
+                                    durationSeconds = lengthSec,
+                                    author = author,
+                                    thumbnailUrl = thumbUrl,
+                                    requestHeaders = mapOf(
+                                        "User-Agent" to YT_USER_AGENT,
+                                        "Referer" to "https://www.youtube.com/",
+                                        "Origin" to "https://www.youtube.com"
+                                    ),
+                                    backupStreamUrls = backupAudios
+                                )
                             }
                         }
 
                         // Los flujos progresivos (formats) contienen audio AAC + video MP4 sin restricciones ni errores 403
                         val formats = streaming.getAsJsonArray("formats")
                         if (formats != null && formats.size() > 0) {
+                            val progUrls = mutableListOf<String>()
                             for (elem in formats) {
                                 val obj = elem.asJsonObject
                                 if (obj.has("url")) {
-                                    return ExtractedMediaInfo(
-                                        title = title,
-                                        directStreamUrl = obj.get("url").asString,
-                                        format = requestedFormat,
-                                        durationSeconds = lengthSec,
-                                        author = author,
-                                        thumbnailUrl = thumbUrl,
-                                        requestHeaders = mapOf("User-Agent" to YT_USER_AGENT)
-                                    )
+                                    progUrls.add(obj.get("url").asString)
                                 }
+                            }
+                            if (progUrls.isNotEmpty()) {
+                                return ExtractedMediaInfo(
+                                    title = title,
+                                    directStreamUrl = progUrls.first(),
+                                    format = requestedFormat,
+                                    durationSeconds = lengthSec,
+                                    author = author,
+                                    thumbnailUrl = thumbUrl,
+                                    requestHeaders = mapOf(
+                                        "User-Agent" to YT_USER_AGENT,
+                                        "Referer" to "https://www.youtube.com/",
+                                        "Origin" to "https://www.youtube.com"
+                                    ),
+                                    backupStreamUrls = progUrls.drop(1)
+                                )
                             }
                         }
                     }

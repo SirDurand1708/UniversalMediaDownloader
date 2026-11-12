@@ -1,19 +1,19 @@
 {
-  "version": "2.5.1",
-  "version_code": 251,
+  "version": "2.5.2",
+  "version_code": 252,
   "release_date": "2026-11-12",
-  "title": "Aura Player v2.5.1 — Fix de Descargas en Segundo Plano y Orden Persistente de Música",
-  "changelog": "🛡️ Corrección crítica del cierre inesperado (crash) al pulsar Descargar mediante inicialización segura de canales de notificación y Foreground Service\n⚡ Motor de descargas desacoplado: inicio inmediato en memoria y resguardo con WakeLock\n🔄 Orden predeterminado de canciones en 'Más reciente (Fecha)', persistente al cambiar de pestaña y al reiniciar la app\n🎬 Orden persistente también en la pestaña de Videos",
+  "title": "Aura Player v2.5.2 — Fix de Descargas HTTP 403, Playlists 100% Funcionales y Opciones Ocultar/Eliminar",
+  "changelog": "🛡️ Fix definitivo para error de servidor HTTP 403 en descargas mediante rango de bytes nativo (Range), encabezados de navegador reales y múltiples fuentes de respaldo\n🎵 Sección de Playlists 100% interactiva: creación, renombrado, eliminación, reproducción completa y aleatoria, y agregar canciones con facilidad\n👁️ Menú de canción enriquecido: nuevas opciones de Ocultar (sin borrar) y Eliminar permanentemente del almacenamiento",
   "android": {
-    "version": "2.5.1",
-    "version_code": 251,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.1/AuraPlayer-v2.5.1-Android.apk",
+    "version": "2.5.2",
+    "version_code": 252,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.2/AuraPlayer-v2.5.2-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.1",
-    "version_code": 251,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.1/AuraPlayer-v2.5.1-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.1/AuraPlayer-v2.5.1-Windows-x64-Portable.zip"
+    "version": "2.5.2",
+    "version_code": 252,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.2/AuraPlayer-v2.5.2-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.2/AuraPlayer-v2.5.2-Windows-x64-Portable.zip"
   }
 }

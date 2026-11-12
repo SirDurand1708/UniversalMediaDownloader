@@ -113,6 +113,57 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         omniPrefs.edit().putString("song_sort_order", sort.name).apply()
     }
 
+    var hiddenSongIds by mutableStateOf<Set<Long>>(
+        application.getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE)
+            .getStringSet("hidden_song_ids", emptySet())
+            ?.mapNotNull { it.toLongOrNull() }?.toSet() ?: emptySet()
+    )
+        private set
+
+    fun hideSong(songId: Long) {
+        val updated = hiddenSongIds + songId
+        hiddenSongIds = updated
+        omniPrefs.edit().putStringSet("hidden_song_ids", updated.map { it.toString() }.toSet()).apply()
+    }
+
+    fun unhideSong(songId: Long) {
+        val updated = hiddenSongIds - songId
+        hiddenSongIds = updated
+        omniPrefs.edit().putStringSet("hidden_song_ids", updated.map { it.toString() }.toSet()).apply()
+    }
+
+    fun deleteSong(song: Song, context: android.content.Context, onComplete: () -> Unit = {}) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // 1. Eliminar archivo físico de almacenamiento
+                val file = java.io.File(song.path)
+                if (file.exists()) {
+                    file.delete()
+                }
+                // 2. Eliminar de MediaStore mediante ContentResolver
+                try {
+                    val uri = android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                    context.contentResolver.delete(
+                        uri,
+                        "${android.provider.MediaStore.Audio.Media._ID} = ?",
+                        arrayOf(song.id.toString())
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.w("LibraryViewModel", "Error eliminando de MediaStore: ${e.message}")
+                }
+                // 3. Notificar MediaScannerConnection
+                android.media.MediaScannerConnection.scanFile(context, arrayOf(song.path), null, null)
+                // 4. Recargar biblioteca local
+                loadLibrary()
+                withContext(Dispatchers.Main) {
+                    onComplete()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("LibraryViewModel", "Error eliminando canción: ${e.message}")
+            }
+        }
+    }
+
     var isLoading by mutableStateOf(false)
         private set
     
@@ -120,10 +171,11 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         private set
     
     val filteredSongs: List<Song> by derivedStateOf {
+        val visibleSongs = songs.filter { !hiddenSongIds.contains(it.id) }
         if (searchQuery.isEmpty()) {
-            songs
+            visibleSongs
         } else {
-            songs.filter {
+            visibleSongs.filter {
                 it.title.contains(searchQuery, ignoreCase = true) ||
                 it.artist.contains(searchQuery, ignoreCase = true) ||
                 it.album.contains(searchQuery, ignoreCase = true)
