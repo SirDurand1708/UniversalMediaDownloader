@@ -8,7 +8,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.amurayada.music.data.repository.ReleaseInfo
 import com.amurayada.music.data.repository.UpdateRepository

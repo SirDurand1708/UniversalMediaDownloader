@@ -13,7 +13,7 @@ dist/
 *.spec
 
 # Media & Temporary downloads
-downloads/
+/downloads/
 *.mp4
 *.mp3
 *.m4a

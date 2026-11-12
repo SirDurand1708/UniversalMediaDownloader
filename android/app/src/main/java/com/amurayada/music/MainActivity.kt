@@ -1178,17 +1178,19 @@ fun MusicPlayerApp(
                 composable(Screen.Downloads.route) {
                     OmniVaultDownloaderScreen(
                         downloadViewModel = downloadViewModel,
-                        onPlayMedia = { item ->
-                            if (item.format.isVideo) {
+                        onPlayMedia = { item: com.omnivault.media.model.DownloadItem ->
+                            if (!item.format.isAudio) {
                                 navController.navigate(Screen.VideoPlayer.createRoute(item.localFilePath ?: item.url, item.title))
                             } else {
                                 val s = Song(
                                     id = item.id.hashCode().toLong(),
                                     title = item.title,
-                                    artist = item.artist,
+                                    artist = item.artist ?: "Desconocido",
                                     album = "OmniVault",
-                                    duration = 0,
-                                    path = item.localFilePath ?: item.url
+                                    duration = 0L,
+                                    albumArtUri = item.thumbnailUrl?.let { android.net.Uri.parse(it) },
+                                    path = item.localFilePath ?: item.url,
+                                    dateAdded = System.currentTimeMillis()
                                 )
                                 playbackViewModel.playSong(s, listOf(s))
                             }

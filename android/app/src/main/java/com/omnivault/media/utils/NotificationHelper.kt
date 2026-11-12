@@ -191,7 +191,7 @@ object NotificationHelper {
         val file = if (localPath != null) File(localPath) else null
 
         val builder = NotificationCompat.Builder(context, CHANNEL_COMPLETED_ID)
-            .setSmallIcon(R.drawable.ic_notification_done)
+            .setSmallIcon(R.drawable.ic_notification_download)
             .setContentTitle("✅ Descarga completada")
             .setContentText("${item.title} (${item.format.extension.uppercase()}${if (item.fileSizeFormatted.isNotBlank()) " • ${item.fileSizeFormatted}" else ""})")
             .setStyle(

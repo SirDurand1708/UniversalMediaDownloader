@@ -21,7 +21,7 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     val searchQuery = MutableStateFlow("")
-    val sortOption = MutableStateFlow(SortOption.RECENT)
+    val sortOption = MutableStateFlow<SortOption>(SortOption.DATE_DESC)
 
     val videos: StateFlow<List<DownloadItem>> = combine(
         _rawVideos,
@@ -36,8 +36,8 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
         }
 
         when (sort) {
-            SortOption.RECENT -> filtered.sortedByDescending { it.timestamp }
-            SortOption.OLDEST -> filtered.sortedBy { it.timestamp }
+            SortOption.DATE_DESC -> filtered.sortedByDescending { it.timestamp }
+            SortOption.DATE_ASC -> filtered.sortedBy { it.timestamp }
             SortOption.NAME_ASC -> filtered.sortedBy { it.title.lowercase() }
             SortOption.NAME_DESC -> filtered.sortedByDescending { it.title.lowercase() }
             SortOption.SIZE_DESC -> filtered.sortedByDescending { it.fileSizeBytes }
@@ -66,20 +66,17 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
 
     fun standardizeVideo(item: DownloadItem, onComplete: (Boolean) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
-            val path = item.localFilePath ?: return@launch
-            val file = File(path)
-            if (!file.exists()) {
-                withContext(Dispatchers.Main) { onComplete(false) }
-                return@launch
-            }
-
-            val standardized = FilenameStandardizer.standardizeFilename(file)
-            if (standardized != null && standardized.exists()) {
-                MediaScannerConnection.scanFile(
-                    getApplication(),
-                    arrayOf(file.absolutePath, standardized.absolutePath),
-                    null
-                ) { _, _ -> }
+            val oldPath = item.localFilePath
+            val success = FilenameStandardizer.standardizeItemFile(item)
+            if (success) {
+                val newPath = item.localFilePath
+                if (oldPath != null && newPath != null) {
+                    MediaScannerConnection.scanFile(
+                        getApplication(),
+                        arrayOf(oldPath, newPath),
+                        null
+                    ) { _, _ -> }
+                }
                 loadVideos()
                 withContext(Dispatchers.Main) { onComplete(true) }
             } else {

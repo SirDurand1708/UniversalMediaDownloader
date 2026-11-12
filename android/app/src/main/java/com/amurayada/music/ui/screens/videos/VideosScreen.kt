@@ -216,12 +216,12 @@ fun VideosScreen(
             title = { Text("Ordenar videos por", fontWeight = FontWeight.Bold) },
             text = {
                 Column {
-                    SortOptionRow("Más reciente (Fecha)", currentSort == SortOption.RECENT) {
-                        videosViewModel.sortOption.value = SortOption.RECENT
+                    SortOptionRow("Más reciente (Fecha)", currentSort == SortOption.DATE_DESC) {
+                        videosViewModel.sortOption.value = SortOption.DATE_DESC
                         showSortDialog = false
                     }
-                    SortOptionRow("Más antiguo", currentSort == SortOption.OLDEST) {
-                        videosViewModel.sortOption.value = SortOption.OLDEST
+                    SortOptionRow("Más antiguo", currentSort == SortOption.DATE_ASC) {
+                        videosViewModel.sortOption.value = SortOption.DATE_ASC
                         showSortDialog = false
                     }
                     SortOptionRow("Nombre: A a Z", currentSort == SortOption.NAME_ASC) {
