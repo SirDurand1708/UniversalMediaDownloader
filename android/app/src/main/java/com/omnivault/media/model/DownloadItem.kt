@@ -27,5 +27,6 @@ data class DownloadItem(
     var fileSizeFormatted: String = "",
     var thumbnailUrl: String? = null,
     var artist: String? = null,
+    var playCount: Int = 0,
     val timestamp: Long = System.currentTimeMillis()
 ) : Serializable

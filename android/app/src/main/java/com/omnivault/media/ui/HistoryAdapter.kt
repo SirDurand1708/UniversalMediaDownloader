@@ -2,17 +2,14 @@ package com.omnivault.media.ui
 
 import android.graphics.BitmapFactory
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
+import coil.load
 import com.omnivault.media.R
 import com.omnivault.media.databinding.ItemDownloadHistoryBinding
 import com.omnivault.media.model.DownloadItem
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
+import com.omnivault.media.model.SortOption
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -21,34 +18,56 @@ import java.util.Locale
 class HistoryAdapter(
     private val onPlayClick: (DownloadItem) -> Unit,
     private val onShareClick: (DownloadItem) -> Unit,
-    private val onDeleteClick: (DownloadItem) -> Unit
+    private val onDeleteClick: (DownloadItem) -> Unit,
+    var onAddToPlaylistClick: ((DownloadItem) -> Unit)? = null
 ) : RecyclerView.Adapter<HistoryAdapter.ViewHolder>() {
 
     private val allItems = mutableListOf<DownloadItem>()
     private val items = mutableListOf<DownloadItem>()
     private var currentQuery: String = ""
+    private var currentSort: SortOption = SortOption.DATE_DESC
     private val dateFormat = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
-    private val httpClient = OkHttpClient()
 
     fun updateList(newItems: List<DownloadItem>) {
         allItems.clear()
         allItems.addAll(newItems)
-        filter(currentQuery)
+        applySortAndFilter()
+    }
+
+    fun setSortOption(sort: SortOption) {
+        currentSort = sort
+        applySortAndFilter()
     }
 
     fun filter(query: String) {
         currentQuery = query
-        items.clear()
-        if (query.isBlank()) {
-            items.addAll(allItems)
+        applySortAndFilter()
+    }
+
+    private fun applySortAndFilter() {
+        val filtered = if (currentQuery.isBlank()) {
+            allItems
         } else {
-            val q = query.lowercase().trim()
-            items.addAll(allItems.filter {
+            val q = currentQuery.lowercase().trim()
+            allItems.filter {
                 it.title.lowercase().contains(q) ||
                 (it.artist?.lowercase()?.contains(q) == true) ||
                 it.platform.displayName.lowercase().contains(q)
-            })
+            }
         }
+
+        val sorted = when (currentSort) {
+            SortOption.DATE_DESC -> filtered.sortedByDescending { it.timestamp }
+            SortOption.DATE_ASC -> filtered.sortedBy { it.timestamp }
+            SortOption.MOST_PLAYED -> filtered.sortedByDescending { it.playCount }
+            SortOption.NAME_ASC -> filtered.sortedBy { it.title.lowercase() }
+            SortOption.NAME_DESC -> filtered.sortedByDescending { it.title.lowercase() }
+            SortOption.SIZE_DESC -> filtered.sortedByDescending { File(it.localFilePath ?: "").length() }
+            SortOption.SIZE_ASC -> filtered.sortedBy { File(it.localFilePath ?: "").length() }
+        }
+
+        items.clear()
+        items.addAll(sorted)
         notifyDataSetChanged()
     }
 
@@ -59,14 +78,6 @@ class HistoryAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         holder.bind(items[position])
-        holder.itemView.alpha = 0f
-        holder.itemView.translationY = 15f
-        holder.itemView.animate()
-            .alpha(1f)
-            .translationY(0f)
-            .setDuration(160)
-            .setInterpolator(android.view.animation.DecelerateInterpolator())
-            .start()
     }
 
     override fun getItemCount(): Int = items.size
@@ -74,9 +85,18 @@ class HistoryAdapter(
     inner class ViewHolder(private val binding: ItemDownloadHistoryBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(item: DownloadItem) {
             binding.tvHistoryTitle.text = item.title
-            binding.tvHistoryPlatform.text = item.platform.displayName
+            binding.tvHistoryPlatform.text = item.artist ?: item.platform.displayName
             binding.tvHistoryDate.text = dateFormat.format(Date(item.timestamp))
-            binding.tvHistorySize.text = item.fileSizeFormatted
+
+            val file = item.localFilePath?.let { File(it) }
+            val sizeStr = if (item.fileSizeFormatted.isNotBlank()) {
+                item.fileSizeFormatted
+            } else if (file != null && file.exists()) {
+                String.format("%.1f MB", file.length() / (1024f * 1024f))
+            } else {
+                "Descargado"
+            }
+            binding.tvHistorySize.text = sizeStr
 
             binding.btnPlay.setOnClickListener { v ->
                 v.animate().scaleX(0.92f).scaleY(0.92f).setDuration(70).withEndAction {
@@ -84,12 +104,14 @@ class HistoryAdapter(
                     onPlayClick(item)
                 }.start()
             }
+
             binding.btnShare.setOnClickListener { v ->
                 v.animate().scaleX(0.92f).scaleY(0.92f).setDuration(70).withEndAction {
                     v.scaleX = 1f; v.scaleY = 1f
                     onShareClick(item)
                 }.start()
             }
+
             binding.btnDelete.setOnClickListener { v ->
                 v.animate().scaleX(0.92f).scaleY(0.92f).setDuration(70).withEndAction {
                     v.scaleX = 1f; v.scaleY = 1f
@@ -97,39 +119,28 @@ class HistoryAdapter(
                 }.start()
             }
 
-            fun applyCover(bitmap: android.graphics.Bitmap) {
-                binding.imgHistoryCover.alpha = 0f
-                binding.imgHistoryCover.setImageBitmap(bitmap)
-                binding.imgHistoryCover.animate().alpha(1f).setDuration(180).start()
+            // Botón Añadir a Playlist
+            binding.btnAddToPlaylist.visibility = if (item.format.isAudio) View.VISIBLE else View.GONE
+            binding.btnAddToPlaylist.setOnClickListener { v ->
+                v.animate().scaleX(0.92f).scaleY(0.92f).setDuration(70).withEndAction {
+                    v.scaleX = 1f; v.scaleY = 1f
+                    onAddToPlaylistClick?.invoke(item)
+                }.start()
             }
 
-            // Cargar carátula del contenido
+            // Cargar carátula con Coil
             val thumb = item.thumbnailUrl
             if (!thumb.isNullOrBlank()) {
                 val localFile = File(thumb)
                 if (localFile.exists()) {
-                    try {
-                        val bitmap = BitmapFactory.decodeFile(localFile.absolutePath)
-                        if (bitmap != null) {
-                            applyCover(bitmap)
-                            return
-                        }
-                    } catch (_: Exception) {}
-                } else if (thumb.startsWith("http")) {
-                    CoroutineScope(Dispatchers.IO).launch {
-                        try {
-                            val req = Request.Builder().url(thumb).build()
-                            httpClient.newCall(req).execute().use { resp ->
-                                if (resp.isSuccessful) {
-                                    val bitmap = BitmapFactory.decodeStream(resp.body?.byteStream())
-                                    withContext(Dispatchers.Main) {
-                                        if (bitmap != null) {
-                                            applyCover(bitmap)
-                                        }
-                                    }
-                                }
-                            }
-                        } catch (_: Exception) {}
+                    binding.imgHistoryCover.load(localFile) {
+                        crossfade(true)
+                        error(R.mipmap.ic_launcher)
+                    }
+                } else {
+                    binding.imgHistoryCover.load(thumb) {
+                        crossfade(true)
+                        error(R.mipmap.ic_launcher)
                     }
                 }
             } else {

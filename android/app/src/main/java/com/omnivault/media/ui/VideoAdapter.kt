@@ -8,6 +8,7 @@ import com.omnivault.media.R
 import com.omnivault.media.databinding.ItemVideoCardBinding
 import com.omnivault.media.model.DownloadItem
 import com.omnivault.media.model.MediaFormat
+import com.omnivault.media.model.SortOption
 import java.io.File
 
 class VideoAdapter(
@@ -18,26 +19,48 @@ class VideoAdapter(
     private val allItems = mutableListOf<DownloadItem>()
     private val items = mutableListOf<DownloadItem>()
     private var currentQuery: String = ""
+    private var currentSort: SortOption = SortOption.DATE_DESC
 
     fun updateList(newItems: List<DownloadItem>) {
         allItems.clear()
         // Filtrar exclusivamente videos válidos (con archivo local existente)
         allItems.addAll(newItems.filter { !it.format.isAudio && !it.localFilePath.isNullOrBlank() })
-        filter(currentQuery)
+        applySortAndFilter()
+    }
+
+    fun setSortOption(sort: SortOption) {
+        currentSort = sort
+        applySortAndFilter()
     }
 
     fun filter(query: String) {
         currentQuery = query
-        items.clear()
-        if (query.isBlank()) {
-            items.addAll(allItems)
+        applySortAndFilter()
+    }
+
+    private fun applySortAndFilter() {
+        val filtered = if (currentQuery.isBlank()) {
+            allItems
         } else {
-            val q = query.lowercase().trim()
-            items.addAll(allItems.filter {
+            val q = currentQuery.lowercase().trim()
+            allItems.filter {
                 it.title.lowercase().contains(q) ||
                 it.platform.displayName.lowercase().contains(q)
-            })
+            }
         }
+
+        val sorted = when (currentSort) {
+            SortOption.DATE_DESC -> filtered.sortedByDescending { it.timestamp }
+            SortOption.DATE_ASC -> filtered.sortedBy { it.timestamp }
+            SortOption.MOST_PLAYED -> filtered.sortedByDescending { it.playCount }
+            SortOption.NAME_ASC -> filtered.sortedBy { it.title.lowercase() }
+            SortOption.NAME_DESC -> filtered.sortedByDescending { it.title.lowercase() }
+            SortOption.SIZE_DESC -> filtered.sortedByDescending { File(it.localFilePath ?: "").length() }
+            SortOption.SIZE_ASC -> filtered.sortedBy { File(it.localFilePath ?: "").length() }
+        }
+
+        items.clear()
+        items.addAll(sorted)
         notifyDataSetChanged()
     }
 

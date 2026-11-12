@@ -597,87 +597,188 @@
                         android:textSize="11sp" />
                 </LinearLayout>
 
-                <!-- Buscador de Música -->
+                <!-- Selector de Sub-Pestañas: Canciones vs Playlists -->
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_height="40dp"
                     android:layout_marginTop="10dp"
                     android:background="@drawable/bg_input_box"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:paddingHorizontal="10dp"
-                    android:paddingVertical="2dp">
-
-                    <ImageView
-                        android:layout_width="16dp"
-                        android:layout_height="16dp"
-                        app:srcCompat="@drawable/ic_search"
-                        app:tint="@color/text_muted" />
-
-                    <EditText
-                        android:id="@+id/etMusicSearch"
-                        android:layout_width="0dp"
-                        android:layout_height="40dp"
-                        android:layout_marginStart="8dp"
-                        android:layout_weight="1"
-                        android:background="@android:color/transparent"
-                        android:fontFamily="sans-serif"
-                        android:hint="Buscar por canción, artista o álbum…"
-                        android:inputType="text"
-                        android:maxLines="1"
-                        android:textColor="@color/text_primary"
-                        android:textColorHint="@color/text_muted"
-                        android:textSize="12sp" />
-
-                    <ImageButton
-                        android:id="@+id/btnClearMusicSearch"
-                        android:layout_width="26dp"
-                        android:layout_height="26dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="Limpiar"
-                        android:src="@android:drawable/ic_menu_close_clear_cancel"
-                        android:visibility="gone"
-                        app:tint="@color/text_muted" />
-                </LinearLayout>
-
-                <!-- Botón de Reproducción Aleatoria Rápida -->
-                <LinearLayout
-                    android:id="@+id/btnPlayAllMusic"
-                    android:layout_width="match_parent"
-                    android:layout_height="42dp"
-                    android:layout_marginTop="10dp"
-                    android:background="@drawable/bg_paste_gradient"
-                    android:gravity="center"
+                    android:padding="3dp"
                     android:orientation="horizontal">
 
                     <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-black"
-                        android:text="▶ Reproducir Todo (Modo Aleatorio)"
-                        android:textColor="#0A0C14"
-                        android:textSize="12sp" />
+                        android:id="@+id/btnSubTabSongs"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_chip_selected"
+                        android:fontFamily="sans-serif-bold"
+                        android:gravity="center"
+                        android:text="🎵 Canciones"
+                        android:textColor="@color/vault_cyan"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/btnSubTabPlaylists"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_chip_unselected"
+                        android:fontFamily="sans-serif-bold"
+                        android:gravity="center"
+                        android:text="📑 Playlists"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp" />
                 </LinearLayout>
 
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/rvMusicLibrary"
+                <!-- CONTENEDOR 1: SUB-PESTAÑA CANCIONES -->
+                <LinearLayout
+                    android:id="@+id/layoutSongsSubTab"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:nestedScrollingEnabled="false" />
+                    android:orientation="vertical"
+                    android:visibility="visible">
 
-                <TextView
-                    android:id="@+id/tvEmptyMusic"
+                    <!-- Buscador de Música + Botón de Ordenar -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:background="@drawable/bg_input_box"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="10dp"
+                        android:paddingVertical="2dp">
+
+                        <ImageView
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            app:srcCompat="@drawable/ic_search"
+                            app:tint="@color/text_muted" />
+
+                        <EditText
+                            android:id="@+id/etMusicSearch"
+                            android:layout_width="0dp"
+                            android:layout_height="40dp"
+                            android:layout_marginStart="8dp"
+                            android:layout_weight="1"
+                            android:background="@android:color/transparent"
+                            android:fontFamily="sans-serif"
+                            android:hint="Buscar por canción, artista o álbum…"
+                            android:inputType="text"
+                            android:maxLines="1"
+                            android:textColor="@color/text_primary"
+                            android:textColorHint="@color/text_muted"
+                            android:textSize="12sp" />
+
+                        <ImageButton
+                            android:id="@+id/btnClearMusicSearch"
+                            android:layout_width="26dp"
+                            android:layout_height="26dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:contentDescription="Limpiar"
+                            android:src="@android:drawable/ic_menu_close_clear_cancel"
+                            android:visibility="gone"
+                            app:tint="@color/text_muted" />
+
+                        <!-- Botón Ordenar Música -->
+                        <ImageButton
+                            android:id="@+id/btnSortMusic"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:layout_marginStart="6dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:contentDescription="Ordenar"
+                            android:src="@drawable/ic_sort"
+                            app:tint="@color/vault_cyan" />
+                    </LinearLayout>
+
+                    <!-- Botón de Reproducción Aleatoria Rápida -->
+                    <LinearLayout
+                        android:id="@+id/btnPlayAllMusic"
+                        android:layout_width="match_parent"
+                        android:layout_height="42dp"
+                        android:layout_marginTop="10dp"
+                        android:background="@drawable/bg_paste_gradient"
+                        android:gravity="center"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-black"
+                            android:text="▶ Reproducir Todo (Modo Aleatorio)"
+                            android:textColor="#0A0C14"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/rvMusicLibrary"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:nestedScrollingEnabled="false" />
+
+                    <TextView
+                        android:id="@+id/tvEmptyMusic"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="30dp"
+                        android:layout_marginBottom="30dp"
+                        android:fontFamily="sans-serif"
+                        android:gravity="center"
+                        android:text="Aún no tienes canciones en tu biblioteca.\nDescarga música o sincroniza las de tu celular."
+                        android:textColor="@color/text_muted"
+                        android:textSize="12sp"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- CONTENEDOR 2: SUB-PESTAÑA PLAYLISTS -->
+                <LinearLayout
+                    android:id="@+id/layoutPlaylistsSubTab"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="30dp"
-                    android:layout_marginBottom="30dp"
-                    android:fontFamily="sans-serif"
-                    android:gravity="center"
-                    android:text="Aún no tienes canciones en tu biblioteca.\nDescarga música desde la pestaña Descargas."
-                    android:textColor="@color/text_muted"
-                    android:textSize="12sp"
-                    android:visibility="gone" />
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <!-- Botón Crear Nueva Playlist -->
+                    <LinearLayout
+                        android:id="@+id/btnCreatePlaylist"
+                        android:layout_width="match_parent"
+                        android:layout_height="46dp"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/bg_btn_gradient"
+                        android:gravity="center">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-black"
+                            android:text="✨ + Crear Nueva Playlist"
+                            android:textColor="#0A0C14"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/rvPlaylists"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:nestedScrollingEnabled="false" />
+
+                    <TextView
+                        android:id="@+id/tvEmptyPlaylists"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="30dp"
+                        android:layout_marginBottom="30dp"
+                        android:fontFamily="sans-serif"
+                        android:gravity="center"
+                        android:text="Aún no has creado playlists.\nPulsa el botón de arriba para crear tu primera lista personalizada."
+                        android:textColor="@color/text_muted"
+                        android:textSize="12sp"
+                        android:visibility="visible" />
+                </LinearLayout>
             </LinearLayout>
 
             <!-- ======================================================== -->
@@ -758,6 +859,17 @@
                         android:src="@android:drawable/ic_menu_close_clear_cancel"
                         android:visibility="gone"
                         app:tint="@color/text_muted" />
+
+                    <!-- Botón Ordenar Videos -->
+                    <ImageButton
+                        android:id="@+id/btnSortVideos"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_marginStart="6dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Ordenar"
+                        android:src="@drawable/ic_sort"
+                        app:tint="@color/vault_cyan" />
                 </LinearLayout>
 
                 <!-- Lista de Videos en Tarjetas 16:9 con Badge 1080p -->
@@ -877,6 +989,84 @@
                         android:layout_marginTop="8dp"
                         android:fontFamily="sans-serif-bold"
                         android:text="💾 Alternar Almacenamiento Interno / MicroSD"
+                        android:textColor="@color/vault_cyan"
+                        android:textSize="11sp"
+                        app:backgroundTint="@color/spotify_card_elevated"
+                        app:cornerRadius="10dp" />
+                </LinearLayout>
+
+                <!-- Card Estandarización de Nombres -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_spotify_card"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-bold"
+                        android:text="✨ Estandarizar Nombres de Archivos"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Limpia sufijos como [Official Video], (4K), [HD], etc. de canciones y videos descargados."
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnStandardizeLibrary"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="38dp"
+                        android:layout_marginTop="8dp"
+                        android:fontFamily="sans-serif-bold"
+                        android:text="🏷️ Estandarizar Nombres Ahora"
+                        android:textColor="@color/vault_cyan"
+                        android:textSize="11sp"
+                        app:backgroundTint="@color/spotify_card_elevated"
+                        app:cornerRadius="10dp" />
+                </LinearLayout>
+
+                <!-- Card Sincronización de Medios del Dispositivo -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_spotify_card"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-bold"
+                        android:text="📱 Sincronizar Medios del Celular"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Muestra en las pestañas Música y Videos todos los archivos que tienes guardados en tu teléfono."
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSyncDeviceMedia"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="38dp"
+                        android:layout_marginTop="8dp"
+                        android:fontFamily="sans-serif-bold"
+                        android:text="🔄 Escanear Música y Videos del Teléfono"
                         android:textColor="@color/vault_cyan"
                         android:textSize="11sp"
                         app:backgroundTint="@color/spotify_card_elevated"

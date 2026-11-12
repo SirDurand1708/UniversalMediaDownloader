@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="10dp"
+    android:background="@drawable/bg_spotify_card"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:padding="12dp">
+
+    <!-- Icono de Playlist Cuadrado con Bordes Suaves -->
+    <LinearLayout
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="@drawable/bg_auto_detect_badge"
+        android:gravity="center">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📑"
+            android:textSize="22sp" />
+    </LinearLayout>
+
+    <!-- Detalles de la Playlist -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvPlaylistName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-black"
+            android:maxLines="1"
+            android:text="Nombre de Playlist"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tvPlaylistTrackCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:fontFamily="sans-serif-medium"
+            android:text="0 canciones"
+            android:textColor="@color/vault_cyan"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <!-- Botón Reproducir Playlist Completa -->
+    <ImageView
+        android:id="@+id/btnPlayPlaylist"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:background="@drawable/bg_btn_gradient"
+        android:padding="10dp"
+        android:src="@android:drawable/ic_media_play"
+        app:tint="#0A0C14" />
+
+    <!-- Botón Eliminar Playlist -->
+    <ImageButton
+        android:id="@+id/btnDeletePlaylist"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:layout_marginStart="8dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Eliminar playlist"
+        android:src="@android:drawable/ic_menu_delete"
+        app:tint="@color/text_muted" />
+
+</LinearLayout>

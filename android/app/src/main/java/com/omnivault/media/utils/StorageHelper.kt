@@ -21,16 +21,41 @@ object StorageHelper {
                 }
             }
         }
-        val baseDir = if (isAudio) {
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
-        } else {
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+
+        // 1. Intentar carpeta estándar Music o Movies en almacenamiento público
+        try {
+            val baseDir = if (isAudio) {
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
+            } else {
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+            }
+            val targetFolder = File(baseDir, FOLDER_NAME)
+            if (targetFolder.exists() || targetFolder.mkdirs()) {
+                return targetFolder
+            }
+        } catch (_: Exception) {}
+
+        // 2. Fallback: Downloads/OmniVault (escribible sin bloqueos de Scoped Storage)
+        try {
+            val dlDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val dlFolder = File(dlDir, FOLDER_NAME)
+            if (dlFolder.exists() || dlFolder.mkdirs()) {
+                return dlFolder
+            }
+        } catch (_: Exception) {}
+
+        // 3. Fallback: Directorio externo propio de la app (100% garantizado en Android 10-14+)
+        if (context != null) {
+            try {
+                val appDir = context.getExternalFilesDir(if (isAudio) Environment.DIRECTORY_MUSIC else Environment.DIRECTORY_MOVIES)
+                if (appDir != null && (appDir.exists() || appDir.mkdirs())) {
+                    return appDir
+                }
+            } catch (_: Exception) {}
         }
-        val targetFolder = File(baseDir, FOLDER_NAME)
-        if (!targetFolder.exists()) {
-            targetFolder.mkdirs()
-        }
-        return targetFolder
+
+        // 4. Último recurso seguro
+        return context?.filesDir ?: File("/sdcard/Download")
     }
 
     fun setCustomStoragePath(context: Context, path: String?) {
@@ -53,6 +78,9 @@ object StorageHelper {
     }
 
     fun sanitizeFilename(name: String): String {
+        val cleaned = FilenameStandardizer.standardizeTitle(name)
+        return cleaned.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
+    }
         return name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
     }
 

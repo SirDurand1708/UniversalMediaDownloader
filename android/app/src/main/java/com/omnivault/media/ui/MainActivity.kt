@@ -12,11 +12,13 @@ import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
+import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -26,24 +28,29 @@ import androidx.core.widget.NestedScrollView
 import androidx.lifecycle.lifecycleScope
 import androidx.palette.graphics.Palette
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.imageview.ShapeableImageView
 import com.omnivault.media.R
-import com.omnivault.media.data.LocalMediaScanner
+import com.omnivault.media.data.AppDatabase
+import com.omnivault.media.data.PlaylistEntity
+import com.omnivault.media.data.PlaylistItemEntity
 import com.omnivault.media.databinding.ActivityMainBinding
 import com.omnivault.media.downloader.DownloadManager
 import com.omnivault.media.downloader.MediaExtractor
 import com.omnivault.media.model.DownloadItem
 import com.omnivault.media.model.MediaFormat
 import com.omnivault.media.model.PlatformType
+import com.omnivault.media.model.SortOption
 import com.omnivault.media.player.AudioPlayerManager
 import com.omnivault.media.player.NowPlayingTrack
 import com.omnivault.media.service.ClipboardMonitorService
 import com.omnivault.media.service.MediaDownloadService
 import com.omnivault.media.utils.CoverArtHelper
+import com.omnivault.media.utils.FilenameStandardizer
 import com.omnivault.media.utils.LyricsHelper
 import com.omnivault.media.utils.NotificationHelper
 import com.omnivault.media.utils.StorageHelper
@@ -67,15 +74,27 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val requestStoragePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted = permissions.entries.any { it.value }
+        if (granted) {
+            Toast.makeText(this, "📱 Permisos concedidos: sincronizando música y videos del celular...", Toast.LENGTH_SHORT).show()
+            syncDeviceMedia(silent = false)
+        }
+    }
+
     private lateinit var binding: ActivityMainBinding
     private lateinit var downloadManager: DownloadManager
     private lateinit var downloadAdapter: DownloadAdapter
     private lateinit var recentAdapter: HistoryAdapter
     private lateinit var musicAdapter: HistoryAdapter
     private lateinit var videoAdapter: VideoAdapter
+    private lateinit var playlistAdapter: PlaylistAdapter
 
     private var selectedFormat: MediaFormat = MediaFormat.M4A
     private var pendingUpdateInfo: UpdateInfo? = null
+    private var isViewingPlaylistsSubTab = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -97,8 +116,10 @@ class MainActivity : AppCompatActivity() {
         downloadManager = DownloadManager.getInstance(this)
         NotificationHelper.createNotificationChannels(this)
         checkNotificationPermission()
+        checkStoragePermissions()
 
         setupRecyclerViews()
+        setupPlaylists()
         setupListeners()
         setupBottomNavigation()
         selectFormat(MediaFormat.M4A) // Formato predeterminado HQ
@@ -109,16 +130,12 @@ class MainActivity : AppCompatActivity() {
         // Comprobación de actualizaciones en segundo plano
         checkForUpdates(silent = true)
         handleUpdateIntent(intent)
-
-        // Escaneo de música local con Room SQLite + MediaStore
-        lifecycleScope.launch(Dispatchers.IO) {
-            LocalMediaScanner.scanDeviceAudio(this@MainActivity)
-        }
     }
 
     override fun onResume() {
         super.onResume()
         refreshLists()
+        refreshPlaylists()
         checkClipboardForMediaUrl()
     }
 
@@ -127,16 +144,40 @@ class MainActivity : AppCompatActivity() {
         setIntent(intent)
         handlePreloadedUrl(intent)
         handleUpdateIntent(intent)
-
-        lifecycleScope.launch(Dispatchers.IO) {
-            LocalMediaScanner.scanDeviceAudio(this@MainActivity)
-        }
+        syncDeviceMedia(silent = true)
     }
 
     private fun checkNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    private fun checkStoragePermissions() {
+        val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            arrayOf(Manifest.permission.READ_MEDIA_AUDIO, Manifest.permission.READ_MEDIA_VIDEO)
+        } else {
+            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+        val needed = permissions.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+        if (needed.isNotEmpty()) {
+            requestStoragePermissionLauncher.launch(needed.toTypedArray())
+        } else {
+            syncDeviceMedia(silent = true)
+        }
+    }
+
+    private fun syncDeviceMedia(silent: Boolean) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val counts = downloadManager.syncWithDeviceMedia(this@MainActivity)
+            withContext(Dispatchers.Main) {
+                refreshLists()
+                refreshPlaylists()
+                if (!silent) {
+                    Toast.makeText(this@MainActivity, "✓ Sincronizado: ${counts.first} canciones y ${counts.second} videos encontrados en el celular", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -176,7 +217,8 @@ class MainActivity : AppCompatActivity() {
             onDeleteClick = { item ->
                 downloadManager.removeHistoryItem(item)
                 refreshLists()
-            }
+            },
+            onAddToPlaylistClick = { item -> showAddToPlaylistDialog(item) }
         )
         binding.rvDownloadHistory.layoutManager = LinearLayoutManager(this)
         binding.rvDownloadHistory.adapter = recentAdapter
@@ -188,10 +230,16 @@ class MainActivity : AppCompatActivity() {
             onDeleteClick = { item ->
                 downloadManager.removeHistoryItem(item)
                 refreshLists()
-            }
+            },
+            onAddToPlaylistClick = { item -> showAddToPlaylistDialog(item) }
         )
         binding.rvMusicLibrary.layoutManager = LinearLayoutManager(this)
         binding.rvMusicLibrary.adapter = musicAdapter
+
+        // Recuperar preferencia de ordenamiento para música
+        val savedMusicSort = getSharedPreferences("omnivault_prefs", Context.MODE_PRIVATE)
+            .getString("sort_music", SortOption.DATE_DESC.name) ?: SortOption.DATE_DESC.name
+        musicAdapter.setSortOption(SortOption.fromKey(savedMusicSort))
 
         // 4. Biblioteca de Videos (Pestaña Videos con tarjetas 16:9)
         videoAdapter = VideoAdapter(
@@ -201,6 +249,11 @@ class MainActivity : AppCompatActivity() {
         binding.rvVideoLibrary.layoutManager = LinearLayoutManager(this)
         binding.rvVideoLibrary.adapter = videoAdapter
 
+        // Recuperar preferencia de ordenamiento para videos
+        val savedVideoSort = getSharedPreferences("omnivault_prefs", Context.MODE_PRIVATE)
+            .getString("sort_video", SortOption.DATE_DESC.name) ?: SortOption.DATE_DESC.name
+        videoAdapter.setSortOption(SortOption.fromKey(savedVideoSort))
+
         downloadManager.onDownloadUpdatedListener = {
             runOnUiThread { refreshLists() }
         }
@@ -208,6 +261,320 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread { refreshLists() }
         }
         refreshLists()
+    }
+
+    private fun setupPlaylists() {
+        playlistAdapter = PlaylistAdapter(
+            onPlaylistClick = { playlist -> showPlaylistDetailsDialog(playlist) },
+            onPlayClick = { playlist -> playPlaylistTracks(playlist) },
+            onDeleteClick = { playlist -> deletePlaylist(playlist) }
+        )
+        binding.rvPlaylists.layoutManager = LinearLayoutManager(this)
+        binding.rvPlaylists.adapter = playlistAdapter
+
+        binding.btnSubTabSongs.setOnClickListener {
+            it.bounce()
+            switchMusicSubTab(isPlaylists = false)
+        }
+
+        binding.btnSubTabPlaylists.setOnClickListener {
+            it.bounce()
+            switchMusicSubTab(isPlaylists = true)
+        }
+
+        binding.btnCreatePlaylist.setOnClickListener {
+            it.bounce()
+            showCreatePlaylistDialog()
+        }
+
+        refreshPlaylists()
+    }
+
+    private fun switchMusicSubTab(isPlaylists: Boolean) {
+        isViewingPlaylistsSubTab = isPlaylists
+        val selectedBg = R.drawable.bg_chip_selected
+        val unselectedBg = R.drawable.bg_chip_unselected
+        val cyan = ContextCompat.getColor(this, R.color.vault_cyan)
+        val muted = ContextCompat.getColor(this, R.color.text_secondary)
+
+        if (isPlaylists) {
+            binding.btnSubTabSongs.setBackgroundResource(unselectedBg)
+            binding.btnSubTabSongs.setTextColor(muted)
+            binding.btnSubTabPlaylists.setBackgroundResource(selectedBg)
+            binding.btnSubTabPlaylists.setTextColor(cyan)
+
+            binding.layoutSongsSubTab.visibility = View.GONE
+            binding.layoutPlaylistsSubTab.visibility = View.VISIBLE
+            refreshPlaylists()
+        } else {
+            binding.btnSubTabSongs.setBackgroundResource(selectedBg)
+            binding.btnSubTabSongs.setTextColor(cyan)
+            binding.btnSubTabPlaylists.setBackgroundResource(unselectedBg)
+            binding.btnSubTabPlaylists.setTextColor(muted)
+
+            binding.layoutSongsSubTab.visibility = View.VISIBLE
+            binding.layoutPlaylistsSubTab.visibility = View.GONE
+        }
+    }
+
+    private fun refreshPlaylists() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val db = AppDatabase.getInstance(this@MainActivity)
+            val playlists = db.playlistDao().getAllPlaylists()
+            val models = playlists.map { p ->
+                val count = db.playlistDao().getItemCount(p.id)
+                PlaylistUiModel(p, count)
+            }
+            withContext(Dispatchers.Main) {
+                playlistAdapter.updateList(models)
+                binding.tvEmptyPlaylists.visibility = if (models.isEmpty()) View.VISIBLE else View.GONE
+                binding.rvPlaylists.visibility = if (models.isNotEmpty()) View.VISIBLE else View.GONE
+            }
+        }
+    }
+
+    private fun showCreatePlaylistDialog(onCreated: ((PlaylistEntity) -> Unit)? = null) {
+        val input = EditText(this).apply {
+            hint = "Ej. Mis Favoritas, Gym, Para el auto..."
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
+            setHintTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_muted))
+            setPadding(40, 30, 40, 30)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("✨ Crear Nueva Playlist")
+            .setView(input)
+            .setPositiveButton("Crear") { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isNotBlank()) {
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        val db = AppDatabase.getInstance(this@MainActivity)
+                        val entity = PlaylistEntity(name = name)
+                        db.playlistDao().insertPlaylist(entity)
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(this@MainActivity, "✓ Playlist '$name' creada", Toast.LENGTH_SHORT).show()
+                            refreshPlaylists()
+                            onCreated?.invoke(entity)
+                        }
+                    }
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun showAddToPlaylistDialog(item: DownloadItem) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val db = AppDatabase.getInstance(this@MainActivity)
+            val playlists = db.playlistDao().getAllPlaylists()
+            withContext(Dispatchers.Main) {
+                val dialog = BottomSheetDialog(this@MainActivity)
+                val view = layoutInflater.inflate(R.layout.dialog_add_to_playlist, null)
+                dialog.setContentView(view)
+
+                view.findViewById<TextView>(R.id.tvSongToAddToPlaylist).text = item.title
+                val rv = view.findViewById<RecyclerView>(R.id.rvPlaylistsSelection)
+                val tvEmpty = view.findViewById<TextView>(R.id.tvNoPlaylistsHint)
+                val btnCreate = view.findViewById<View>(R.id.btnCreateNewPlaylistFromDialog)
+
+                if (playlists.isEmpty()) {
+                    tvEmpty.visibility = View.VISIBLE
+                    rv.visibility = View.GONE
+                } else {
+                    tvEmpty.visibility = View.GONE
+                    rv.visibility = View.VISIBLE
+                    val selectionAdapter = PlaylistAdapter(
+                        onPlaylistClick = { playlist ->
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                db.playlistDao().insertPlaylistItem(
+                                    PlaylistItemEntity(
+                                        playlistId = playlist.id,
+                                        trackPath = item.localFilePath ?: "",
+                                        title = item.title,
+                                        artist = item.artist ?: "OmniVault",
+                                        coverPath = item.thumbnailUrl
+                                    )
+                                )
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(this@MainActivity, "✓ Añadida a '${playlist.name}'", Toast.LENGTH_SHORT).show()
+                                    dialog.dismiss()
+                                    refreshPlaylists()
+                                }
+                            }
+                        },
+                        onPlayClick = {},
+                        onDeleteClick = {}
+                    )
+                    rv.layoutManager = LinearLayoutManager(this@MainActivity)
+                    rv.adapter = selectionAdapter
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        val models = playlists.map { p -> PlaylistUiModel(p, db.playlistDao().getItemCount(p.id)) }
+                        withContext(Dispatchers.Main) { selectionAdapter.updateList(models) }
+                    }
+                }
+
+                btnCreate.setOnClickListener {
+                    dialog.dismiss()
+                    showCreatePlaylistDialog { newPlaylist ->
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            db.playlistDao().insertPlaylistItem(
+                                PlaylistItemEntity(
+                                    playlistId = newPlaylist.id,
+                                    trackPath = item.localFilePath ?: "",
+                                    title = item.title,
+                                    artist = item.artist ?: "OmniVault",
+                                    coverPath = item.thumbnailUrl
+                                )
+                            )
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(this@MainActivity, "✓ Añadida a '${newPlaylist.name}'", Toast.LENGTH_SHORT).show()
+                                refreshPlaylists()
+                            }
+                        }
+                    }
+                }
+                dialog.show()
+            }
+        }
+    }
+
+    private fun playPlaylistTracks(playlist: PlaylistEntity) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val db = AppDatabase.getInstance(this@MainActivity)
+            val items = db.playlistDao().getItemsForPlaylist(playlist.id)
+            withContext(Dispatchers.Main) {
+                if (items.isNotEmpty()) {
+                    val tracks = items.map {
+                        NowPlayingTrack(
+                            filePath = it.trackPath,
+                            title = it.title,
+                            artist = it.artist,
+                            coverPath = it.coverPath
+                        )
+                    }
+                    AudioPlayerManager.setPlaylist(tracks, startIndex = 0)
+                    val firstItem = downloadManager.getHistory().firstOrNull { it.localFilePath == tracks.first().filePath }
+                    if (firstItem != null) {
+                        showFullPlayerBottomSheet(firstItem)
+                    }
+                    Toast.makeText(this@MainActivity, "▶ Reproduciendo playlist '${playlist.name}' (${items.size} canciones)", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this@MainActivity, "La playlist '${playlist.name}' está vacía. Añade canciones con el botón '+ Playlist'", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    private fun deletePlaylist(playlist: PlaylistEntity) {
+        AlertDialog.Builder(this)
+            .setTitle("Eliminar Playlist")
+            .setMessage("¿Deseas eliminar '${playlist.name}'? Las canciones continuarán en tu celular.")
+            .setPositiveButton("Eliminar") { _, _ ->
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val db = AppDatabase.getInstance(this@MainActivity)
+                    db.playlistDao().clearPlaylistItems(playlist.id)
+                    db.playlistDao().deletePlaylist(playlist)
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@MainActivity, "✓ Playlist eliminada", Toast.LENGTH_SHORT).show()
+                        refreshPlaylists()
+                    }
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun showPlaylistDetailsDialog(playlist: PlaylistEntity) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val db = AppDatabase.getInstance(this@MainActivity)
+            val items = db.playlistDao().getItemsForPlaylist(playlist.id)
+            withContext(Dispatchers.Main) {
+                val dialog = BottomSheetDialog(this@MainActivity)
+                val view = layoutInflater.inflate(R.layout.dialog_add_to_playlist, null)
+                dialog.setContentView(view)
+
+                view.findViewById<TextView>(R.id.tvSongToAddToPlaylist).text = "📑 ${playlist.name} (${items.size} canciones)"
+                val rv = view.findViewById<RecyclerView>(R.id.rvPlaylistsSelection)
+                val tvEmpty = view.findViewById<TextView>(R.id.tvNoPlaylistsHint)
+                val btnAction = view.findViewById<View>(R.id.btnCreateNewPlaylistFromDialog)
+                (btnAction as? android.widget.LinearLayout)?.getChildAt(0)?.let {
+                    (it as? TextView)?.text = "▶ Reproducir Playlist Completa"
+                }
+
+                btnAction.setOnClickListener {
+                    dialog.dismiss()
+                    playPlaylistTracks(playlist)
+                }
+
+                if (items.isEmpty()) {
+                    tvEmpty.visibility = View.VISIBLE
+                    tvEmpty.text = "Esta playlist está vacía.\nVe a la lista de canciones y toca '+ Playlist' para agregar."
+                    rv.visibility = View.GONE
+                } else {
+                    tvEmpty.visibility = View.GONE
+                    rv.visibility = View.VISIBLE
+                    // Usar HistoryAdapter para mostrar canciones dentro de la playlist
+                    val songItems = items.map {
+                        DownloadItem(
+                            id = it.trackPath,
+                            url = it.trackPath,
+                            title = it.title,
+                            format = MediaFormat.M4A,
+                            status = com.omnivault.media.model.DownloadStatus.COMPLETED,
+                            localFilePath = it.trackPath,
+                            thumbnailUrl = it.coverPath,
+                            artist = it.artist
+                        )
+                    }
+                    val playlistSongsAdapter = HistoryAdapter(
+                        onPlayClick = { playMediaFile(it) },
+                        onShareClick = { shareMediaFile(it) },
+                        onDeleteClick = { song ->
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                db.playlistDao().removePlaylistItem(playlist.id, song.localFilePath ?: "")
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(this@MainActivity, "Canción removida de la playlist", Toast.LENGTH_SHORT).show()
+                                    dialog.dismiss()
+                                    refreshPlaylists()
+                                }
+                            }
+                        }
+                    )
+                    rv.layoutManager = LinearLayoutManager(this@MainActivity)
+                    rv.adapter = playlistSongsAdapter
+                    playlistSongsAdapter.updateList(songItems)
+                }
+                dialog.show()
+            }
+        }
+    }
+
+    private fun showSortDialog(isAudio: Boolean) {
+        val dialog = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.dialog_sort_options, null)
+        dialog.setContentView(view)
+
+        val setSort: (SortOption) -> Unit = { opt ->
+            if (isAudio) {
+                musicAdapter.setSortOption(opt)
+                recentAdapter.setSortOption(opt)
+            } else {
+                videoAdapter.setSortOption(opt)
+            }
+            getSharedPreferences("omnivault_prefs", Context.MODE_PRIVATE)
+                .edit().putString(if (isAudio) "sort_music" else "sort_video", opt.name).apply()
+            Toast.makeText(this, "Ordenado por: ${opt.displayName}", Toast.LENGTH_SHORT).show()
+            dialog.dismiss()
+        }
+
+        view.findViewById<View>(R.id.sortDateDesc).setOnClickListener { setSort(SortOption.DATE_DESC) }
+        view.findViewById<View>(R.id.sortDateAsc).setOnClickListener { setSort(SortOption.DATE_ASC) }
+        view.findViewById<View>(R.id.sortMostPlayed).setOnClickListener { setSort(SortOption.MOST_PLAYED) }
+        view.findViewById<View>(R.id.sortNameAsc).setOnClickListener { setSort(SortOption.NAME_ASC) }
+        view.findViewById<View>(R.id.sortNameDesc).setOnClickListener { setSort(SortOption.NAME_DESC) }
+        view.findViewById<View>(R.id.sortSizeDesc).setOnClickListener { setSort(SortOption.SIZE_DESC) }
+        view.findViewById<View>(R.id.sortSizeAsc).setOnClickListener { setSort(SortOption.SIZE_ASC) }
+
+        dialog.show()
     }
 
     private fun setupListeners() {
@@ -417,6 +784,12 @@ class MainActivity : AppCompatActivity() {
             musicAdapter.filter("")
         }
 
+        // Botón Ordenar Música
+        binding.btnSortMusic.setOnClickListener {
+            it.bounce()
+            showSortDialog(isAudio = true)
+        }
+
         // Botón Reproducir Todo en Modo Aleatorio (Pestaña Música)
         binding.btnPlayAllMusic.setOnClickListener {
             it.bounce()
@@ -445,6 +818,27 @@ class MainActivity : AppCompatActivity() {
             it.bounce()
             binding.etVideoSearch.setText("")
             videoAdapter.filter("")
+        }
+
+        // Botón Ordenar Videos
+        binding.btnSortVideos.setOnClickListener {
+            it.bounce()
+            showSortDialog(isAudio = false)
+        }
+
+        // Botón Estandarizar Nombres en Ajustes
+        binding.btnStandardizeLibrary.setOnClickListener {
+            it.bounce()
+            val count = downloadManager.standardizeAllLibrary()
+            refreshLists()
+            Toast.makeText(this, "✨ Se estandarizaron $count nombres de canciones y videos", Toast.LENGTH_LONG).show()
+        }
+
+        // Botón Sincronizar Medios del Celular en Ajustes
+        binding.btnSyncDeviceMedia.setOnClickListener {
+            it.bounce()
+            Toast.makeText(this, "🔍 Escaneando música y videos de tu celular...", Toast.LENGTH_SHORT).show()
+            checkStoragePermissions()
         }
 
         // Botón Manual de Actualizaciones (Pestaña Ajustes)
@@ -519,6 +913,7 @@ class MainActivity : AppCompatActivity() {
         binding.labelNavSettings.setTextColor(if (index == 3) cyan else muted)
 
         refreshLists()
+        if (index == 1) refreshPlaylists()
     }
 
     private fun analyzeUrl(url: String) {
@@ -720,6 +1115,13 @@ class MainActivity : AppCompatActivity() {
         if (!file.exists()) {
             Toast.makeText(this, "El archivo ya no se encuentra en el dispositivo", Toast.LENGTH_SHORT).show()
             return
+        }
+
+        downloadManager.recordPlay(item)
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                AppDatabase.getInstance(this@MainActivity).trackDao().incrementPlayCount("track_${item.id}")
+            } catch (_: Exception) {}
         }
 
         if (item.format.isAudio) {

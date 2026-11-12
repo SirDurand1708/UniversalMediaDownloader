@@ -549,30 +549,33 @@ object MediaExtractor {
                     val root = JsonParser.parseString(body).asJsonObject
 
                     val videoDetails = root.getAsJsonObject("videoDetails")
-                    val title = videoDetails?.get("title")?.asString ?: "YouTube Media"
+                    val rawTitle = videoDetails?.get("title")?.asString ?: "YouTube Media"
+                    val title = com.omnivault.media.utils.FilenameStandardizer.standardizeTitle(rawTitle)
                     val author = videoDetails?.get("author")?.asString ?: "YouTube"
                     val lengthSec = videoDetails?.get("lengthSeconds")?.asLong ?: 0L
 
                     val streaming = root.getAsJsonObject("streamingData")
 
                     if (streaming != null) {
-                        // Soporte para 1080p Full HD real mediante combinación de pistas DASH nativas
-                        if (requestedFormat == MediaFormat.MP4_1080) {
+                        // Soporte para Video 1080p FHD y 720p HD mediante combinación de pistas DASH nativas
+                        if (!requestedFormat.isAudio) {
                             val adaptive = streaming.getAsJsonArray("adaptiveFormats")
                             if (adaptive != null) {
-                                var v1080Url: String? = null
+                                val targetHeight = if (requestedFormat == MediaFormat.MP4_1080) 1080 else 720
+                                var vTargetUrl: String? = null
                                 var aUrl: String? = null
 
+                                // 1. Buscar video AVC1 (H.264) que MediaMuxer soporte nativamente
                                 for (elem in adaptive) {
                                     val obj = elem.asJsonObject
                                     val mime = if (obj.has("mimeType") && !obj.get("mimeType").isJsonNull) obj.get("mimeType").asString else ""
                                     val url = if (obj.has("url") && !obj.get("url").isJsonNull) obj.get("url").asString else null
+                                    val height = if (obj.has("height") && !obj.get("height").isJsonNull) obj.get("height").asInt else 0
+                                    val quality = if (obj.has("qualityLabel") && !obj.get("qualityLabel").isJsonNull) obj.get("qualityLabel").asString else ""
 
-                                    if (url != null && v1080Url == null && mime.startsWith("video/mp4")) {
-                                        val height = if (obj.has("height") && !obj.get("height").isJsonNull) obj.get("height").asInt else 0
-                                        val quality = if (obj.has("qualityLabel") && !obj.get("qualityLabel").isJsonNull) obj.get("qualityLabel").asString else ""
-                                        if (height >= 1080 || quality.contains("1080")) {
-                                            v1080Url = url
+                                    if (url != null && vTargetUrl == null && mime.startsWith("video/mp4") && mime.contains("avc1")) {
+                                        if (height >= targetHeight || quality.contains("$targetHeight")) {
+                                            vTargetUrl = url
                                         }
                                     }
 
@@ -581,7 +584,22 @@ object MediaExtractor {
                                     }
                                 }
 
-                                val finalVUrl = v1080Url
+                                // 2. Si no encontró AVC1 exacto, buscar cualquier video MP4 que coincida
+                                if (vTargetUrl == null) {
+                                    for (elem in adaptive) {
+                                        val obj = elem.asJsonObject
+                                        val mime = if (obj.has("mimeType") && !obj.get("mimeType").isJsonNull) obj.get("mimeType").asString else ""
+                                        val url = if (obj.has("url") && !obj.get("url").isJsonNull) obj.get("url").asString else null
+                                        val height = if (obj.has("height") && !obj.get("height").isJsonNull) obj.get("height").asInt else 0
+
+                                        if (url != null && mime.startsWith("video/mp4") && height >= targetHeight) {
+                                            vTargetUrl = url
+                                            break
+                                        }
+                                    }
+                                }
+
+                                val finalVUrl = vTargetUrl
                                 val finalAUrl = aUrl
                                 if (finalVUrl != null && finalAUrl != null) {
                                     return ExtractedMediaInfo(
@@ -594,6 +612,29 @@ object MediaExtractor {
                                         requestHeaders = mapOf("User-Agent" to YT_USER_AGENT),
                                         audioStreamUrl = finalAUrl
                                     )
+                                }
+                            }
+                        }
+
+                        // Para audio (M4A / MP3): seleccionar la mejor pista de audio AAC
+                        if (requestedFormat.isAudio) {
+                            val adaptive = streaming.getAsJsonArray("adaptiveFormats")
+                            if (adaptive != null) {
+                                for (elem in adaptive) {
+                                    val obj = elem.asJsonObject
+                                    val mime = if (obj.has("mimeType") && !obj.get("mimeType").isJsonNull) obj.get("mimeType").asString else ""
+                                    val url = if (obj.has("url") && !obj.get("url").isJsonNull) obj.get("url").asString else null
+                                    if (url != null && mime.startsWith("audio/mp4")) {
+                                        return ExtractedMediaInfo(
+                                            title = title,
+                                            directStreamUrl = url,
+                                            format = requestedFormat,
+                                            durationSeconds = lengthSec,
+                                            author = author,
+                                            thumbnailUrl = thumbUrl,
+                                            requestHeaders = mapOf("User-Agent" to YT_USER_AGENT)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -658,29 +699,28 @@ object MediaExtractor {
                         val videos = root.getAsJsonArray("videoStreams")
                         val audios = root.getAsJsonArray("audioStreams")
 
-                        // 1080p DASH con audio separado en Piped
-                        if (requestedFormat == MediaFormat.MP4_1080 && videos != null && audios != null && audios.size() > 0) {
-                            var v1080Url: String? = null
+                        // Video DASH (1080p y 720p) con audio separado en Piped
+                        if (!requestedFormat.isAudio && videos != null && audios != null && audios.size() > 0) {
+                            val targetHeight = if (requestedFormat == MediaFormat.MP4_1080) 1080 else 720
+                            var vTargetUrl: String? = null
                             for (elem in videos) {
                                 val obj = elem.asJsonObject
                                 val q = if (obj.has("quality") && !obj.get("quality").isJsonNull) obj.get("quality").asString else ""
                                 val fmt = if (obj.has("format") && !obj.get("format").isJsonNull) obj.get("format").asString else ""
                                 val sUrl = if (obj.has("url") && !obj.get("url").isJsonNull) obj.get("url").asString else ""
-                                if (q.contains("1080") && fmt.contains("mp4", ignoreCase = true) && sUrl.isNotBlank()) {
-                                    v1080Url = sUrl
+                                if ((q.contains("$targetHeight") || q.contains("${targetHeight}p")) && fmt.contains("mp4", ignoreCase = true) && sUrl.isNotBlank()) {
+                                    vTargetUrl = sUrl
                                     break
                                 }
                             }
                             val aUrl = if (audios[0].isJsonObject && audios[0].asJsonObject.has("url") && !audios[0].asJsonObject.get("url").isJsonNull) audios[0].asJsonObject.get("url").asString else null
-                            val finalVUrl = v1080Url
-                            val finalAUrl = aUrl
-                            if (finalVUrl != null && finalAUrl != null) {
+                            if (vTargetUrl != null && aUrl != null) {
                                 return ExtractedMediaInfo(
                                     title = title,
-                                    directStreamUrl = finalVUrl,
+                                    directStreamUrl = vTargetUrl,
                                     format = requestedFormat,
                                     thumbnailUrl = thumbUrl,
-                                    audioStreamUrl = finalAUrl
+                                    audioStreamUrl = aUrl
                                 )
                             }
                         }

@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_bottom_sheet"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <!-- Indicador de Arrastre -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="16dp"
+        android:background="@drawable/bg_sheet_handle" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-black"
+        android:letterSpacing="0.04"
+        android:text="🔄 ORDENAR POR"
+        android:textColor="@color/vault_cyan"
+        android:textSize="14sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:orientation="vertical">
+
+        <!-- Opción 1: Más recientes -->
+        <TextView
+            android:id="@+id/sortDateDesc"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:background="?attr/selectableItemBackground"
+            android:fontFamily="sans-serif-bold"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="8dp"
+            android:text="🕒 Más recientes primero (Descendente)"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
+
+        <!-- Opción 2: Más antiguos -->
+        <TextView
+            android:id="@+id/sortDateAsc"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:background="?attr/selectableItemBackground"
+            android:fontFamily="sans-serif-bold"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="8dp"
+            android:text="⏳ Más antiguos primero (Ascendente)"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
+
+        <!-- Opción 3: Más reproducidas -->
+        <TextView
+            android:id="@+id/sortMostPlayed"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:background="?attr/selectableItemBackground"
+            android:fontFamily="sans-serif-bold"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="8dp"
+            android:text="🔥 Más reproducidas"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
+
+        <!-- Opción 4: A a Z -->
+        <TextView
+            android:id="@+id/sortNameAsc"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:background="?attr/selectableItemBackground"
+            android:fontFamily="sans-serif-bold"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="8dp"
+            android:text="🔤 Título: A a Z (Ascendente)"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
+
+        <!-- Opción 5: Z a A -->
+        <TextView
+            android:id="@+id/sortNameDesc"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:background="?attr/selectableItemBackground"
+            android:fontFamily="sans-serif-bold"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="8dp"
+            android:text="🔤 Título: Z a A (Descendente)"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
+
+        <!-- Opción 6: Mayor tamaño -->
+        <TextView
+            android:id="@+id/sortSizeDesc"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:background="?attr/selectableItemBackground"
+            android:fontFamily="sans-serif-bold"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="8dp"
+            android:text="💾 Mayor tamaño de archivo"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
+
+        <!-- Opción 7: Menor tamaño -->
+        <TextView
+            android:id="@+id/sortSizeAsc"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:background="?attr/selectableItemBackground"
+            android:fontFamily="sans-serif-bold"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="8dp"
+            android:text="💾 Menor tamaño de archivo"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
+    </LinearLayout>
+</LinearLayout>

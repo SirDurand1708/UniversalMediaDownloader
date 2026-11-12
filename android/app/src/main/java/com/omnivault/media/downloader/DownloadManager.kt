@@ -99,7 +99,7 @@ class DownloadManager private constructor(private val context: Context) {
             notifyUpdate(item)
 
             val info = MediaExtractor.extract(item.url, item.format)
-            item.title = info.title
+            item.title = com.omnivault.media.utils.FilenameStandardizer.standardizeTitle(info.title)
             item.thumbnailUrl = info.thumbnailUrl
             item.artist = info.author
             item.status = DownloadStatus.DOWNLOADING
@@ -361,6 +361,48 @@ class DownloadManager private constructor(private val context: Context) {
         historyList.clear()
         saveHistory()
         onHistoryUpdatedListener?.invoke(historyList)
+    }
+
+    suspend fun syncWithDeviceMedia(context: Context): Pair<Int, Int> {
+        val audios = com.omnivault.media.data.LocalMediaScanner.scanDeviceAudio(context)
+        val videos = com.omnivault.media.data.LocalMediaScanner.scanDeviceVideo(context)
+
+        val existingPaths = historyList.mapNotNull { it.localFilePath }.toSet()
+        val newAudios = audios.filter { it.localFilePath !in existingPaths }
+        val newVideos = videos.filter { it.localFilePath !in existingPaths }
+
+        if (newAudios.isNotEmpty() || newVideos.isNotEmpty()) {
+            historyList.addAll(newAudios)
+            historyList.addAll(newVideos)
+            saveHistory()
+            onHistoryUpdatedListener?.invoke(historyList)
+        }
+        return Pair(audios.size, videos.size)
+    }
+
+    fun recordPlay(item: DownloadItem) {
+        val target = historyList.firstOrNull { it.id == item.id || it.localFilePath == item.localFilePath }
+        if (target != null) {
+            target.playCount++
+            saveHistory()
+        }
+    }
+
+    fun standardizeAllLibrary(): Int {
+        var count = 0
+        for (item in historyList) {
+            val renamed = com.omnivault.media.utils.FilenameStandardizer.standardizeItemFile(item)
+            val cleanTitle = com.omnivault.media.utils.FilenameStandardizer.standardizeTitle(item.title)
+            if (renamed || cleanTitle != item.title) {
+                item.title = cleanTitle
+                count++
+            }
+        }
+        if (count > 0) {
+            saveHistory()
+            onHistoryUpdatedListener?.invoke(historyList)
+        }
+        return count
     }
 
     private fun saveHistory() {
