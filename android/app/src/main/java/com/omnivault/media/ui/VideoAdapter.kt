@@ -55,24 +55,35 @@ class VideoAdapter(
         fun bind(item: DownloadItem) {
             binding.tvVideoTitle.text = item.title
 
-            val resolution = if (item.format.displayName.contains("1080")) "1080p FHD" else "720p HD"
+            val resolution = if (item.format == MediaFormat.MP4_1080) "1080p FHD" else "720p HD"
             binding.tvVideoResolutionBadge.text = resolution
 
             val file = item.localFilePath?.let { File(it) }
-            val sizeMb = if (file != null && file.exists()) {
+            val sizeMb = if (item.fileSizeFormatted.isNotBlank()) {
+                item.fileSizeFormatted
+            } else if (file != null && file.exists()) {
                 String.format("%.1f MB", file.length() / (1024f * 1024f))
             } else {
                 "Descargado"
             }
             binding.tvVideoSubtitle.text = "${item.platform.displayName} • MP4 • $sizeMb"
 
-            // Duración formateada
-            val dur = item.durationSeconds
-            binding.tvVideoDuration.text = if (dur > 0) {
-                String.format("%02d:%02d", dur / 60, dur % 60)
-            } else {
-                "Video"
+            // Duración formateada desde el archivo local o etiqueta de calidad
+            var durationText = if (item.format == MediaFormat.MP4_1080) "1080p" else "720p"
+            if (file != null && file.exists()) {
+                try {
+                    val retriever = android.media.MediaMetadataRetriever()
+                    retriever.setDataSource(file.absolutePath)
+                    val timeStr = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+                    val timeMs = timeStr?.toLongOrNull() ?: 0L
+                    if (timeMs > 0) {
+                        val totalSec = timeMs / 1000
+                        durationText = String.format("%02d:%02d", totalSec / 60, totalSec % 60)
+                    }
+                    retriever.release()
+                } catch (_: Exception) {}
             }
+            binding.tvVideoDuration.text = durationText
 
             // Carga de Miniatura con Coil
             val thumb = item.thumbnailUrl
