@@ -28,10 +28,4 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace 2>&1 | tee ../build.log || {
-            echo "### ❌ Gradle Build Error Log" >> $GITHUB_STEP_SUMMARY
-            echo '```text' >> $GITHUB_STEP_SUMMARY
-            tail -n 80 ../build.log >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            exit 1
-          }
+          ./gradlew assembleRelease --stacktrace
