@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SkipNext
@@ -32,6 +33,7 @@ fun MiniPlayer(
     onPlayPauseClick: () -> Unit,
     onNextClick: () -> Unit,
     onExpandClick: () -> Unit,
+    onCloseClick: () -> Unit = {},
     customBgUri: String? = null,
     isAmoledMode: Boolean = false,
     modifier: Modifier = Modifier
@@ -147,12 +149,24 @@ fun MiniPlayer(
                     
                     IconButton(
                         onClick = onNextClick,
-                        modifier = Modifier.size(48.dp)
+                        modifier = Modifier.size(44.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.SkipNext,
                             contentDescription = "Siguiente",
                             tint = iconColor
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onCloseClick,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = "Cerrar reproductor",
+                            tint = iconColor.copy(alpha = 0.7f),
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }

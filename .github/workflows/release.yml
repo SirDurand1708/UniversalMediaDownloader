@@ -96,13 +96,14 @@ jobs:
           if [ -z "$TAG_VAL" ]; then
             TAG_VAL="v2.2.0"
           fi
+          cp app/build/outputs/apk/release/*.apk ../dist/Releases/AuraPlayer-${TAG_VAL}-Android.apk
           cp app/build/outputs/apk/release/*.apk ../dist/Releases/OmniVault-${TAG_VAL}-Android.apk
 
       - name: 📤 Subir artefacto de Android
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: dist/Releases/OmniVault-*-Android.apk
+          path: dist/Releases/*-Android.apk
 
   # =========================================================================
   # 3. Publicación Oficial en GitHub Releases
@@ -155,7 +156,7 @@ jobs:
           files: |
             dist/Releases/OmniVault-*-Windows-x64-Setup.exe
             dist/Releases/OmniVault-*-Windows-x64-Portable.zip
-            dist/Releases/OmniVault-*-Android.apk
+            dist/Releases/*-Android.apk
             dist/Releases/SHA256SUMS.txt
           body: |
             ## ✦ OmniVault ${{ steps.resolve_tag.outputs.tag }} — Obsidian & Titanium Release

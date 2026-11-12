@@ -205,64 +205,25 @@ fun SettingsScreen(
                     }
                 }
                 
-                SettingsSection(title = "Cuenta", icon = Icons.Rounded.AccountCircle) {
-                    if (isLoggedIn) {
-                        // Show user profile with avatar
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Profile Avatar (using first letter for now - can be replaced with actual photo URL)
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Rounded.Person,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.size(28.dp)
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "YouTube Music",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    text = "Sesión iniciada ✓",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
+                SettingsSection(title = "Bóveda & Captura", icon = Icons.Rounded.CloudDownload) {
+                    val prefs = context.getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE)
+                    var clipboardEnabled by remember { mutableStateOf(prefs.getBoolean("clipboard_monitor_enabled", true)) }
+
+                    SettingsToggleItem(
+                        title = "Auto-Captura de Portapapeles",
+                        subtitle = "Detectar enlaces de YouTube, TikTok, IG, FB al copiarlos",
+                        icon = Icons.Rounded.ContentPaste,
+                        checked = clipboardEnabled,
+                        onCheckedChange = {
+                            clipboardEnabled = it
+                            prefs.edit().putBoolean("clipboard_monitor_enabled", it).apply()
+                            if (it) {
+                                com.omnivault.media.service.ClipboardMonitorService.start(context)
+                            } else {
+                                com.omnivault.media.service.ClipboardMonitorService.stop(context)
                             }
                         }
-                        
-                        SettingsItem(
-                            title = "Cerrar sesión",
-                            subtitle = "Eliminar credenciales guardadas",
-                            icon = Icons.Rounded.Logout,
-                            onClick = { 
-                                authManager.logout()
-                                isLoggedIn = false
-                            }
-                        )
-                    } else {
-                        SettingsItem(
-                            title = "Iniciar sesión en YouTube Music",
-                            subtitle = "Desbloquea contenido personalizado",
-                            icon = Icons.Rounded.Login,
-                            onClick = onLoginClick
-                        )
-                    }
-                    
-
+                    )
                 }
             }
             
@@ -283,11 +244,32 @@ fun SettingsScreen(
             item {
                 val updateStatus by settingsViewModel.updateStatus.collectAsState()
                 
-                SettingsSection(title = "Acerca de", icon = Icons.Rounded.Info) {
+                SettingsSection(title = "Acerca de Aura Player", icon = Icons.Rounded.Info) {
+                    SettingsItem(
+                        title = "Nombre",
+                        subtitle = "Aura Player • Edición Oficial",
+                        icon = Icons.Rounded.PlayCircle,
+                        onClick = { }
+                    )
                     SettingsItem(
                         title = "Versión",
-                        subtitle = settingsViewModel.CURRENT_VERSION,
+                        subtitle = "v${settingsViewModel.CURRENT_VERSION} (Compilación Universal)",
                         icon = Icons.Rounded.Numbers,
+                        onClick = { }
+                    )
+                    SettingsItem(
+                        title = "Desarrollador",
+                        subtitle = "OmniVault Team / SirDurand",
+                        icon = Icons.Rounded.Code,
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/SirDurand1708/UniversalMediaDownloader"))
+                            context.startActivity(intent)
+                        }
+                    )
+                    SettingsItem(
+                        title = "Licencia",
+                        subtitle = "Código Abierto (GPL-3.0)",
+                        icon = Icons.Rounded.VerifiedUser,
                         onClick = { }
                     )
                     

@@ -4,6 +4,10 @@ import com.google.gson.JsonParser
 import com.omnivault.media.model.MediaFormat
 import com.omnivault.media.model.PlatformType
 import com.omnivault.media.utils.UrlUtils
+import com.amurayada.music.data.newpipe.NewPipeDownloader
+import org.schabi.newpipe.extractor.NewPipe
+import org.schabi.newpipe.extractor.ServiceList
+import org.schabi.newpipe.extractor.stream.StreamExtractor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
@@ -198,6 +202,35 @@ object MediaExtractor {
                 originalUrl = url
             )
         }
+
+        // 1. Intentar mediante NewPipeExtractor para duración exacta y carátula HD
+        try {
+            if (NewPipe.getDownloader() == null) {
+                NewPipe.init(NewPipeDownloader())
+            }
+            val service = ServiceList.YouTube
+            val ytWatchUrl = "https://www.youtube.com/watch?v=$videoId"
+            val extractor = service.getStreamExtractor(ytWatchUrl) as StreamExtractor
+            extractor.fetchPage()
+
+            val rawTitle = extractor.name ?: "YouTube Video"
+            val title = if (isPlaylist) "📀 Álbum/Video: $rawTitle" else rawTitle
+            val author = extractor.uploaderName ?: "YouTube Creator"
+            val durationSec = extractor.length
+            val mins = durationSec / 60
+            val secs = durationSec % 60
+            val durText = if (durationSec > 0) String.format("%d:%02d", mins, secs) else ""
+            val bestThumb = extractor.thumbnails.maxByOrNull { it.width * it.height }?.url ?: thumb
+
+            return MediaPreview(
+                title = title,
+                author = author,
+                thumbnailUrl = bestThumb,
+                platform = PlatformType.YOUTUBE,
+                durationText = durText,
+                originalUrl = url
+            )
+        } catch (_: Exception) {}
 
         try {
             val oembedUrl = "https://www.youtube.com/oembed?url=https://youtu.be/$videoId&format=json"
@@ -515,7 +548,106 @@ object MediaExtractor {
 
         val thumbUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
 
-        // 1. Intentar mediante la API oficial InnerTube (Cliente Android)
+        // 1. MOTOR PRIMARIO: NewPipeExtractor (Descifrado nativo, soporte 1080p, 720p y Audio M4A sin errores 403)
+        try {
+            if (NewPipe.getDownloader() == null) {
+                NewPipe.init(NewPipeDownloader())
+            }
+            val service = ServiceList.YouTube
+            val ytWatchUrl = "https://www.youtube.com/watch?v=$videoId"
+            val extractor = service.getStreamExtractor(ytWatchUrl) as StreamExtractor
+            extractor.fetchPage()
+
+            val rawTitle = extractor.name ?: "YouTube Media"
+            val title = com.omnivault.media.utils.FilenameStandardizer.standardizeTitle(rawTitle)
+            val author = extractor.uploaderName ?: "YouTube"
+            val lengthSec = extractor.length
+            val bestThumb = extractor.thumbnails.maxByOrNull { it.width * it.height }?.url ?: thumbUrl
+
+            if (!requestedFormat.isAudio) {
+                val targetHeight = if (requestedFormat == MediaFormat.MP4_1080) 1080 else 720
+
+                // 1A. Streams de video muxed (audio y video integrados)
+                val muxedList = extractor.videoStreams
+                val bestMuxed = muxedList
+                    .filter { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }
+                    .filter { (it.resolution.replace("p", "").toIntOrNull() ?: 0) <= targetHeight }
+                    .maxByOrNull { it.resolution.replace("p", "").toIntOrNull() ?: 0 }
+
+                if (bestMuxed != null && targetHeight <= 720) {
+                    return ExtractedMediaInfo(
+                        title = title,
+                        directStreamUrl = bestMuxed.content,
+                        format = requestedFormat,
+                        durationSeconds = lengthSec,
+                        author = author,
+                        thumbnailUrl = bestThumb,
+                        requestHeaders = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                    )
+                }
+
+                // 1B. DASH Video Only (1080p FHD / 720p HD) + Audio M4A para muxing nativo
+                val videoOnlyList = extractor.videoOnlyStreams
+                val bestVideoOnly = videoOnlyList
+                    .filter { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }
+                    .filter { (it.resolution.replace("p", "").toIntOrNull() ?: 0) <= targetHeight }
+                    .maxByOrNull { it.resolution.replace("p", "").toIntOrNull() ?: 0 }
+                    ?: videoOnlyList.filter { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }.maxByOrNull { it.resolution.replace("p", "").toIntOrNull() ?: 0 }
+                    ?: videoOnlyList.firstOrNull()
+
+                val audioList = extractor.audioStreams
+                val bestAudio = audioList
+                    .filter { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }
+                    .maxByOrNull { it.averageBitrate }
+                    ?: audioList.maxByOrNull { it.averageBitrate }
+
+                if (bestVideoOnly != null && bestAudio != null) {
+                    return ExtractedMediaInfo(
+                        title = title,
+                        directStreamUrl = bestVideoOnly.content,
+                        format = requestedFormat,
+                        durationSeconds = lengthSec,
+                        author = author,
+                        thumbnailUrl = bestThumb,
+                        requestHeaders = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"),
+                        audioStreamUrl = bestAudio.content
+                    )
+                } else if (bestMuxed != null) {
+                    return ExtractedMediaInfo(
+                        title = title,
+                        directStreamUrl = bestMuxed.content,
+                        format = requestedFormat,
+                        durationSeconds = lengthSec,
+                        author = author,
+                        thumbnailUrl = bestThumb,
+                        requestHeaders = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                    )
+                }
+            } else {
+                // Formato de audio solicitado (M4A / MP3)
+                val audioList = extractor.audioStreams
+                val bestAudio = audioList
+                    .filter { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }
+                    .maxByOrNull { it.averageBitrate }
+                    ?: audioList.maxByOrNull { it.averageBitrate }
+
+                if (bestAudio != null) {
+                    return ExtractedMediaInfo(
+                        title = title,
+                        directStreamUrl = bestAudio.content,
+                        format = requestedFormat,
+                        durationSeconds = lengthSec,
+                        author = author,
+                        thumbnailUrl = bestThumb,
+                        requestHeaders = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MediaExtractor", "NewPipeExtractor YouTube failed, attempting InnerTube/Piped fallback", e)
+        }
+
+        // 2. Respaldo mediante API InnerTube (Cliente Android)
         try {
             val endpoint = "https://www.youtube.com/youtubei/v1/player?key=$YT_API_KEY"
             val payload = """

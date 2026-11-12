@@ -33,8 +33,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     // Repositorio para la gestión de versiones desde GitHub
     private val updateRepository: UpdateRepository = UpdateRepositoryImpl(client)
 
-    // Versión actual configurada en el proyecto
-    val CURRENT_VERSION = "1.1"
+    // Versión oficial de Aura Player
+    val CURRENT_VERSION = "2.5.0"
 
     // --- Estados de Configuración ---
     

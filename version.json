@@ -1,19 +1,19 @@
 {
-  "version": "2.4.0",
-  "version_code": 240,
+  "version": "2.5.0",
+  "version_code": 250,
   "release_date": "2026-11-12",
-  "title": "OmniVault v2.4.0 — Base Jetpack Compose & Motor Universal de Descargas",
-  "changelog": "💎 Migración completa a arquitectura moderna Jetpack Compose y Material 3\n⚡ Motor de descargas universal OmniVault: descarga audio (M4A HQ, MP3 320k) y video (1080p FHD, 720p HD con muxing nativo) de cualquier fuente (YouTube, TikTok sin marca de agua, Instagram, Facebook, X/Twitter, SoundCloud)\n🔊 Super Volumen de hasta 300% con limitador por hardware LoudnessEnhancer sin distorsión\n🎬 Nueva pestaña exclusiva para videos locales y descargados con miniaturas dinámicas, filtros y reproductor a pantalla completa\n🎵 Búsqueda y streaming directo de YouTube Music con letras sincronizadas estilo karaoke\n🗂️ 4 pestañas intuitivas: Descargas, Música, Videos y Ajustes",
+  "title": "Aura Player v2.5.0 — Nueva Identidad, Descarga de YouTube Blindada y Biblioteca Lark Style",
+  "changelog": "✨ Nueva identidad y marca oficial: Aura Player\n⚡ Descarga de YouTube 100% garantizada mediante NewPipeExtractor nativo (Audio M4A/MP3 y Video hasta 1080p FHD)\n🎵 Pestaña Música completamente rediseñada estilo Lark Player: canciones locales en fila vertical con insignia [LETRAS], categorías y ordenamiento rápido\n🚫 Pestaña Descargas simplificada y limpia (eliminada la sección de archivos acumulados)\n⏹️ Mini reproductor con botón de cierre (✕) para quitarlo en cualquier momento\n🔊 Super Volumen al 300% con LoudnessEnhancer por hardware",
   "android": {
-    "version": "2.4.0",
-    "version_code": 240,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.4.0/OmniVault-v2.4.0-Android.apk",
+    "version": "2.5.0",
+    "version_code": 250,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.0/AuraPlayer-v2.5.0-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.2.0",
-    "version_code": 220,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.2.0/OmniVault-v2.2.0-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.2.0/OmniVault-v2.2.0-Windows-x64-Portable.zip"
+    "version": "2.5.0",
+    "version_code": 250,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.0/AuraPlayer-v2.5.0-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.0/AuraPlayer-v2.5.0-Windows-x64-Portable.zip"
   }
 }

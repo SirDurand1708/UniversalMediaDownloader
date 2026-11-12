@@ -41,7 +41,7 @@ import java.io.File
 @Composable
 fun OmniVaultDownloaderScreen(
     downloadViewModel: DownloadViewModel,
-    onPlayMedia: (DownloadItem) -> Unit
+    onPlayMedia: (DownloadItem) -> Unit = {}
 ) {
     val context = LocalContext.current
     val urlInput by downloadViewModel.urlInput.collectAsState()
@@ -49,7 +49,6 @@ fun OmniVaultDownloaderScreen(
     val mediaPreview by downloadViewModel.mediaPreview.collectAsState()
     val isAnalyzing by downloadViewModel.isAnalyzing.collectAsState()
     val activeDownloads by downloadViewModel.omniActiveDownloads.collectAsState()
-    val historyDownloads by downloadViewModel.omniHistory.collectAsState()
 
     val neonGreen = Color(0xFF00E676)
     val cardBg = Color(0xFF141923).copy(alpha = 0.85f)
@@ -89,13 +88,13 @@ fun OmniVaultDownloaderScreen(
                     Spacer(Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "TU BÓVEDA",
+                            text = "DESCARGAS",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color.White
                         )
                         Text(
-                            text = "OmniVault • Universal Downloader",
+                            text = "Aura Player • Universal Engine",
                             style = MaterialTheme.typography.labelSmall,
                             color = neonGreen
                         )
@@ -360,59 +359,6 @@ fun OmniVaultDownloaderScreen(
                 ActiveDownloadCard(
                     item = item,
                     onCancel = { downloadViewModel.cancelOmniDownload(item.id) }
-                )
-            }
-        }
-
-        // 7. Historial / Bóveda
-        item {
-            Text(
-                text = "ARCHIVOS EN TU BÓVEDA (${historyDownloads.size})",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color.White.copy(alpha = 0.7f),
-                letterSpacing = 1.sp
-            )
-        }
-
-        if (historyDownloads.isEmpty()) {
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Aún no tienes descargas registradas.\nCopia o pega un enlace para guardar tu primer archivo.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                }
-            }
-        } else {
-            items(historyDownloads, key = { it.id }) { item ->
-                HistoryDownloadCard(
-                    item = item,
-                    onPlay = { onPlayMedia(item) },
-                    onShare = {
-                        val path = item.localFilePath ?: return@HistoryDownloadCard
-                        val file = File(path)
-                        if (file.exists()) {
-                            try {
-                                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                    type = if (!item.format.isAudio) "video/*" else "audio/*"
-                                    putExtra(Intent.EXTRA_STREAM, uri)
-                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                }
-                                context.startActivity(Intent.createChooser(shareIntent, "Compartir archivo"))
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "Error al compartir: ${e.message}", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
                 )
             }
         }

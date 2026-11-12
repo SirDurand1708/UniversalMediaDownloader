@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">OmniVault</string>
-    <string name="notification_channel_name">Reproducción de Música</string>
+    <string name="app_name">Aura Player</string>
+    <string name="notification_channel_name">Aura Player Reproducción</string>
 </resources>

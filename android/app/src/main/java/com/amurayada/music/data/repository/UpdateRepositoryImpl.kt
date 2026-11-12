@@ -11,7 +11,7 @@ class UpdateRepositoryImpl(private val client: OkHttpClient) : UpdateRepository 
     override suspend fun getLatestRelease(): Result<ReleaseInfo> = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder()
-                .url("https://api.github.com/repos/harmony-music/Harmoni/releases/latest")
+                .url("https://api.github.com/repos/SirDurand1708/UniversalMediaDownloader/releases/latest")
                 .header("Accept", "application/vnd.github.v3+json")
                 .build()
 

@@ -539,6 +539,13 @@ fun MusicPlayerApp(
 
     
     var isPlayerExpanded by remember { mutableStateOf(false) }
+    var isMiniPlayerDismissed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(currentSong?.id) {
+        if (currentSong != null) {
+            isMiniPlayerDismissed = false
+        }
+    }
     
     // Manejar botón "Atrás" cuando el reproductor está expandido
     androidx.activity.compose.BackHandler(enabled = isPlayerExpanded) {
@@ -600,7 +607,7 @@ fun MusicPlayerApp(
                 if (showBottomNav) {
                     Column {
                         AnimatedVisibility(
-                            visible = currentSong != null,
+                            visible = currentSong != null && !isMiniPlayerDismissed,
                             enter = slideInVertically { it } + fadeIn(),
                             exit = slideOutVertically { it } + fadeOut()
                         ) {
@@ -612,6 +619,10 @@ fun MusicPlayerApp(
                                 onPlayPauseClick = playbackViewModel::togglePlayPause,
                                 onNextClick = playbackViewModel::skipToNext,
                                 onExpandClick = { isPlayerExpanded = true },
+                                onCloseClick = {
+                                    playbackViewModel.pause()
+                                    isMiniPlayerDismissed = true
+                                },
                                 customBgUri = customBgUri?.toString(),
                                 isAmoledMode = isAmoledMode
                             )
@@ -741,57 +752,11 @@ fun MusicPlayerApp(
                 }
             ) {
                 composable(Screen.Home.route) {
-                    val isOnlineMode by settingsViewModel.onlineMode.collectAsState()
-                    val onlineHomeSections = searchViewModel.onlineHomeSections
-                    
-                    LaunchedEffect(isOnlineMode) {
-                        if (isOnlineMode) {
-                            searchViewModel.loadOnlineHome()
-                        }
-                    }
-
-                    HomeScreen(
-                        songs = songs,
-                        albums = albums,
-                        recentlyPlayed = playbackViewModel.recentlyPlayed,
-                        recentlyAddedSongs = libraryViewModel.recentlyAddedSongs,
-                        mostPlayed = playbackViewModel.mostPlayed,
-                        timeCapsuleSongs = libraryViewModel.timeCapsuleSongs,
-                        onSongClick = { song, songList ->
-                            playbackViewModel.playSong(song, songList)
-                        },
-                        onAlbumClick = { album ->
-                            if (album.path.contains("music.youtube.com") || album.path.startsWith("MPRE") || album.path.startsWith("OLAK")) {
-                                navController.navigate(Screen.AlbumDetailOnline.createRoute(album.path, from = Screen.Home.route))
-                            } else {
-                                navController.navigate(Screen.AlbumDetail.createRoute(album.id, from = Screen.Home.route))
-                            }
-                        },
-                        onArtistClick = { artist ->
-                            if (artist.path.contains("music.youtube.com") || artist.path.startsWith("UC")) {
-                                navController.navigate(Screen.ArtistDetailOnline.createRoute(artist.path, from = Screen.Home.route))
-                            } else {
-                                navController.navigate(Screen.ArtistDetail.createRoute(artist.id, from = Screen.Home.route))
-                            }
-                        },
-                        onPlaylistClick = { playlist ->
-                            if (playlist.remoteId != null) {
-                                navController.navigate(Screen.AlbumDetailOnline.createRoute(playlist.remoteId, from = Screen.Home.route))
-                            } else {
-                                navController.navigate(Screen.PlaylistDetail.createRoute(playlist.id, from = Screen.Home.route))
-                            }
-                        },
-                        onSearchClick = { navController.navigate(Screen.Search.route) },
-                        onSettingsClick = { navController.navigate(Screen.Settings.route) },
-                        onHistoryClick = { navController.navigate(Screen.History.route) },
-
-                        onRecapClick = { navController.navigate(Screen.Recap.route) },
-                        onTimeCapsuleClick = { navController.navigate(Screen.TimeCapsule.route) },
-                        onRefreshClick = { searchViewModel.refreshHome() },
-                        onLoadMore = { searchViewModel.loadMoreHome() },
-                        isOnlineMode = isOnlineMode,
-                        isHomeExhausted = searchViewModel.isHomeExhausted,
-                        onlineSections = onlineHomeSections
+                    com.amurayada.music.ui.screens.music.LarkStyleMusicScreen(
+                        libraryViewModel = libraryViewModel,
+                        playbackViewModel = playbackViewModel,
+                        playlistViewModel = playlistViewModel,
+                        onEqualizerClick = { navController.navigate(Screen.Equalizer.route) }
                     )
                 }
                 
