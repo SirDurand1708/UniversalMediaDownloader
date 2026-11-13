@@ -862,6 +862,7 @@ object MediaExtractor {
         // 2. Respaldo mediante instancia proxy Piped
         val pipedInstances = listOf(
             "https://api.piped.private.coffee",
+            "https://pipedapi.ducks.party",
             "https://pipedapi.tokhmi.xyz"
         )
 
@@ -952,6 +953,111 @@ object MediaExtractor {
         }
 
         throw Exception("No se pudo obtener el flujo de descarga de YouTube. Por favor revisa tu conexión a internet.")
+    }
+
+    /**
+     * Respaldo de emergencia directo para videos de YouTube cuando las conexiones directas
+     * al CDN de Google Video responden con error HTTP 403 (por IP-lock o firmas no resueltas).
+     * Consulta instancias públicas y proxies de Piped para entregar flujos accesibles y libres de bloqueo.
+     */
+    fun extractEmergencyFallback(url: String, requestedFormat: MediaFormat): ExtractedMediaInfo? {
+        val matcher = YT_VIDEO_ID_PATTERN.matcher(url)
+        val videoId = if (matcher.find()) matcher.group(1) else null ?: return null
+
+        val pipedInstances = listOf(
+            "https://api.piped.private.coffee",
+            "https://pipedapi.ducks.party",
+            "https://pipedapi.tokhmi.xyz"
+        )
+
+        for (host in pipedInstances) {
+            try {
+                val pReq = Request.Builder()
+                    .url("$host/streams/$videoId")
+                    .header("User-Agent", BROWSER_USER_AGENT)
+                    .build()
+
+                client.newCall(pReq).execute().use { resp ->
+                    if (resp.isSuccessful) {
+                        val body = resp.body?.string() ?: ""
+                        val root = JsonParser.parseString(body).asJsonObject
+                        val title = root.get("title")?.asString ?: "YouTube Media"
+                        val thumbUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
+
+                        if (requestedFormat.isAudio) {
+                            val audios = root.getAsJsonArray("audioStreams")
+                            if (audios != null && audios.size() > 0) {
+                                val audioUrls = mutableListOf<String>()
+                                for (elem in audios) {
+                                    val u = elem.asJsonObject.get("url")?.asString
+                                    if (!u.isNullOrBlank()) audioUrls.add(u)
+                                }
+                                if (audioUrls.isNotEmpty()) {
+                                    return ExtractedMediaInfo(
+                                        title = title,
+                                        directStreamUrl = audioUrls.first(),
+                                        format = requestedFormat,
+                                        thumbnailUrl = thumbUrl,
+                                        backupStreamUrls = audioUrls.drop(1)
+                                    )
+                                }
+                            }
+                        }
+
+                        val videos = root.getAsJsonArray("videoStreams")
+                        val audios = root.getAsJsonArray("audioStreams")
+
+                        // Video DASH (1080p y 720p) con audio separado
+                        if (!requestedFormat.isAudio && videos != null && audios != null && audios.size() > 0) {
+                            val targetHeight = if (requestedFormat == MediaFormat.MP4_1080) 1080 else 720
+                            var vTargetUrl: String? = null
+                            for (elem in videos) {
+                                val obj = elem.asJsonObject
+                                val q = if (obj.has("quality") && !obj.get("quality").isJsonNull) obj.get("quality").asString else ""
+                                val fmt = if (obj.has("format") && !obj.get("format").isJsonNull) obj.get("format").asString else ""
+                                val sUrl = if (obj.has("url") && !obj.get("url").isJsonNull) obj.get("url").asString else ""
+                                if ((q.contains("$targetHeight") || q.contains("${targetHeight}p")) && fmt.contains("mp4", ignoreCase = true) && sUrl.isNotBlank()) {
+                                    vTargetUrl = sUrl
+                                    break
+                                }
+                            }
+                            val aUrl = if (audios[0].isJsonObject && audios[0].asJsonObject.has("url") && !audios[0].asJsonObject.get("url").isJsonNull) audios[0].asJsonObject.get("url").asString else null
+                            if (vTargetUrl != null && aUrl != null) {
+                                return ExtractedMediaInfo(
+                                    title = title,
+                                    directStreamUrl = vTargetUrl,
+                                    format = requestedFormat,
+                                    thumbnailUrl = thumbUrl,
+                                    audioStreamUrl = aUrl
+                                )
+                            }
+                        }
+
+                        // Stream integrado progresivo
+                        if (videos != null && videos.size() > 0) {
+                            val candidateVideoUrls = mutableListOf<String>()
+                            for (elem in videos) {
+                                val obj = elem.asJsonObject
+                                val sUrl = obj.get("url")?.asString ?: ""
+                                if (sUrl.isNotBlank()) {
+                                    candidateVideoUrls.add(sUrl)
+                                }
+                            }
+                            if (candidateVideoUrls.isNotEmpty()) {
+                                return ExtractedMediaInfo(
+                                    title = title,
+                                    directStreamUrl = candidateVideoUrls.first(),
+                                    format = requestedFormat,
+                                    thumbnailUrl = thumbUrl,
+                                    backupStreamUrls = candidateVideoUrls.drop(1)
+                                )
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        return null
     }
 
     /**

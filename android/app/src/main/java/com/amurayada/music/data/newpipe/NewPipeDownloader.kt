@@ -62,9 +62,9 @@ class NewPipeDownloader : Downloader() {
             }
         }
 
-        // Default User-Agent if not present
+        // Default User-Agent if not present (modern Chrome to avoid botguard restrictions)
         if (headers["User-Agent"].isNullOrEmpty()) {
-            requestBuilder.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+            requestBuilder.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
         }
         
         // Default Accept-Language

@@ -140,29 +140,35 @@ class DownloadManager private constructor(private val context: Context) {
                 for (streamUrl in candidateUrls) {
                     if (targetFile.exists()) targetFile.delete()
 
-                    // Método 1: OkHttp optimizado con Range: bytes=0- y headers de streaming
+                    val lowerUrl = streamUrl.lowercase()
+                    val isYouTube = lowerUrl.contains("googlevideo.com") || lowerUrl.contains("youtube.com")
+                    val isTikTok = lowerUrl.contains("tiktok") || lowerUrl.contains("tikwm")
+                    val isAndroidStream = isYouTube && (lowerUrl.contains("c=android") || info.requestHeaders["User-Agent"]?.contains("android", ignoreCase = true) == true)
+                    val hasRangeInUrl = lowerUrl.contains("range=")
+
+                    val ua = when {
+                        isAndroidStream -> "com.google.android.youtube/20.10.38 (Linux; U; Android 11)"
+                        isYouTube -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+                        isTikTok -> "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+                        else -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+                    }
+
+                    // Método 1: OkHttp con encabezados precisos adaptados al tipo de flujo
                     try {
                         val reqBuilder = Request.Builder()
                             .url(streamUrl)
+                            .header("User-Agent", ua)
+                            .header("Accept", if (isAudioStream) "audio/webm,audio/ogg,audio/wav,audio/*;q=0.9,application/ogg;q=0.7,video/*;q=0.6,*/*;q=0.5" else "*/*")
+                            .header("Accept-Language", "en-US,en;q=0.9,es;q=0.8")
+                            .header("Accept-Encoding", "identity")
+                            .header("Connection", "keep-alive")
 
-                        val lowerUrl = streamUrl.lowercase()
-                        val isYouTube = lowerUrl.contains("googlevideo.com") || lowerUrl.contains("youtube.com")
-                        val isTikTok = lowerUrl.contains("tiktok") || lowerUrl.contains("tikwm")
-
-                        // User-Agent y encabezados de streaming
-                        val ua = if (isYouTube) {
-                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                        } else {
-                            "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+                        if (!hasRangeInUrl) {
+                            reqBuilder.header("Range", "bytes=0-")
                         }
-                        reqBuilder.header("User-Agent", ua)
-                        reqBuilder.header("Accept", if (isAudioStream) "audio/webm,audio/ogg,audio/wav,audio/*;q=0.9,application/ogg;q=0.7,video/*;q=0.6,*/*;q=0.5" else "*/*")
-                        reqBuilder.header("Accept-Language", "en-US,en;q=0.9,es;q=0.8")
-                        reqBuilder.header("Accept-Encoding", "identity")
-                        reqBuilder.header("Connection", "keep-alive")
-                        reqBuilder.header("Range", "bytes=0-") // CRÍTICO: Evita error HTTP 403 en Google Video CDN
 
-                        if (isYouTube) {
+                        // Para clientes Android de YouTube NO se envían Referer ni Sec-Fetch para evitar bloqueos por spoofing
+                        if (isYouTube && !isAndroidStream) {
                             reqBuilder.header("Referer", "https://www.youtube.com/")
                             reqBuilder.header("Origin", "https://www.youtube.com")
                             reqBuilder.header("Sec-Fetch-Dest", if (isAudioStream) "audio" else "video")
@@ -173,8 +179,10 @@ class DownloadManager private constructor(private val context: Context) {
                         }
 
                         for ((k, v) in info.requestHeaders) {
-                            if (!k.equals("Range", ignoreCase = true) && !k.equals("Accept-Encoding", ignoreCase = true)) {
-                                reqBuilder.header(k, v)
+                            if (!k.equals("Range", ignoreCase = true) && !k.equals("Accept-Encoding", ignoreCase = true) && !k.equals("User-Agent", ignoreCase = true)) {
+                                if (!isAndroidStream || (!k.equals("Referer", ignoreCase = true) && !k.equals("Origin", ignoreCase = true))) {
+                                    reqBuilder.header(k, v)
+                                }
                             }
                         }
 
@@ -235,7 +243,7 @@ class DownloadManager private constructor(private val context: Context) {
                         lastError = e
                     }
 
-                    // Método 2 (Fallback): HttpURLConnection con soporte de Range y headers de navegador nativo
+                    // Método 2 (Fallback): HttpURLConnection nativo con headers adaptados
                     try {
                         if (targetFile.exists()) targetFile.delete()
                         val url = java.net.URL(streamUrl)
@@ -246,18 +254,17 @@ class DownloadManager private constructor(private val context: Context) {
                         connection.connectTimeout = 30000
                         connection.readTimeout = 120000
 
-                        val lowerUrl = streamUrl.lowercase()
-                        val isYouTube = lowerUrl.contains("googlevideo.com") || lowerUrl.contains("youtube.com")
-                        val isTikTok = lowerUrl.contains("tiktok") || lowerUrl.contains("tikwm")
-
-                        connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                        connection.setRequestProperty("User-Agent", ua)
                         connection.setRequestProperty("Accept", if (isAudioStream) "audio/webm,audio/ogg,audio/wav,audio/*;q=0.9,application/ogg;q=0.7,video/*;q=0.6,*/*;q=0.5" else "*/*")
                         connection.setRequestProperty("Accept-Language", "en-US,en;q=0.9,es;q=0.8")
                         connection.setRequestProperty("Accept-Encoding", "identity")
                         connection.setRequestProperty("Connection", "keep-alive")
-                        connection.setRequestProperty("Range", "bytes=0-")
 
-                        if (isYouTube) {
+                        if (!hasRangeInUrl) {
+                            connection.setRequestProperty("Range", "bytes=0-")
+                        }
+
+                        if (isYouTube && !isAndroidStream) {
                             connection.setRequestProperty("Referer", "https://www.youtube.com/")
                             connection.setRequestProperty("Origin", "https://www.youtube.com")
                             connection.setRequestProperty("Sec-Fetch-Dest", if (isAudioStream) "audio" else "video")
@@ -268,8 +275,10 @@ class DownloadManager private constructor(private val context: Context) {
                         }
 
                         for ((k, v) in info.requestHeaders) {
-                            if (!k.equals("Range", ignoreCase = true) && !k.equals("Accept-Encoding", ignoreCase = true)) {
-                                connection.setRequestProperty(k, v)
+                            if (!k.equals("Range", ignoreCase = true) && !k.equals("Accept-Encoding", ignoreCase = true) && !k.equals("User-Agent", ignoreCase = true)) {
+                                if (!isAndroidStream || (!k.equals("Referer", ignoreCase = true) && !k.equals("Origin", ignoreCase = true))) {
+                                    connection.setRequestProperty(k, v)
+                                }
                             }
                         }
 
@@ -319,19 +328,80 @@ class DownloadManager private constructor(private val context: Context) {
                         android.util.Log.w("DownloadManager", "HttpURLConnection fallback failed: ${e.message}")
                         lastError = e
                     }
+
+                    // Método 3: Conexión con encabezados limpios mínimos (resuelve rechazos por spoofing en CDN)
+                    try {
+                        if (targetFile.exists()) targetFile.delete()
+                        val minimalReq = Request.Builder()
+                            .url(streamUrl)
+                            .header("User-Agent", ua)
+                            .apply {
+                                if (!hasRangeInUrl) header("Range", "bytes=0-")
+                            }
+                            .build()
+                        client.newCall(minimalReq).execute().use { response ->
+                            if (response.isSuccessful || response.code == 206) {
+                                val body = response.body
+                                if (body != null) {
+                                    val inStream = BufferedInputStream(body.byteStream(), 65536)
+                                    val outStream = BufferedOutputStream(FileOutputStream(targetFile), 65536)
+                                    val buf = ByteArray(65536)
+                                    var readBytes: Int
+                                    while (inStream.read(buf).also { readBytes = it } != -1) {
+                                        outStream.write(buf, 0, readBytes)
+                                    }
+                                    outStream.flush()
+                                    outStream.close()
+                                    inStream.close()
+                                    if (targetFile.exists() && targetFile.length() > 0L) {
+                                        return // Descarga limpia mínima exitosa
+                                    }
+                                }
+                            }
+                        }
+                    } catch (_: Exception) {}
                 }
 
                 throw lastError ?: Exception("No se pudo descargar el flujo multimedia después de probar todos los servidores de respaldo.")
             }
 
-            // Descarga de flujo principal (video o audio)
-            downloadStreamInternal(info.directStreamUrl, info.backupStreamUrls, tempDownloadFile, 1, mainStreamMaxProgress, item.format.isAudio)
+            // Descarga de flujos principales con failover automático a red de respaldo en caso de HTTP 403
+            var primaryDownloadSuccess = false
+            try {
+                // Descarga de flujo principal (video o audio)
+                downloadStreamInternal(info.directStreamUrl, info.backupStreamUrls, tempDownloadFile, 1, mainStreamMaxProgress, item.format.isAudio)
+                if (hasSeparateAudio) {
+                    item.speedText = "Descargando audio HQ…"
+                    notifyUpdate(item)
+                    downloadStreamInternal(info.audioStreamUrl!!, info.backupAudioUrls, tempAudioFile, 70, 90, true)
+                }
+                primaryDownloadSuccess = true
+            } catch (e: Exception) {
+                android.util.Log.w("DownloadManager", "Primary download failed: ${e.message}. Launching emergency proxy fallback...")
+            }
 
-            // Descarga de pista complementaria de audio DASH si es video FHD 1080p
-            if (hasSeparateAudio) {
-                item.speedText = "Descargando audio HQ…"
+            // Red de Respaldo de Emergencia (Proxy Piped): si Google Video CDN bloquea con HTTP 403
+            if (!primaryDownloadSuccess) {
+                item.speedText = "Conectando servidor de respaldo…"
                 notifyUpdate(item)
-                downloadStreamInternal(info.audioStreamUrl!!, info.backupAudioUrls, tempAudioFile, 70, 90, true)
+
+                val fallbackInfo = MediaExtractor.extractEmergencyFallback(item.url, item.format)
+                if (fallbackInfo != null) {
+                    if (tempDownloadFile.exists()) tempDownloadFile.delete()
+                    if (tempAudioFile.exists()) tempAudioFile.delete()
+
+                    val fallbackHasSeparateAudio = !fallbackInfo.audioStreamUrl.isNullOrBlank()
+                    val fallbackMainMaxProgress = if (fallbackHasSeparateAudio) 70 else 100
+
+                    downloadStreamInternal(fallbackInfo.directStreamUrl, fallbackInfo.backupStreamUrls, tempDownloadFile, 1, fallbackMainMaxProgress, item.format.isAudio)
+                    if (fallbackHasSeparateAudio) {
+                        item.speedText = "Descargando audio de respaldo…"
+                        notifyUpdate(item)
+                        downloadStreamInternal(fallbackInfo.audioStreamUrl!!, fallbackInfo.backupAudioUrls, tempAudioFile, 70, 90, true)
+                    }
+                } else {
+                    throw Exception("No se pudo descargar el video debido a restricciones del servidor (HTTP 403). Por favor intenta de nuevo en unos momentos.")
+                }
             }
 
             // 4. Procesamiento y empaquetado en staging
