@@ -50,29 +50,33 @@ object LocalMediaScanner {
                 null,
                 "${MediaStore.Audio.Media.DATE_ADDED} DESC"
             )?.use { cursor ->
-                val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-                val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-                val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-                val albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
-                val durCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-                val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
-                val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
-                val dateCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
-                val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+                val idCol = cursor.getColumnIndex(MediaStore.Audio.Media._ID)
+                val titleCol = cursor.getColumnIndex(MediaStore.Audio.Media.TITLE)
+                val artistCol = cursor.getColumnIndex(MediaStore.Audio.Media.ARTIST)
+                val albumCol = cursor.getColumnIndex(MediaStore.Audio.Media.ALBUM)
+                val durCol = cursor.getColumnIndex(MediaStore.Audio.Media.DURATION)
+                val dataCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
+                val sizeCol = cursor.getColumnIndex(MediaStore.Audio.Media.SIZE)
+                val dateCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATE_ADDED)
+                val albumIdCol = cursor.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID)
+
+                if (idCol == -1 || dataCol == -1) return@use
 
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idCol)
-                    val rawTitle = cursor.getString(titleCol) ?: "Audio"
-                    val artist = cursor.getString(artistCol) ?: "Desconocido"
-                    val album = cursor.getString(albumCol) ?: "OmniVault"
-                    val duration = cursor.getLong(durCol)
+                    val rawTitle = if (titleCol != -1) cursor.getString(titleCol) ?: "Audio" else "Audio"
+                    val artist = if (artistCol != -1) cursor.getString(artistCol) ?: "Desconocido" else "Desconocido"
+                    val album = if (albumCol != -1) cursor.getString(albumCol) ?: "OmniVault" else "OmniVault"
+                    val duration = if (durCol != -1) cursor.getLong(durCol) else 0L
                     val path = cursor.getString(dataCol) ?: continue
-                    val sizeBytes = cursor.getLong(sizeCol)
-                    val dateAddedSec = cursor.getLong(dateCol)
-                    val albumId = cursor.getLong(albumIdCol)
+                    val sizeBytes = if (sizeCol != -1) cursor.getLong(sizeCol) else 0L
+                    val dateAddedSec = if (dateCol != -1) cursor.getLong(dateCol) else 0L
+                    val albumId = if (albumIdCol != -1) cursor.getLong(albumIdCol) else 0L
 
-                    val file = File(path)
-                    if (!file.exists() || file.length() == 0L) continue
+                    if (sizeBytes <= 0) {
+                        val file = File(path)
+                        if (!file.exists() || file.length() == 0L) continue
+                    }
 
                     val sArtworkUri = Uri.parse("content://media/external/audio/albumart")
                     val coverUri = if (albumId > 0) ContentUris.withAppendedId(sArtworkUri, albumId).toString() else null
@@ -100,7 +104,7 @@ object LocalMediaScanner {
                         durationFormatted = durFormatted,
                         thumbnailUrl = coverUri,
                         artist = cleanArtist,
-                        timestamp = if (dateAddedSec > 0) dateAddedSec * 1000 else file.lastModified()
+                        timestamp = if (dateAddedSec > 0) dateAddedSec * 1000 else System.currentTimeMillis()
                     )
                     items.add(downloadItem)
 
@@ -163,26 +167,30 @@ object LocalMediaScanner {
                 null,
                 "${MediaStore.Video.Media.DATE_ADDED} DESC"
             )?.use { cursor ->
-                val idCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
-                val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.TITLE)
-                val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATA)
-                val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+                val idCol = cursor.getColumnIndex(MediaStore.Video.Media._ID)
+                val titleCol = cursor.getColumnIndex(MediaStore.Video.Media.TITLE)
+                val dataCol = cursor.getColumnIndex(MediaStore.Video.Media.DATA)
+                val sizeCol = cursor.getColumnIndex(MediaStore.Video.Media.SIZE)
                 val durCol = cursor.getColumnIndex(MediaStore.Video.Media.DURATION)
-                val dateCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
+                val dateCol = cursor.getColumnIndex(MediaStore.Video.Media.DATE_ADDED)
                 val resCol = cursor.getColumnIndex(MediaStore.Video.Media.RESOLUTION)
+
+                if (idCol == -1 || dataCol == -1) return@use
 
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idCol)
-                    val rawTitle = cursor.getString(titleCol) ?: "Video"
+                    val rawTitle = if (titleCol != -1) cursor.getString(titleCol) ?: "Video" else "Video"
                     val path = cursor.getString(dataCol) ?: continue
-                    val sizeBytes = cursor.getLong(sizeCol)
-                    val dateAddedSec = cursor.getLong(dateCol)
+                    val sizeBytes = if (sizeCol != -1) cursor.getLong(sizeCol) else 0L
+                    val dateAddedSec = if (dateCol != -1) cursor.getLong(dateCol) else 0L
                     val resolution = if (resCol != -1) cursor.getString(resCol) ?: "" else ""
                     val durMs = if (durCol != -1) cursor.getLong(durCol) else 0L
 
-                    val file = File(path)
-                    if (!file.exists() || file.length() == 0L) continue
-                    seenPaths.add(file.absolutePath)
+                    if (sizeBytes <= 0) {
+                        val file = File(path)
+                        if (!file.exists() || file.length() == 0L) continue
+                    }
+                    seenPaths.add(path)
 
                     val format = if (resolution.contains("1080") || resolution.contains("1920")) {
                         MediaFormat.MP4_1080
@@ -214,7 +222,7 @@ object LocalMediaScanner {
                         durationFormatted = durFormatted,
                         thumbnailUrl = path,
                         artist = "Dispositivo",
-                        timestamp = if (dateAddedSec > 0) dateAddedSec * 1000 else file.lastModified()
+                        timestamp = if (dateAddedSec > 0) dateAddedSec * 1000 else System.currentTimeMillis()
                     )
                     items.add(downloadItem)
                 }

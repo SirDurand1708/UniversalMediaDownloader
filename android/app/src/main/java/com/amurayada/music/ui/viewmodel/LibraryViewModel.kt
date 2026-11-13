@@ -274,11 +274,14 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                     
                     // Combine albums, favoring MediaStore versions (usually better metadata), but adding missing ones
                     val allAlbums = (mediaStoreAlbums + downloadedAlbums).distinctBy { it.id }
-                    // Recalculate song counts correctly based on FULL song list
-                    val finalAlbums = allAlbums.map { album ->
-                         val count = sortedSongs.count { it.albumId == album.id }
-                         if (count != album.songCount) album.copy(songCount = count) else album
-                    }.filter { it.songCount > 0 }.sortedBy { it.name }
+                    // Recalculate song counts correctly based on FULL song list in O(N) linear time
+                    val songCountByAlbum = sortedSongs.groupingBy { it.albumId }.eachCount()
+                    val finalAlbums = allAlbums.mapNotNull { album ->
+                        val count = songCountByAlbum[album.id] ?: 0
+                        if (count > 0) {
+                            if (count != album.songCount) album.copy(songCount = count) else album
+                        } else null
+                    }.sortedBy { it.name }
 
                     // Merge Artists: Start with MediaStore artists, add downloaded artists
                     val mediaStoreArtists = repository.getAllArtists()
@@ -298,13 +301,18 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                     
                     // Combine artists
                     val allArtists = (mediaStoreArtists + downloadedArtists).distinctBy { it.id }
-                    // Recalculate counts
-                    val finalArtists = allArtists.map { artist ->
-                        // Count by NAME as Song might not have consistent artistId across sources
-                        val tracksCount = sortedSongs.count { it.artist.equals(artist.name, ignoreCase = true) }
-                        val albumsCount = finalAlbums.count { it.artist.equals(artist.name, ignoreCase = true) }
-                        artist.copy(songCount = tracksCount, albumCount = albumsCount)
-                    }.filter { it.songCount > 0 }.sortedBy { it.name }
+                    // Recalculate counts in O(N) linear time using precomputed maps
+                    val songCountByArtist = sortedSongs.groupingBy { it.artist.lowercase().trim() }.eachCount()
+                    val albumCountByArtist = finalAlbums.groupingBy { it.artist.lowercase().trim() }.eachCount()
+
+                    val finalArtists = allArtists.mapNotNull { artist ->
+                        val key = artist.name.lowercase().trim()
+                        val tracksCount = songCountByArtist[key] ?: 0
+                        if (tracksCount > 0) {
+                            val albumsCount = albumCountByArtist[key] ?: 0
+                            artist.copy(songCount = tracksCount, albumCount = albumsCount)
+                        } else null
+                    }.sortedBy { it.name }
 
                     val finalGenres = repository.getAllGenres()
                     

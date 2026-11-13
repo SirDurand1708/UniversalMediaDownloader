@@ -216,10 +216,13 @@ class MusicPlaybackService : MediaSessionService() {
         // Agregamos listeners para actualizaciones de UI (Widget/Notificación)
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                // REFUERZO DE CICLO DE VIDA: Iniciamos el servicio explícitamente de nuevo para renovar el periodo de gracia.
-                // Esto previene que el sistema mate la app si considera que el "comando previo" terminó.
-                val restartIntent = Intent(applicationContext, MusicPlaybackService::class.java)
-                startService(restartIntent)
+                // REFUERZO DE CICLO DE VIDA: Intentamos renovar el servicio si el estado lo permite
+                try {
+                    val restartIntent = Intent(applicationContext, MusicPlaybackService::class.java)
+                    startService(restartIntent)
+                } catch (e: Exception) {
+                    android.util.Log.w("MusicPlaybackService", "startService renovacion no permitida por SO en background: ${e.message}")
+                }
                 updateWidget()
             }
 
@@ -523,18 +526,22 @@ class MusicPlaybackService : MediaSessionService() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        val restartServiceIntent = Intent(applicationContext, this.javaClass)
-        restartServiceIntent.setPackage(packageName)
-        val restartServicePendingIntent = PendingIntent.getService(
-            applicationContext, 1, restartServiceIntent,
-            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val alarmService = applicationContext.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
-        alarmService.set(
-            android.app.AlarmManager.ELAPSED_REALTIME,
-            android.os.SystemClock.elapsedRealtime() + 1000,
-            restartServicePendingIntent
-        )
+        try {
+            val restartServiceIntent = Intent(applicationContext, this.javaClass)
+            restartServiceIntent.setPackage(packageName)
+            val restartServicePendingIntent = PendingIntent.getService(
+                applicationContext, 1, restartServiceIntent,
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val alarmService = applicationContext.getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
+            alarmService?.set(
+                android.app.AlarmManager.ELAPSED_REALTIME,
+                android.os.SystemClock.elapsedRealtime() + 1000,
+                restartServicePendingIntent
+            )
+        } catch (e: Exception) {
+            android.util.Log.w("MusicPlaybackService", "Could not schedule service restart onTaskRemoved: ${e.message}")
+        }
         super.onTaskRemoved(rootIntent)
     }
 
@@ -855,8 +862,12 @@ class MusicPlaybackService : MediaSessionService() {
             }
             
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                val restartIntent = Intent(applicationContext, MusicPlaybackService::class.java)
-                startService(restartIntent)
+                try {
+                    val restartIntent = Intent(applicationContext, MusicPlaybackService::class.java)
+                    startService(restartIntent)
+                } catch (e: Exception) {
+                    android.util.Log.w("MusicPlaybackService", "startService renovacion no permitida por SO en background: ${e.message}")
+                }
                 updateWidget()
             }
 

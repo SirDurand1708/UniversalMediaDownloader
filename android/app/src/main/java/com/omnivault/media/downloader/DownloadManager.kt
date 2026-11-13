@@ -441,11 +441,10 @@ class DownloadManager private constructor(private val context: Context) {
                     item.speedText = "Extrayendo audio…"
                     notifyUpdate(item)
                     val extracted = AudioExtractor.extractAudio(tempDownloadFile, stagedFile)
-                    tempDownloadFile.delete()
-
                     if (!extracted || !stagedFile.exists() || stagedFile.length() == 0L) {
                         tempDownloadFile.copyTo(stagedFile, overwrite = true)
                     }
+                    tempDownloadFile.delete()
                     finalMimeType = "audio/mp4"
                 }
             } else {
