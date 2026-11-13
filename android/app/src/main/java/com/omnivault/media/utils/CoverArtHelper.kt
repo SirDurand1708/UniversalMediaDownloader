@@ -124,21 +124,44 @@ object CoverArtHelper {
             id3Header[5] = 0x00
             writeSyncsafeInt(framesBytes.size, id3Header, 6)
 
-            // 5. Leer audio existente omitiendo ID3 antiguo si existía
-            val originalAudio = mp3File.readBytes()
-            var audioOffset = 0
-            if (originalAudio.size > 10 && originalAudio[0] == 'I'.code.toByte() && originalAudio[1] == 'D'.code.toByte() && originalAudio[2] == '3'.code.toByte()) {
-                val oldSize = readSyncsafeInt(originalAudio, 6)
-                audioOffset = 10 + oldSize
-            }
-
-            // 6. Escribir archivo final etiquetado
+            // 5. Leer audio existente omitiendo ID3 antiguo si existía usando streaming seguro (sin agotar memoria RAM)
             val tempOutput = File(mp3File.parentFile, "${mp3File.name}.tagged")
-            FileOutputStream(tempOutput).use { fos ->
-                fos.write(id3Header)
-                fos.write(framesBytes)
-                if (audioOffset < originalAudio.size) {
-                    fos.write(originalAudio, audioOffset, originalAudio.size - audioOffset)
+            java.io.FileInputStream(mp3File).use { fis ->
+                java.io.BufferedInputStream(fis, 65536).use { bis ->
+                    bis.mark(10)
+                    val headerProbe = ByteArray(10)
+                    val readLen = bis.read(headerProbe)
+                    var skipBytes = 0L
+                    if (readLen == 10 && headerProbe[0] == 'I'.code.toByte() && headerProbe[1] == 'D'.code.toByte() && headerProbe[2] == '3'.code.toByte()) {
+                        val oldSize = readSyncsafeInt(headerProbe, 6)
+                        skipBytes = oldSize.toLong()
+                    } else {
+                        bis.reset()
+                    }
+
+                    if (skipBytes > 0) {
+                        var skipped = 0L
+                        while (skipped < skipBytes) {
+                            val s = bis.skip(skipBytes - skipped)
+                            if (s <= 0) break
+                            skipped += s
+                        }
+                    }
+
+                    // 6. Escribir archivo final etiquetado mediante streaming por búferes de 64KB
+                    FileOutputStream(tempOutput).use { fos ->
+                        java.io.BufferedOutputStream(fos, 65536).use { bos ->
+                            bos.write(id3Header)
+                            bos.write(framesBytes)
+
+                            val buffer = ByteArray(65536)
+                            var bytesRead: Int
+                            while (bis.read(buffer).also { bytesRead = it } != -1) {
+                                bos.write(buffer, 0, bytesRead)
+                            }
+                            bos.flush()
+                        }
+                    }
                 }
             }
 
@@ -163,6 +186,18 @@ object CoverArtHelper {
      */
     fun embedCoverInM4a(mediaFile: File, coverBytes: ByteArray, title: String, artist: String, lyrics: String? = null): Boolean {
         if (!mediaFile.exists() || coverBytes.isEmpty()) return false
+
+        // Protección contra OutOfMemoryError en archivos M4A de gran tamaño (> 25 MB):
+        // En lugar de clonar 50-200MB en la memoria RAM, guardamos la carátula complementaria en disco (.jpg)
+        if (mediaFile.length() > 25 * 1024 * 1024L) {
+            return try {
+                val companionArt = File(mediaFile.parentFile, "${mediaFile.nameWithoutExtension}.jpg")
+                companionArt.writeBytes(coverBytes)
+                Log.i(TAG, "M4A grande (${mediaFile.length() / (1024 * 1024)} MB): carátula guardada como companion .jpg para evitar OOM")
+                true
+            } catch (_: Exception) { false }
+        }
+
         return try {
             val isPng = coverBytes.size > 8 && coverBytes[0] == 0x89.toByte() && coverBytes[1] == 0x50.toByte()
             val fileBytes = mediaFile.readBytes()

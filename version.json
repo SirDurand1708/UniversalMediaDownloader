@@ -1,19 +1,19 @@
 {
-  "version": "2.5.5",
-  "version_code": 255,
+  "version": "2.5.6",
+  "version_code": 256,
   "release_date": "2026-11-13",
-  "title": "Aura Player v2.5.5 — Optimización O(N) para Bibliotecas de 2000+ Canciones, Escaneo Seguro y Resiliencia en Segundo Plano",
-  "changelog": "⚡ Optimización radical del algoritmo de carga de la biblioteca local de O(N*M) a O(N) lineal: apertura instantánea y sin congelamientos para más de 2200 canciones\n🛡️ Escaneo seguro de MediaStore eliminando getColumnIndexOrThrow para máxima compatibilidad con ROMs de fabricantes (MIUI/HyperOS, ColorOS, EMUI)\n🚀 Eliminación de lecturas redundantes en disco y aceleración del escáner de medios\n🔒 Blindaje contra caídas en segundo plano (IllegalStateException en Android 12-14) durante el cambio de canciones con pantalla apagada\n🎯 Corrección de fallback de extracción de audio en descargas asegurando integridad de archivos",
+  "title": "Aura Player v2.5.6 — Rendimiento Ultra-Fluido a 120 FPS, Audio Focus en Videos y Protección contra OOM",
+  "changelog": "🚀 Caché O(1) en memoria para letras sincronizadas (.lrc): desplazamiento a 120 FPS sin micro-tirones (jank) en bibliotecas de más de 2200 canciones\n🛡️ Streaming seguro por búferes de 64KB en incrustación de carátulas ID3/M4A: eliminación total del riesgo de OutOfMemoryError en sesiones largas y podcasts\n🎵 Gestión inteligente de foco de audio: la música de fondo se pausa automáticamente al reproducir cualquier video en la pestaña Videos\n⚡ Ventana inteligente en persistencia de cola: reducción del tamaño de datos en disco de 1.2MB a 25KB, eliminando riesgo de TransactionTooLargeException\n🎛️ Aislamiento y resiliencia en DSPs: inicialización independiente de Ecualizador, BassBoost, Virtualizer y Super Volumen 300%\n🎬 Miniaturas de video aceleradas por hardware vía MediaStore ContentUris",
   "android": {
-    "version": "2.5.5",
-    "version_code": 255,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.5/AuraPlayer-v2.5.5-Android.apk",
+    "version": "2.5.6",
+    "version_code": 256,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.6/AuraPlayer-v2.5.6-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.5",
-    "version_code": 255,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.5/AuraPlayer-v2.5.5-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.5/AuraPlayer-v2.5.5-Windows-x64-Portable.zip"
+    "version": "2.5.6",
+    "version_code": 256,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.6/AuraPlayer-v2.5.6-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.6/AuraPlayer-v2.5.6-Windows-x64-Portable.zip"
   }
 }

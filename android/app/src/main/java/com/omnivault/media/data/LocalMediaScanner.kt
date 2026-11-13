@@ -207,6 +207,7 @@ object LocalMediaScanner {
                         "720p"
                     }
 
+                    val videoContentUri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id).toString()
                     val downloadItem = DownloadItem(
                         id = "local_video_$id",
                         url = path,
@@ -220,7 +221,7 @@ object LocalMediaScanner {
                         fileSizeFormatted = StorageHelper.formatFileSize(sizeBytes),
                         fileSizeBytes = sizeBytes,
                         durationFormatted = durFormatted,
-                        thumbnailUrl = path,
+                        thumbnailUrl = videoContentUri,
                         artist = "Dispositivo",
                         timestamp = if (dateAddedSec > 0) dateAddedSec * 1000 else System.currentTimeMillis()
                     )

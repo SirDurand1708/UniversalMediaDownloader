@@ -303,7 +303,7 @@ fun VideoGridCard(
                     .background(Color.Black)
             ) {
                 AsyncImage(
-                    model = video.localFilePath ?: video.url,
+                    model = video.thumbnailUrl ?: video.localFilePath ?: video.url,
                     contentDescription = video.title,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop

@@ -49,16 +49,23 @@ fun VideoPlayerScreen(
     var resizeMode by remember { mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
 
     val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            val uri = if (videoPath.startsWith("http://") || videoPath.startsWith("https://") || videoPath.startsWith("content://")) {
-                Uri.parse(videoPath)
-            } else {
-                Uri.fromFile(File(videoPath))
+        val audioAttributes = androidx.media3.common.AudioAttributes.Builder()
+            .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE)
+            .setUsage(androidx.media3.common.C.USAGE_MEDIA)
+            .build()
+
+        ExoPlayer.Builder(context)
+            .setAudioAttributes(audioAttributes, true)
+            .build().apply {
+                val uri = if (videoPath.startsWith("http://") || videoPath.startsWith("https://") || videoPath.startsWith("content://")) {
+                    Uri.parse(videoPath)
+                } else {
+                    Uri.fromFile(File(videoPath))
+                }
+                setMediaItem(MediaItem.fromUri(uri))
+                prepare()
+                playWhenReady = true
             }
-            setMediaItem(MediaItem.fromUri(uri))
-            prepare()
-            playWhenReady = true
-        }
     }
 
     DisposableEffect(Unit) {

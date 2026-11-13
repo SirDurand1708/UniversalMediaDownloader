@@ -325,17 +325,27 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     private fun saveQueue() {
         viewModelScope.launch {
             try {
+                val currentIdx = mediaController?.currentMediaItemIndex ?: 0
+                // Ventana inteligente: guardar máximo 150 canciones alrededor de la pista actual para no sobrecargar SharedPreferences
+                val (windowedQueue, relativeIndex) = if (queue.size > 150) {
+                    val fromIdx = (currentIdx - 50).coerceAtLeast(0)
+                    val toIdx = (fromIdx + 150).coerceAtMost(queue.size)
+                    Pair(queue.subList(fromIdx, toIdx), (currentIdx - fromIdx).coerceIn(0, 149))
+                } else {
+                    Pair(queue, currentIdx)
+                }
+
                 val jsonArray = JSONArray()
-                queue.forEach { song ->
+                windowedQueue.forEach { song ->
                     jsonArray.put(songToJson(song))
                 }
                 prefs.edit().apply {
                     putString("current_queue", jsonArray.toString())
-                    putInt("current_index", mediaController?.currentMediaItemIndex ?: -1)
+                    putInt("current_index", relativeIndex)
                     putLong("current_position", mediaController?.currentPosition ?: 0L)
                     apply()
                 }
-                Log.d("PlaybackViewModel", "Queue saved: ${queue.size} items")
+                Log.d("PlaybackViewModel", "Queue saved: ${windowedQueue.size} items (total in memory: ${queue.size})")
             } catch (e: Exception) {
                 Log.e("PlaybackViewModel", "Error saving queue", e)
             }

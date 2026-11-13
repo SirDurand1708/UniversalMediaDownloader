@@ -49,6 +49,9 @@ import com.amurayada.music.ui.viewmodel.PlaylistViewModel
 import com.omnivault.media.utils.FilenameStandardizer
 import java.io.File
 
+// Cache thread-safe de detección de letras en disco para evitar jank en LazyColumn de 2000+ canciones
+private val lyricsCache = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
 enum class LarkCategory(val label: String) {
     CANCIONES("Canciones"),
     PLAYLISTS("Playlists"),
@@ -114,15 +117,17 @@ fun LarkStyleMusicScreen(
         }
     }
 
-    // Agrupación por carpetas
+    // Agrupación optimizada por carpetas mediante manipulación directa de cadenas (sin instanciar miles de Files)
     val folderGroups = remember(rawSongs) {
         rawSongs.groupBy { song ->
-            try {
-                val f = File(song.path)
-                f.parentFile?.name ?: "Almacenamiento Interno"
-            } catch (_: Exception) {
-                "Música"
-            }
+            val p = song.path
+            if (p.startsWith("/")) {
+                val lastSlash = p.lastIndexOf('/')
+                if (lastSlash > 0) {
+                    val prevSlash = p.lastIndexOf('/', lastSlash - 1)
+                    if (prevSlash >= 0) p.substring(prevSlash + 1, lastSlash) else "Almacenamiento Interno"
+                } else "Almacenamiento Interno"
+            } else "Música"
         }
     }
 
@@ -748,13 +753,16 @@ private fun LarkSongRow(
     val context = LocalContext.current
     var menuExpanded by remember { mutableStateOf(false) }
 
-    // Detección de archivo de letra sincronizada (.lrc)
+    // Detección en memoria con caché O(1) de archivo de letra (.lrc) para scrolling fluido a 120 FPS
     val hasLyrics = remember(song.path) {
-        try {
-            val lrcFile = File(song.path.substringBeforeLast(".") + ".lrc")
-            lrcFile.exists() && lrcFile.length() > 0L
-        } catch (_: Exception) {
-            false
+        if (!song.path.startsWith("/")) return@remember false
+        lyricsCache.getOrPut(song.path) {
+            try {
+                val lrcFile = File(song.path.substringBeforeLast(".") + ".lrc")
+                lrcFile.exists() && lrcFile.length() > 0L
+            } catch (_: Exception) {
+                false
+            }
         }
     }
 

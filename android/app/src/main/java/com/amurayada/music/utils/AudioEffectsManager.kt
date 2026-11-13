@@ -57,53 +57,58 @@ object AudioEffectsManager {
     }
 
     private fun initEffects(sessionId: Int) {
+        release()
+
+        // 1. Equalizer independiente
         try {
-            release()
-            
-            // Equalizer
             equalizer = Equalizer(0, sessionId).apply {
                 enabled = _isEnabled.value
                 _bandLevels.value.forEach { (band, level) ->
                     try {
                         setBandLevel(band.toShort(), level.toShort())
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
+                    } catch (_: Exception) {}
                 }
             }
+        } catch (e: Exception) {
+            android.util.Log.w("AudioEffectsManager", "Equalizer no soportado por DSP: ${e.message}")
+        }
 
-            // Bass Boost
+        // 2. Bass Boost independiente
+        try {
             bassBoost = android.media.audiofx.BassBoost(0, sessionId).apply {
                 enabled = _isEnabled.value
                 try {
                     if (strengthSupported) {
                         setStrength(_bassBoostStrength.value.toShort())
                     }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
+                } catch (_: Exception) {}
             }
+        } catch (e: Exception) {
+            android.util.Log.w("AudioEffectsManager", "BassBoost no soportado por DSP: ${e.message}")
+        }
 
-            // Virtualizer
+        // 3. Virtualizer independiente
+        try {
             virtualizer = android.media.audiofx.Virtualizer(0, sessionId).apply {
                 enabled = _isEnabled.value
                 try {
                     if (strengthSupported) {
                         setStrength(_virtualizerStrength.value.toShort())
                     }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
+                } catch (_: Exception) {}
             }
+        } catch (e: Exception) {
+            android.util.Log.w("AudioEffectsManager", "Virtualizer no soportado por DSP: ${e.message}")
+        }
 
-            // Loudness Enhancer (Super Volumen hasta 300%)
+        // 4. Loudness Enhancer (Super Volumen hasta 300%) independiente
+        try {
             loudnessEnhancer = android.media.audiofx.LoudnessEnhancer(sessionId).apply {
                 enabled = true
                 applyGain(_volumeBoost.value)
             }
-
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.w("AudioEffectsManager", "LoudnessEnhancer no soportado por DSP: ${e.message}")
         }
     }
 
