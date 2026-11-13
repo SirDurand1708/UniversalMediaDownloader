@@ -46,6 +46,10 @@ fun VideosScreen(
 
     var showSortDialog by remember { mutableStateOf(false) }
 
+    LaunchedEffect(Unit) {
+        videosViewModel.loadVideos()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()

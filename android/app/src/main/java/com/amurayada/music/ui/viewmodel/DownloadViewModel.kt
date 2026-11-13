@@ -155,14 +155,12 @@ class DownloadViewModel(
         // 1. Asegurar canales del sistema
         com.omnivault.media.utils.NotificationHelper.createNotificationChannels(getApplication())
 
-        // 2. Encolar directamente en DownloadManager (inicia de inmediato en memoria)
-        omniDownloadManager.enqueueDownload(trimmed, format)
-
-        // 3. Iniciar Foreground Service de forma segura (con try/catch) para persistencia en segundo plano
+        // 2. Iniciar Foreground Service de forma segura (encola la descarga y gestiona la notificación persistente)
         try {
             MediaDownloadService.startDownload(getApplication(), trimmed, format)
         } catch (e: Exception) {
-            android.util.Log.e("DownloadViewModel", "Error starting MediaDownloadService", e)
+            android.util.Log.e("DownloadViewModel", "Error starting MediaDownloadService, fallback to direct enqueue", e)
+            omniDownloadManager.enqueueDownload(trimmed, format)
         }
 
         urlInput.value = ""

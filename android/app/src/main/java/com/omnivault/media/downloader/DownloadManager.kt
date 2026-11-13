@@ -430,18 +430,24 @@ class DownloadManager private constructor(private val context: Context) {
                 }
             }
 
-            // 6. Mover archivo a la carpeta pública correspondiente (Music o Movies)
-            val finalOutputFile = File(targetDir, "${cleanTitle}.${extension}")
-            stagedFile.copyTo(finalOutputFile, overwrite = true)
+            // 6. Mover archivo a la carpeta pública correspondiente (Music o Movies) garantizando visibilidad en MediaStore
+            val finalOutputFile = StorageHelper.saveMediaFile(
+                context = context,
+                sourceFile = stagedFile,
+                displayName = "${cleanTitle}.${extension}",
+                isAudio = item.format.isAudio,
+                mimeType = finalMimeType
+            )
             stagedFile.delete()
 
             // Guardar carátula complementaria .jpg y archivo de letras .lrc ÚNICAMENTE para audios.
             // Para videos NUNCA se guardan .jpg ni .lrc en la carpeta de películas,
             // ya que Lark Player los detecta como álbum de música.
+            val effectiveTargetDir = finalOutputFile.parentFile ?: targetDir
             if (item.format.isAudio) {
                 if (coverBytes != null && coverBytes.isNotEmpty()) {
                     try {
-                        val companionJpg = File(targetDir, "${cleanTitle}.jpg")
+                        val companionJpg = File(effectiveTargetDir, "${cleanTitle}.jpg")
                         companionJpg.writeBytes(coverBytes)
                         StorageHelper.scanMediaFile(context, companionJpg, "image/jpeg")
                     } catch (_: Exception) {}
@@ -449,7 +455,7 @@ class DownloadManager private constructor(private val context: Context) {
 
                 val lyricsContent = LyricsHelper.fetchLyrics(info.title, info.author)
                 if (!lyricsContent.isNullOrBlank()) {
-                    val lrcFile = LyricsHelper.saveLrcFile(targetDir, cleanTitle, lyricsContent)
+                    val lrcFile = LyricsHelper.saveLrcFile(effectiveTargetDir, cleanTitle, lyricsContent)
                     if (lrcFile != null) {
                         StorageHelper.scanMediaFile(context, lrcFile, "text/plain")
                     }

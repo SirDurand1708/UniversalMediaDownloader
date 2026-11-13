@@ -37,8 +37,8 @@ object LocalMediaScanner {
             MediaStore.Audio.Media.ALBUM_ID
         )
 
-        // Filtrar audios de más de 5 segundos y más de 50 KB (ignora audios de WhatsApp/notificaciones cortas)
-        val selection = "${MediaStore.Audio.Media.DURATION} >= 5000 AND ${MediaStore.Audio.Media.SIZE} >= 50000"
+        // Filtrar audios genuinos por tamaño y duración flexible para no descartar descargas recientes
+        val selection = "${MediaStore.Audio.Media.SIZE} >= 30000 AND (${MediaStore.Audio.Media.DURATION} >= 3000 OR ${MediaStore.Audio.Media.DURATION} IS NULL OR ${MediaStore.Audio.Media.DURATION} = 0)"
 
         try {
             context.contentResolver.query(
@@ -149,8 +149,9 @@ object LocalMediaScanner {
             MediaStore.Video.Media.RESOLUTION
         )
 
-        // Filtrar videos de más de 3 segundos y más de 100 KB
-        val selection = "${MediaStore.Video.Media.DURATION} >= 3000 AND ${MediaStore.Video.Media.SIZE} >= 100000"
+        // Filtrar videos de más de 20 KB sin exigir duración previa para no descartar descargas recientes
+        val selection = "${MediaStore.Video.Media.SIZE} >= 20000"
+        val seenPaths = mutableSetOf<String>()
 
         try {
             context.contentResolver.query(
@@ -179,6 +180,7 @@ object LocalMediaScanner {
 
                     val file = File(path)
                     if (!file.exists() || file.length() == 0L) continue
+                    seenPaths.add(file.absolutePath)
 
                     val format = if (resolution.contains("1080") || resolution.contains("1920")) {
                         MediaFormat.MP4_1080
@@ -217,6 +219,56 @@ object LocalMediaScanner {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error escaneando MediaStore de video", e)
+        }
+
+        // Descubrimiento directo en carpetas públicas y privadas de OmniVault para disponibilidad inmediata
+        try {
+            val omniFolders = listOfNotNull(
+                File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "OmniVault"),
+                File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "OmniVault"),
+                context.getExternalFilesDir(Environment.DIRECTORY_MOVIES),
+                StorageHelper.getCustomStoragePath(context)?.let { File(it, "Movies") }
+            )
+
+            for (folder in omniFolders) {
+                if (folder.exists() && folder.isDirectory) {
+                    val videoFiles = folder.listFiles { file ->
+                        file.isFile && file.length() >= 20000 &&
+                                (file.name.endsWith(".mp4", ignoreCase = true) ||
+                                 file.name.endsWith(".mkv", ignoreCase = true) ||
+                                 file.name.endsWith(".webm", ignoreCase = true))
+                    } ?: emptyArray()
+
+                    for (file in videoFiles) {
+                        if (!seenPaths.contains(file.absolutePath)) {
+                            seenPaths.add(file.absolutePath)
+                            val is1080 = file.name.contains("1080", ignoreCase = true)
+                            val format = if (is1080) MediaFormat.MP4_1080 else MediaFormat.MP4_720
+                            val cleanTitle = FilenameStandardizer.standardizeTitle(file.nameWithoutExtension)
+                            val item = DownloadItem(
+                                id = "omnivault_video_${file.name.hashCode()}",
+                                url = file.absolutePath,
+                                title = cleanTitle,
+                                format = format,
+                                platform = PlatformType.GENERIC,
+                                progress = 100,
+                                speedText = "OmniVault",
+                                status = DownloadStatus.COMPLETED,
+                                localFilePath = file.absolutePath,
+                                fileSizeFormatted = StorageHelper.formatFileSize(file.length()),
+                                fileSizeBytes = file.length(),
+                                durationFormatted = if (is1080) "1080p" else "720p",
+                                thumbnailUrl = file.absolutePath,
+                                artist = "OmniVault",
+                                timestamp = file.lastModified()
+                            )
+                            items.add(0, item) // Mostrar al inicio por ser descarga reciente
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error en descubrimiento directo de carpetas de video OmniVault", e)
         }
 
         items

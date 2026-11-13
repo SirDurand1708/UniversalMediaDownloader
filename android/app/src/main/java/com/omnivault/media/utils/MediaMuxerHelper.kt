@@ -86,43 +86,54 @@ object MediaMuxerHelper {
             val muxerAudioTrack = muxer.addTrack(aFormat)
             muxer.start()
 
-            // 4. Escribir muestras de video
+            // 4. Escribir muestras intercaladas de video y audio en estricto orden cronológico
             val videoBufSize = if (vFormat.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
-                vFormat.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE).coerceAtLeast(256 * 1024)
+                vFormat.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE).coerceAtLeast(1024 * 1024)
             } else {
-                512 * 1024
+                1024 * 1024
             }
-            val videoBuffer = ByteBuffer.allocate(videoBufSize)
-            val bufferInfo = MediaCodec.BufferInfo()
-
-            while (true) {
-                bufferInfo.offset = 0
-                bufferInfo.size = videoExtractor.readSampleData(videoBuffer, 0)
-                if (bufferInfo.size < 0) break
-
-                bufferInfo.presentationTimeUs = videoExtractor.sampleTime
-                bufferInfo.flags = videoExtractor.sampleFlags
-                muxer.writeSampleData(muxerVideoTrack, videoBuffer, bufferInfo)
-                videoExtractor.advance()
-            }
-
-            // 5. Escribir muestras de audio
             val audioBufSize = if (aFormat.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
-                aFormat.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE).coerceAtLeast(64 * 1024)
+                aFormat.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE).coerceAtLeast(256 * 1024)
             } else {
-                128 * 1024
+                256 * 1024
             }
-            val audioBuffer = ByteBuffer.allocate(audioBufSize)
 
-            while (true) {
-                bufferInfo.offset = 0
-                bufferInfo.size = audioExtractor.readSampleData(audioBuffer, 0)
-                if (bufferInfo.size < 0) break
+            val videoBuffer = ByteBuffer.allocateDirect(videoBufSize)
+            val audioBuffer = ByteBuffer.allocateDirect(audioBufSize)
+            val videoBufferInfo = MediaCodec.BufferInfo()
+            val audioBufferInfo = MediaCodec.BufferInfo()
 
-                bufferInfo.presentationTimeUs = audioExtractor.sampleTime
-                bufferInfo.flags = audioExtractor.sampleFlags
-                muxer.writeSampleData(muxerAudioTrack, audioBuffer, bufferInfo)
-                audioExtractor.advance()
+            var videoDone = false
+            var audioDone = false
+
+            // Intercalado cronológico estricto de muestras para compatibilidad total con MediaMuxer en Android
+            while (!videoDone || !audioDone) {
+                val videoTime = if (!videoDone) videoExtractor.sampleTime else Long.MAX_VALUE
+                val audioTime = if (!audioDone) audioExtractor.sampleTime else Long.MAX_VALUE
+
+                if (!videoDone && (audioDone || videoTime <= audioTime)) {
+                    videoBufferInfo.offset = 0
+                    videoBufferInfo.size = videoExtractor.readSampleData(videoBuffer, 0)
+                    if (videoBufferInfo.size < 0) {
+                        videoDone = true
+                    } else {
+                        videoBufferInfo.presentationTimeUs = videoExtractor.sampleTime.coerceAtLeast(0L)
+                        videoBufferInfo.flags = videoExtractor.sampleFlags
+                        muxer.writeSampleData(muxerVideoTrack, videoBuffer, videoBufferInfo)
+                        videoExtractor.advance()
+                    }
+                } else if (!audioDone) {
+                    audioBufferInfo.offset = 0
+                    audioBufferInfo.size = audioExtractor.readSampleData(audioBuffer, 0)
+                    if (audioBufferInfo.size < 0) {
+                        audioDone = true
+                    } else {
+                        audioBufferInfo.presentationTimeUs = audioExtractor.sampleTime.coerceAtLeast(0L)
+                        audioBufferInfo.flags = audioExtractor.sampleFlags
+                        muxer.writeSampleData(muxerAudioTrack, audioBuffer, audioBufferInfo)
+                        audioExtractor.advance()
+                    }
+                }
             }
 
             Log.i(TAG, "Remuxing exitoso de 1080p FHD: ${outputFile.name} (${outputFile.length() / 1024} KB)")

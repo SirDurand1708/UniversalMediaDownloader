@@ -569,7 +569,7 @@ object MediaExtractor {
             if (!requestedFormat.isAudio) {
                 val targetHeight = if (requestedFormat == MediaFormat.MP4_1080) 1080 else 720
 
-                // 1A. Streams de video muxed (audio y video integrados)
+                // 1A. Streams de video muxed (audio y video integrados para 720p o menor sin necesidad de remuxing)
                 val muxedList = extractor.videoStreams
                 val bestMuxed = muxedList
                     .filter { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }
@@ -577,6 +577,7 @@ object MediaExtractor {
                     .maxByOrNull { it.resolution.replace("p", "").toIntOrNull() ?: 0 }
 
                 if (bestMuxed != null && targetHeight <= 720) {
+                    val muxedBackups = muxedList.filter { it.content != bestMuxed.content }.map { it.content }
                     return ExtractedMediaInfo(
                         title = title,
                         directStreamUrl = bestMuxed.content,
@@ -584,28 +585,32 @@ object MediaExtractor {
                         durationSeconds = lengthSec,
                         author = author,
                         thumbnailUrl = bestThumb,
-                        requestHeaders = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                        requestHeaders = mapOf(
+                            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                            "Referer" to "https://www.youtube.com/",
+                            "Origin" to "https://www.youtube.com"
+                        ),
+                        backupStreamUrls = muxedBackups
                     )
                 }
 
                 // 1B. DASH Video Only (1080p FHD / 720p HD) + Audio M4A para muxing nativo
+                // Filtrar estrictamente por MPEG_4 (H.264 / AVC y AAC) para compatibilidad nativa absoluta con Android MediaMuxer
                 val videoOnlyList = extractor.videoOnlyStreams
-                val bestVideoOnly = videoOnlyList
-                    .filter { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }
+                val mp4VideoOnly = videoOnlyList.filter { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }
+                val bestVideoOnly = mp4VideoOnly
                     .filter { (it.resolution.replace("p", "").toIntOrNull() ?: 0) <= targetHeight }
                     .maxByOrNull { it.resolution.replace("p", "").toIntOrNull() ?: 0 }
-                    ?: videoOnlyList.filter { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }.maxByOrNull { it.resolution.replace("p", "").toIntOrNull() ?: 0 }
-                    ?: videoOnlyList.firstOrNull()
+                    ?: mp4VideoOnly.maxByOrNull { it.resolution.replace("p", "").toIntOrNull() ?: 0 }
 
                 val audioList = extractor.audioStreams
-                val bestAudio = audioList
-                    .filter { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }
-                    .maxByOrNull { it.averageBitrate }
-                    ?: audioList.maxByOrNull { it.averageBitrate }
+                val mp4Audio = audioList.filter { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }
+                val bestAudio = mp4Audio.maxByOrNull { it.averageBitrate }
+                    ?: audioList.firstOrNull { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }
 
                 if (bestVideoOnly != null && bestAudio != null) {
-                    val backupVideos = videoOnlyList.map { it.content }.filter { it != bestVideoOnly.content }
-                    val backupAudios = audioList.map { it.content }.filter { it != bestAudio.content }
+                    val backupVideos = mp4VideoOnly.map { it.content }.filter { it != bestVideoOnly.content }
+                    val backupAudios = mp4Audio.map { it.content }.filter { it != bestAudio.content }
                     return ExtractedMediaInfo(
                         title = title,
                         directStreamUrl = bestVideoOnly.content,
@@ -623,6 +628,7 @@ object MediaExtractor {
                         backupAudioUrls = backupAudios
                     )
                 } else if (bestMuxed != null) {
+                    val muxedBackups = muxedList.filter { it.content != bestMuxed.content }.map { it.content }
                     return ExtractedMediaInfo(
                         title = title,
                         directStreamUrl = bestMuxed.content,
@@ -634,7 +640,8 @@ object MediaExtractor {
                             "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                             "Referer" to "https://www.youtube.com/",
                             "Origin" to "https://www.youtube.com"
-                        )
+                        ),
+                        backupStreamUrls = muxedBackups
                     )
                 }
             } else {

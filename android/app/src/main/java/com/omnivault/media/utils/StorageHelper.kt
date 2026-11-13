@@ -82,6 +82,88 @@ object StorageHelper {
         return cleaned.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
     }
 
+    /**
+     * Guarda de forma garantizada un archivo multimedia en el almacenamiento público del dispositivo
+     * utilizando MediaStore en Android 10+ (API 29+) para sortear completamente los bloqueos de Scoped Storage.
+     * Devuelve el objeto File final guardado y asegura su indexación inmediata en la galería y reproductores del sistema.
+     */
+    fun saveMediaFile(
+        context: Context,
+        sourceFile: File,
+        displayName: String,
+        isAudio: Boolean,
+        mimeType: String
+    ): File {
+        val appContext = context.applicationContext
+
+        // Método 1: MediaStore ContentResolver oficial (Android 10+ / API 29+)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            try {
+                val collection = if (isAudio) {
+                    android.provider.MediaStore.Audio.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                } else {
+                    android.provider.MediaStore.Video.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                }
+
+                val relativePath = if (isAudio) "Music/$FOLDER_NAME" else "Movies/$FOLDER_NAME"
+
+                val contentValues = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+                    put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+
+                val contentUri = appContext.contentResolver.insert(collection, contentValues)
+                if (contentUri != null) {
+                    appContext.contentResolver.openOutputStream(contentUri)?.use { outputStream ->
+                        sourceFile.inputStream().use { inputStream ->
+                            inputStream.copyTo(outputStream)
+                        }
+                    }
+
+                    contentValues.clear()
+                    contentValues.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                    appContext.contentResolver.update(contentUri, contentValues, null, null)
+
+                    // Intentar obtener la ruta física canonical
+                    val projection = arrayOf(android.provider.MediaStore.MediaColumns.DATA)
+                    var physicalPath: String? = null
+                    try {
+                        appContext.contentResolver.query(contentUri, projection, null, null, null)?.use { cursor ->
+                            if (cursor.moveToFirst()) {
+                                physicalPath = cursor.getString(0)
+                            }
+                        }
+                    } catch (_: Exception) {}
+
+                    val finalFile = if (!physicalPath.isNullOrBlank()) {
+                        File(physicalPath)
+                    } else {
+                        val baseDir = if (isAudio) {
+                            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
+                        } else {
+                            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+                        }
+                        File(File(baseDir, FOLDER_NAME), displayName)
+                    }
+
+                    scanMediaFile(appContext, finalFile, mimeType)
+                    return finalFile
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("StorageHelper", "MediaStore insert failed, falling back to direct filesystem write: ${e.message}")
+            }
+        }
+
+        // Método 2 (Legacy o almacenamiento directo): Escritura en directorio público o Downloads
+        val targetDir = getOutputDirectory(isAudio, appContext)
+        val targetFile = File(targetDir, displayName)
+        sourceFile.copyTo(targetFile, overwrite = true)
+        scanMediaFile(appContext, targetFile, mimeType)
+        return targetFile
+    }
+
     fun scanMediaFile(context: Context, file: File, mimeType: String) {
         if (!file.exists()) return
         try {
