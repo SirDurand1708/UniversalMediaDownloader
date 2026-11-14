@@ -10,13 +10,9 @@ import subprocess
 import threading
 from datetime import datetime
 from typing import List, Dict, Any, Optional
+from config_manager import get_data_dir
 
-def get_app_dir() -> str:
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
-
-HISTORY_FILE = os.path.join(get_app_dir(), "library.json")
+HISTORY_FILE = os.path.join(get_data_dir(), "library.json")
 
 # Lista blanca estricta de extensiones multimedia permitidas para reproducción
 ALLOWED_MEDIA_EXTENSIONS = {
@@ -44,6 +40,9 @@ class HistoryManager:
         """Guarda la biblioteca atómicamente para prevenir corrupción de datos."""
         temp_path = f"{self.filepath}.tmp"
         try:
+            parent_dir = os.path.dirname(os.path.abspath(self.filepath))
+            if parent_dir:
+                os.makedirs(parent_dir, exist_ok=True)
             with open(temp_path, "w", encoding="utf-8") as f:
                 json.dump(self.items, f, indent=2, ensure_ascii=False)
             os.replace(temp_path, self.filepath)

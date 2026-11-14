@@ -156,6 +156,12 @@ class AudioPlayer:
     def get_loaded_path(self) -> Optional[str]:
         return self._loaded_path
 
+    def get_current_track_title(self) -> Optional[str]:
+        """Devuelve el nombre limpio del archivo de audio cargado actualmente."""
+        if not self._loaded_path:
+            return None
+        return os.path.splitext(os.path.basename(self._loaded_path))[0]
+
     def close(self):
         """Cierra el dispositivo MCI y libera recursos de Windows."""
         with self._lock:

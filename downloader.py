@@ -19,6 +19,7 @@ import zipfile
 import tempfile
 from typing import Callable, Optional, Dict, Any, List
 import yt_dlp
+from config_manager import get_data_dir
 
 def get_app_dir() -> str:
     if getattr(sys, 'frozen', False):
@@ -638,7 +639,7 @@ class DownloaderEngine:
         """
         Extrae las cookies del navegador especificado y las guarda en un archivo local 'saved_cookies.txt'.
         """
-        dest_path = os.path.join(get_app_dir(), "saved_cookies.txt")
+        dest_path = os.path.join(get_data_dir(), "saved_cookies.txt")
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
@@ -674,7 +675,7 @@ class DownloaderEngine:
 
     def test_youtube_auth(self) -> Dict[str, Any]:
         """Comprueba si las cookies guardadas permiten acceso autenticado a YouTube."""
-        saved_cookie = os.path.join(get_app_dir(), "saved_cookies.txt")
+        saved_cookie = os.path.join(get_data_dir(), "saved_cookies.txt")
         if not os.path.exists(saved_cookie) or os.path.getsize(saved_cookie) == 0:
             return {
                 'ok': False,
@@ -789,7 +790,7 @@ class DownloaderEngine:
             opts['ffmpeg_location'] = ff if os.path.isdir(ff) else os.path.dirname(ff)
 
         if use_cookies:
-            saved_cookie = os.path.join(get_app_dir(), "saved_cookies.txt")
+            saved_cookie = os.path.join(get_data_dir(), "saved_cookies.txt")
             if cookiefile and os.path.exists(cookiefile):
                 opts['cookiefile'] = cookiefile
             elif os.path.exists(saved_cookie) and os.path.getsize(saved_cookie) > 0:

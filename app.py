@@ -28,7 +28,7 @@ from downloader import (
 from queue_manager import QueueManager, DownloadTask
 from history_manager import HistoryManager
 from image_cache import ThumbnailCache
-from config_manager import ConfigManager
+from config_manager import ConfigManager, get_data_dir
 from audio_player import AudioPlayer
 from notifications import send_notification
 import updater
@@ -54,7 +54,7 @@ def _global_exception_handler(exc_type, exc_value, exc_traceback):
         return
     err_text = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
     try:
-        log_path = os.path.join(get_app_dir(), "crash_log.txt")
+        log_path = os.path.join(get_data_dir(), "crash_log.txt")
         with open(log_path, "a", encoding="utf-8") as f:
             f.write(f"\n--- ERROR {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")
             f.write(err_text)
@@ -266,7 +266,7 @@ class OmniVaultApp(ctk.CTk):
             pass
 
     def _get_active_browser(self):
-        saved = os.path.join(get_app_dir(), "saved_cookies.txt")
+        saved = os.path.join(get_data_dir(), "saved_cookies.txt")
         if os.path.exists(saved) and os.path.getsize(saved) > 0:
             return None
         b = self.config.get("browser_cookies", "none")
@@ -410,7 +410,7 @@ class OmniVaultApp(ctk.CTk):
         )
         status_box.pack(fill="x", padx=12, pady=14)
 
-        saved_cookie = os.path.join(get_app_dir(), "saved_cookies.txt")
+        saved_cookie = os.path.join(get_data_dir(), "saved_cookies.txt")
         has_saved = os.path.exists(saved_cookie) and os.path.getsize(saved_cookie) > 0
         self.session_lbl = ctk.CTkLabel(
             status_box,
@@ -1944,7 +1944,7 @@ class OmniVaultApp(ctk.CTk):
         self.trans_open_btn.configure(state="normal")
         self.trans_progress.set(1.0)
         self._transcribed_srt_path = res.get("srt_path", "")
-        count = res.get("segments_count", 0)
+        count = res.get("lines_count", 0)
         fname = os.path.basename(self._transcribed_srt_path)
         self.trans_status_lbl.configure(
             text=f"✔ ¡Subtítulos listos! Generados {count} bloques de diálogo en: {fname}",
@@ -2433,7 +2433,7 @@ class OmniVaultApp(ctk.CTk):
         )
         ctk.CTkLabel(box3, text=desc, font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY, justify="left").pack(anchor="w", padx=14, pady=(0, 6))
 
-        saved_cookie_file = os.path.join(get_app_dir(), "saved_cookies.txt")
+        saved_cookie_file = os.path.join(get_data_dir(), "saved_cookies.txt")
         self.cookie_status_lbl = ctk.CTkLabel(
             box3,
             text="✔ Sesión guardada en archivo local (Sin bloqueos de navegador)" if os.path.exists(saved_cookie_file) else "ℹ Modo anónimo activo (Sin credenciales guardadas)",
@@ -2565,9 +2565,18 @@ class OmniVaultApp(ctk.CTk):
         gpu_accel = detect_hardware_acceleration() or "Procesamiento por CPU estándar"
         aria_ok = is_aria2c_available()
         aria_detail = "Habilitado (8 conexiones simultáneas por archivo)" if aria_ok else "No detectado (Opcional)"
+        install_type = updater.get_installation_type()
+        mode_badge = (
+            "Modo Instalado (Datos en %LOCALAPPDATA%\\OmniVault)"
+            if install_type == "installed"
+            else ("Modo Portable (Datos junto al ejecutable)" if install_type == "portable" else "Modo Desarrollo (Datos en carpeta del proyecto)")
+        )
+        data_dir_path = get_data_dir()
 
         diag_text = (
             f"• Aplicación: OmniVault Desktop (Obsidian & Titanium Edition)\n"
+            f"• Modo de Ejecución: {mode_badge}\n"
+            f"• Carpeta de Datos / Logs: {data_dir_path}\n"
             f"• Python: {sys.version.split()[0]} ({sys.platform})\n"
             f"• Reproductor de Audio: MCI Nativo winmm.dll (Bajo consumo de memoria)\n"
             f"• Aceleración GPU FFmpeg: {gpu_accel}\n"
@@ -2577,7 +2586,30 @@ class OmniVaultApp(ctk.CTk):
             f"• Motor FFmpeg: {ff_detail}\n"
             f"• Conexión: Cifrada y directa con validación SSL activa"
         )
-        ctk.CTkLabel(box4, text=diag_text, font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY, justify="left").pack(anchor="w", padx=14, pady=(0, 12))
+        ctk.CTkLabel(box4, text=diag_text, font=ctk.CTkFont(size=11), text_color=theme.TEXT_SECONDARY, justify="left").pack(anchor="w", padx=14, pady=(0, 8))
+
+        mode_row = ctk.CTkFrame(box4, fg_color="transparent")
+        mode_row.pack(fill="x", padx=14, pady=(0, 12))
+
+        mode_pill_text = "📦 Modo Instalado" if install_type == "installed" else ("🎒 Modo Portable" if install_type == "portable" else "🛠️ Modo Desarrollo")
+        mode_pill_color = theme.ACCENT_CYAN if install_type == "installed" else theme.STATUS_SUCCESS
+        ctk.CTkLabel(
+            mode_row,
+            text=mode_pill_text,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color=mode_pill_color
+        ).pack(side="left", padx=(0, 12))
+
+        ctk.CTkButton(
+            mode_row,
+            text="📂 Abrir Carpeta de Datos / Logs",
+            height=30,
+            fg_color=theme.BTN_SECONDARY_BG,
+            hover_color=theme.BTN_SECONDARY_HOVER,
+            text_color=theme.BTN_SECONDARY_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=self._open_data_dir
+        ).pack(side="left")
 
         # Bloque 5: Actualizaciones Oficiales
         box5 = ctk.CTkFrame(settings_scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS, border_width=1, border_color=theme.BORDER_COLOR)
@@ -2774,7 +2806,7 @@ class OmniVaultApp(ctk.CTk):
             filetypes=[("Archivos de texto", "*.txt"), ("Todos los archivos", "*.*")]
         )
         if path:
-            dest = os.path.join(get_app_dir(), "saved_cookies.txt")
+            dest = os.path.join(get_data_dir(), "saved_cookies.txt")
             import shutil
             shutil.copy(path, dest)
             try:
@@ -2789,7 +2821,7 @@ class OmniVaultApp(ctk.CTk):
             messagebox.showinfo("Éxito", "El archivo cookies.txt ha sido importado correctamente.")
 
     def _clear_saved_cookies(self):
-        dest = os.path.join(get_app_dir(), "saved_cookies.txt")
+        dest = os.path.join(get_data_dir(), "saved_cookies.txt")
         if os.path.exists(dest):
             try:
                 os.remove(dest)
@@ -2804,6 +2836,20 @@ class OmniVaultApp(ctk.CTk):
         )
         self.session_lbl.configure(text="● Sesión: Anónima", text_color=theme.TEXT_MUTED)
         messagebox.showinfo("Sesión Limpiada", "Se ha eliminado el archivo de cookies y se ha restablecido el modo anónimo.")
+
+    def _open_data_dir(self):
+        """Abre la carpeta donde se almacenan la configuración, biblioteca, cookies y logs."""
+        data_dir = get_data_dir()
+        try:
+            os.makedirs(data_dir, exist_ok=True)
+            if sys.platform == "win32":
+                os.startfile(data_dir)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", data_dir])
+            else:
+                subprocess.Popen(["xdg-open", data_dir])
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir la carpeta de datos:\n{data_dir}\n\n{e}")
 
     def _get_current_theme_label(self) -> str:
         cur = self.config.get("accent_theme", "violet")
@@ -3156,16 +3202,16 @@ class OmniVaultApp(ctk.CTk):
             clip = self.clipboard_get().strip()
             if is_url(clip):
                 self._select_tab("explore")
-                self.url_entry.delete(0, tk.END)
-                self.url_entry.insert(0, clip)
-                self._on_search_clicked()
+                self.search_entry.delete(0, tk.END)
+                self.search_entry.insert(0, clip)
+                self._on_search_submit()
         except Exception:
             pass
 
     def _on_shortcut_search(self, event=None):
         self._select_tab("library")
-        if hasattr(self, "lib_search_entry"):
-            self.lib_search_entry.focus_set()
+        if hasattr(self, "library_search_entry"):
+            self.library_search_entry.focus_set()
 
     def _on_shortcut_space(self, event=None):
         focused = self.focus_get()

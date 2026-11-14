@@ -16,7 +16,7 @@ if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
     except Exception:
         pass
 
-DEFAULT_VERSION = "2.5.8"
+DEFAULT_VERSION = "2.5.9"
 
 def get_release_version() -> str:
     """Obtiene la versión oficial de forma dinámica desde argumentos CLI, entorno CI/CD o version.json."""
@@ -104,13 +104,17 @@ def calculate_sha256(filepath: str) -> str:
     return sha256.hexdigest()
 
 def make_portable_zip(source_dir: str, target_zip: str):
-    """Crea el archivo .zip portátil excluyendo cachés temporales."""
+    """Crea el archivo .zip portátil excluyendo cachés temporales y datos de usuario locales."""
     print(f"[*] Comprimiendo versión portátil: {target_zip}...")
+    excluded_runtime_files = {
+        "config.json", "library.json", "subscriptions.json",
+        "saved_cookies.txt", "crash_log.txt"
+    }
     with zipfile.ZipFile(target_zip, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
         for root, dirs, files in os.walk(source_dir):
             dirs[:] = [d for d in dirs if d != "__pycache__"]
             for file in files:
-                if file.endswith((".pyc", ".tmp")):
+                if file.endswith((".pyc", ".tmp")) or file in excluded_runtime_files:
                     continue
                 full_path = os.path.join(root, file)
                 rel_path = os.path.join("OmniVault", os.path.relpath(full_path, source_dir))

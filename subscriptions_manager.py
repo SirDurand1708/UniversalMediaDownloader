@@ -13,13 +13,9 @@ from typing import Dict, Any, List, Optional, Callable
 import yt_dlp
 
 from notifications import send_notification
+from config_manager import get_data_dir
 
-def get_app_dir() -> str:
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
-
-SUBSCRIPTIONS_FILE = os.path.join(get_app_dir(), "subscriptions.json")
+SUBSCRIPTIONS_FILE = os.path.join(get_data_dir(), "subscriptions.json")
 
 
 class SubscriptionsManager:
@@ -46,6 +42,9 @@ class SubscriptionsManager:
     def _save(self):
         temp_path = f"{self.filepath}.tmp"
         try:
+            parent_dir = os.path.dirname(os.path.abspath(self.filepath))
+            if parent_dir:
+                os.makedirs(parent_dir, exist_ok=True)
             with open(temp_path, "w", encoding="utf-8") as f:
                 json.dump(self.subscriptions, f, indent=2, ensure_ascii=False)
             os.replace(temp_path, self.filepath)

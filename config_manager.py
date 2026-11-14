@@ -14,7 +14,29 @@ def get_app_dir() -> str:
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
 
-CONFIG_FILE = os.path.join(get_app_dir(), "config.json")
+def get_data_dir() -> str:
+    """
+    Devuelve el directorio donde se almacenan los datos mutables de la aplicación.
+    - En modo instalado (Inno Setup / Program Files / AppData\\Local\\Programs): %LOCALAPPDATA%\\OmniVault
+    - En modo portable o desarrollo: junto al ejecutable/código (get_app_dir())
+    """
+    try:
+        import updater
+        if updater.get_installation_type() == "installed":
+            local_app_data = os.environ.get("LOCALAPPDATA") or os.path.expanduser(r"~\AppData\Local")
+            data_dir = os.path.join(local_app_data, "OmniVault")
+            os.makedirs(data_dir, exist_ok=True)
+            return data_dir
+    except Exception:
+        pass
+    app_dir = get_app_dir()
+    try:
+        os.makedirs(app_dir, exist_ok=True)
+    except Exception:
+        pass
+    return app_dir
+
+CONFIG_FILE = os.path.join(get_data_dir(), "config.json")
 
 class ConfigManager:
     def __init__(self, filepath: str = CONFIG_FILE):
@@ -97,6 +119,9 @@ class ConfigManager:
         with self._lock:
             temp_path = f"{self.filepath}.tmp"
             try:
+                parent_dir = os.path.dirname(os.path.abspath(self.filepath))
+                if parent_dir:
+                    os.makedirs(parent_dir, exist_ok=True)
                 with open(temp_path, "w", encoding="utf-8") as f:
                     json.dump(self.settings, f, indent=2, ensure_ascii=False)
                 os.replace(temp_path, self.filepath)

@@ -40,7 +40,6 @@ def build():
     icon_args = ["--icon", ico_file] if os.path.isfile(ico_file) else []
 
     assets_dir = os.path.join(base_dir, "assets")
-    add_data_args = ["--add-data", f"{assets_dir};assets"] if os.path.isdir(assets_dir) else []
 
     # Paquetes requeridos y opcionales
     packages_to_collect = ["customtkinter", "PIL", "mutagen", "yt_dlp", "packaging"]
@@ -66,7 +65,7 @@ def build():
         "--windowed",
         "--name", "OmniVault",
         "--clean",
-    ] + collect_args + icon_args + add_data_args + [os.path.join(base_dir, "app.py")]
+    ] + collect_args + icon_args + [os.path.join(base_dir, "app.py")]
 
     print("[*] Ejecutando compilación...")
     ret = subprocess.call(cmd)
@@ -78,17 +77,20 @@ def build():
     internal_dir = os.path.join(output_app_dir, "_internal")
     print(f"[*] Copiando recursos y binarios a {output_app_dir}...")
 
-    # Copiar carpeta bin (FFmpeg / Aria2c) a raíz y a _internal para redundancia total
+    # Copiar carpeta bin (FFmpeg / Aria2c) únicamente a la raíz de dist/OmniVault para evitar duplicar peso en _internal
     src_bin = os.path.join(base_dir, "bin")
     if os.path.isdir(src_bin):
-        for target in [os.path.join(output_app_dir, "bin"), os.path.join(internal_dir, "bin")]:
-            os.makedirs(target, exist_ok=True)
-            for item in os.listdir(src_bin):
-                s = os.path.join(src_bin, item)
-                d = os.path.join(target, item)
-                if os.path.isfile(s):
-                    shutil.copy2(s, d)
-        print("    -> Carpeta bin (FFmpeg / Aria2c) copiada con éxito.")
+        target_bin = os.path.join(output_app_dir, "bin")
+        os.makedirs(target_bin, exist_ok=True)
+        for item in os.listdir(src_bin):
+            s = os.path.join(src_bin, item)
+            d = os.path.join(target_bin, item)
+            if os.path.isfile(s):
+                shutil.copy2(s, d)
+        internal_bin = os.path.join(internal_dir, "bin")
+        if os.path.isdir(internal_bin):
+            shutil.rmtree(internal_bin, ignore_errors=True)
+        print("    -> Carpeta bin (FFmpeg / Aria2c) copiada con éxito sin duplicados.")
 
     # Copiar config.example.json y LICENSE
     for f_name in ["config.example.json", "LICENSE"]:
@@ -96,13 +98,16 @@ def build():
         if os.path.isfile(src_f):
             shutil.copy2(src_f, os.path.join(output_app_dir, f_name))
 
-    # Copiar carpeta assets (iconos y logos) a raíz y a _internal
+    # Copiar carpeta assets (iconos y logos) únicamente a la raíz de dist/OmniVault
     if os.path.isdir(assets_dir):
-        for target in [os.path.join(output_app_dir, "assets"), os.path.join(internal_dir, "assets")]:
-            if os.path.exists(target):
-                shutil.rmtree(target)
-            shutil.copytree(assets_dir, target)
-        print("    -> Carpeta assets copiada con iconos y logotipo oficiales.")
+        target_assets = os.path.join(output_app_dir, "assets")
+        if os.path.exists(target_assets):
+            shutil.rmtree(target_assets)
+        shutil.copytree(assets_dir, target_assets)
+        internal_assets = os.path.join(internal_dir, "assets")
+        if os.path.isdir(internal_assets):
+            shutil.rmtree(internal_assets, ignore_errors=True)
+        print("    -> Carpeta assets copiada con iconos y logotipo oficiales sin duplicados.")
 
     print("\n" + "=" * 60)
     print("[OK] COMPILACION EXITOSA!")
