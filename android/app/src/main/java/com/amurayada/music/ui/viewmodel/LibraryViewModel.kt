@@ -120,46 +120,184 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     )
         private set
 
+    var deletedSongPaths by mutableStateOf<Set<String>>(
+        application.getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE)
+            .getStringSet("deleted_song_paths", emptySet())
+            ?.toSet() ?: emptySet()
+    )
+        private set
+
     fun hideSong(songId: Long) {
         val updated = hiddenSongIds + songId
         hiddenSongIds = updated
-        omniPrefs.edit().putStringSet("hidden_song_ids", updated.map { it.toString() }.toSet()).apply()
+        omniPrefs.edit().putStringSet("hidden_song_ids", updated.map { it.toString() }.toHashSet()).apply()
     }
 
     fun unhideSong(songId: Long) {
         val updated = hiddenSongIds - songId
         hiddenSongIds = updated
-        omniPrefs.edit().putStringSet("hidden_song_ids", updated.map { it.toString() }.toSet()).apply()
+        omniPrefs.edit().putStringSet("hidden_song_ids", updated.map { it.toString() }.toHashSet()).apply()
+    }
+
+    private fun markSongDeleted(song: Song) {
+        val updatedIds = hiddenSongIds + song.id
+        hiddenSongIds = updatedIds
+        val updatedPaths = if (song.path.isNotBlank()) deletedSongPaths + song.path else deletedSongPaths
+        deletedSongPaths = updatedPaths
+        omniPrefs.edit()
+            .putStringSet("hidden_song_ids", updatedIds.map { it.toString() }.toHashSet())
+            .putStringSet("deleted_song_paths", updatedPaths.toHashSet())
+            .apply()
+    }
+
+    fun clearPermissionEvent() {
+        _permissionEvent.value = null
+    }
+
+    private fun resolveMediaStoreAudioUri(context: android.content.Context, song: Song): android.net.Uri {
+        if (song.path.isNotBlank()) {
+            try {
+                context.contentResolver.query(
+                    android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                    arrayOf(android.provider.MediaStore.Audio.Media._ID),
+                    "${android.provider.MediaStore.Audio.Media.DATA} = ?",
+                    arrayOf(song.path),
+                    null
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val idCol = cursor.getColumnIndex(android.provider.MediaStore.Audio.Media._ID)
+                        if (idCol != -1) {
+                            val mediaId = cursor.getLong(idCol)
+                            return android.content.ContentUris.withAppendedId(
+                                android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                                mediaId
+                            )
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        return android.content.ContentUris.withAppendedId(
+            android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            song.id
+        )
     }
 
     fun deleteSong(song: Song, context: android.content.Context, onComplete: () -> Unit = {}) {
+        // Excluir inmediatamente de estado y preferencias persistentes para que desaparezca al instante de la UI
+        markSongDeleted(song)
+        songs = songs.filter { it.id != song.id && (song.path.isBlank() || it.path != song.path) }
+
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // 1. Eliminar archivo físico de almacenamiento
-                val file = java.io.File(song.path)
-                if (file.exists()) {
-                    file.delete()
-                }
-                // 2. Eliminar de MediaStore mediante ContentResolver
+                // 1. Eliminar registros en bases de datos internas de descargas e historial
                 try {
-                    val uri = android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-                    context.contentResolver.delete(
-                        uri,
-                        "${android.provider.MediaStore.Audio.Media._ID} = ?",
-                        arrayOf(song.id.toString())
-                    )
+                    downloadDatabase.downloadDao().deleteDownloadById(song.id)
+                    if (song.path.isNotBlank()) {
+                        downloadDatabase.downloadDao().deleteDownloadByPath(song.path)
+                    }
                 } catch (e: Exception) {
-                    android.util.Log.w("LibraryViewModel", "Error eliminando de MediaStore: ${e.message}")
+                    android.util.Log.w("LibraryViewModel", "Error eliminando de DownloadDatabase: ${e.message}")
                 }
-                // 3. Notificar MediaScannerConnection
-                android.media.MediaScannerConnection.scanFile(context, arrayOf(song.path), null, null)
-                // 4. Recargar biblioteca local
+
+                if (song.path.isNotBlank()) {
+                    try {
+                        com.omnivault.media.downloader.DownloadManager.getInstance(context).removeHistoryByPath(song.path)
+                    } catch (e: Exception) {
+                        android.util.Log.w("LibraryViewModel", "Error eliminando de DownloadManager: ${e.message}")
+                    }
+
+                    try {
+                        com.omnivault.media.data.AppDatabase.getInstance(context).trackDao().deleteByPath(song.path)
+                    } catch (e: Exception) {
+                        android.util.Log.w("LibraryViewModel", "Error eliminando de AppDatabase: ${e.message}")
+                    }
+
+                    // 2. Eliminar archivos complementarios (.lrc y .jpg) en la misma carpeta
+                    try {
+                        val audioFile = java.io.File(song.path)
+                        val parentDir = audioFile.parentFile
+                        if (parentDir != null && parentDir.exists()) {
+                            val baseName = audioFile.nameWithoutExtension
+                            val lrcFile = java.io.File(parentDir, "$baseName.lrc")
+                            val jpgFile = java.io.File(parentDir, "$baseName.jpg")
+                            if (lrcFile.exists()) lrcFile.delete()
+                            if (jpgFile.exists()) jpgFile.delete()
+                        }
+                    } catch (_: Exception) {}
+                }
+
+                // 3. Eliminar de MediaStore y almacenamiento físico
+                val mediaUri = resolveMediaStoreAudioUri(context, song)
+                var securityException: SecurityException? = null
+
+                try {
+                    context.contentResolver.delete(mediaUri, null, null)
+                } catch (se: SecurityException) {
+                    securityException = se
+                    android.util.Log.w("LibraryViewModel", "SecurityException eliminando URI $mediaUri: ${se.message}")
+                } catch (e: Exception) {
+                    android.util.Log.w("LibraryViewModel", "Error eliminando de MediaStore por URI: ${e.message}")
+                }
+
+                if (song.path.isNotBlank()) {
+                    try {
+                        context.contentResolver.delete(
+                            android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                            "${android.provider.MediaStore.Audio.Media.DATA} = ?",
+                            arrayOf(song.path)
+                        )
+                    } catch (se: SecurityException) {
+                        if (securityException == null) securityException = se
+                    } catch (e: Exception) {
+                        android.util.Log.w("LibraryViewModel", "Error eliminando de MediaStore por DATA: ${e.message}")
+                    }
+
+                    val file = java.io.File(song.path)
+                    if (file.exists()) {
+                        try {
+                            file.delete()
+                        } catch (_: Exception) {}
+                    }
+
+                    // 4. Solo re-escanear si el archivo ya fue borrado; si sigue protegido por Scoped Storage, solicitar permiso del sistema
+                    if (!file.exists()) {
+                        android.media.MediaScannerConnection.scanFile(context, arrayOf(song.path), null, null)
+                    } else if (securityException != null) {
+                        try {
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                                val pendingIntent = android.provider.MediaStore.createDeleteRequest(
+                                    context.contentResolver,
+                                    listOf(mediaUri)
+                                )
+                                _permissionEvent.postValue(
+                                    androidx.activity.result.IntentSenderRequest.Builder(pendingIntent.intentSender).build()
+                                )
+                            } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q &&
+                                securityException is android.app.RecoverableSecurityException
+                            ) {
+                                _permissionEvent.postValue(
+                                    androidx.activity.result.IntentSenderRequest.Builder(
+                                        securityException.userAction.actionIntent.intentSender
+                                    ).build()
+                                )
+                            }
+                        } catch (reqEx: Exception) {
+                            android.util.Log.w("LibraryViewModel", "No se pudo emitir solicitud de eliminación: ${reqEx.message}")
+                        }
+                    }
+                }
+
+                // 5. Recargar biblioteca local y notificar término
                 loadLibrary()
                 withContext(Dispatchers.Main) {
                     onComplete()
                 }
             } catch (e: Exception) {
                 android.util.Log.e("LibraryViewModel", "Error eliminando canción: ${e.message}")
+                withContext(Dispatchers.Main) {
+                    onComplete()
+                }
             }
         }
     }
@@ -171,7 +309,9 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         private set
     
     val filteredSongs: List<Song> by derivedStateOf {
-        val visibleSongs = songs.filter { !hiddenSongIds.contains(it.id) }
+        val visibleSongs = songs.filter {
+            !hiddenSongIds.contains(it.id) && (it.path.isBlank() || !deletedSongPaths.contains(it.path))
+        }
         if (searchQuery.isEmpty()) {
             visibleSongs
         } else {
@@ -256,7 +396,11 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                     
                     // Combine and deduplicate by title and artist (case-insensitive)
                     // Combine and deduplicate by path (to avoid duplicates if MediaStore indexed the downloaded file)
-                    val allSongs = (localSongs + downloadedSongs).distinctBy { it.path }
+                    val excludedIds = hiddenSongIds
+                    val excludedPaths = deletedSongPaths
+                    val allSongs = (localSongs + downloadedSongs)
+                        .distinctBy { it.path }
+                        .filter { !excludedIds.contains(it.id) && (it.path.isBlank() || !excludedPaths.contains(it.path)) }
                     val sortedSongs = allSongs.sortedBy { it.title }
 
                     // Merge Albums: Start with MediaStore albums, add downloaded albums
@@ -381,30 +525,6 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         return repository.getSongsByGenre(genreId)
     }
 
-    fun deleteSong(song: Song, context: android.content.Context) {
-        viewModelScope.launch {
-            try {
-                repository.deleteSong(song.id)
-                // The ContentObserver will trigger a reload, but we can also optimistically remove it
-                songs = songs.filter { it.id != song.id }
-            } catch (e: android.app.RecoverableSecurityException) {
-                // Request permission from user
-                // This needs to be handled by the Activity/Fragment
-                // For now, we'll just rethrow or let the caller handle it if possible
-                // Since we are in ViewModel, we can't startIntentSender directly easily without context
-                // We passed context, but starting intent sender requires Activity context usually
-                
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                     val intentSender = e.userAction.actionIntent.intentSender
-                     // We need to signal the UI to launch this intent sender
-                     // For simplicity in this iteration, we might need a SharedFlow for events
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
-    
     // Simplified version for now that assumes permission is granted or handles it via standard flow
     // In a real app, we'd use a channel to send the IntentSenderRequest to the UI
     suspend fun performDeleteSong(songId: Long) {

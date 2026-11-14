@@ -87,8 +87,15 @@ fun LarkStyleMusicScreen(
     var playlistToDelete by remember { mutableStateOf<Playlist?>(null) }
     var songToDelete by remember { mutableStateOf<Song?>(null) }
 
-    val rawSongs = remember(libraryViewModel.songs, libraryViewModel.hiddenSongIds) {
-        libraryViewModel.songs.filter { !libraryViewModel.hiddenSongIds.contains(it.id) }
+    val rawSongs = remember(
+        libraryViewModel.songs,
+        libraryViewModel.hiddenSongIds,
+        libraryViewModel.deletedSongPaths
+    ) {
+        libraryViewModel.songs.filter {
+            !libraryViewModel.hiddenSongIds.contains(it.id) &&
+                (it.path.isBlank() || !libraryViewModel.deletedSongPaths.contains(it.path))
+        }
     }
     val playlists by playlistViewModel.playlists.collectAsState()
 
@@ -609,6 +616,18 @@ fun LarkStyleMusicScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3333)),
                     onClick = {
                         val title = song.title
+                        if (playbackViewModel.currentSong?.id == song.id) {
+                            if (playbackViewModel.queue.size > 1) {
+                                playbackViewModel.skipToNext()
+                            } else {
+                                playbackViewModel.pause()
+                            }
+                        }
+                        playlistViewModel.playlists.value.forEach { playlist ->
+                            if (playlist.songIds.contains(song.id)) {
+                                playlistViewModel.removeSongFromPlaylist(playlist.id, song.id)
+                            }
+                        }
                         libraryViewModel.deleteSong(song, context) {
                             Toast.makeText(context, "Canción eliminada: $title", Toast.LENGTH_SHORT).show()
                         }

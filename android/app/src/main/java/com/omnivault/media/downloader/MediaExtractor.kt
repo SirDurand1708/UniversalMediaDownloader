@@ -30,7 +30,8 @@ data class ExtractedMediaInfo(
     val requestHeaders: Map<String, String> = emptyMap(),
     val audioStreamUrl: String? = null,
     val backupStreamUrls: List<String> = emptyList(),
-    val backupAudioUrls: List<String> = emptyList()
+    val backupAudioUrls: List<String> = emptyList(),
+    val progressiveFallbackUrls: List<String> = emptyList()
 )
 
 data class MediaPreview(
@@ -50,7 +51,8 @@ object MediaExtractor {
         .build()
 
     private const val YT_API_KEY = "AIzaSyAO_FJ2SlqAE4An4Ek78YsFubnuhRlzQ"
-    private const val YT_USER_AGENT = "com.google.android.youtube/20.10.38 (Linux; U; Android 11)"
+    private const val YT_USER_AGENT = "com.google.android.youtube/20.10.38 (Linux; U; Android 14)"
+    private const val YT_VISIONOS_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"
     private const val BROWSER_USER_AGENT = "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
     private const val DESKTOP_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     private const val BOT_USER_AGENT = "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"
@@ -539,18 +541,430 @@ object MediaExtractor {
         }
     }
 
+    private data class YtStreamCandidate(
+        val itag: Int,
+        val mime: String,
+        val height: Int,
+        val bitrate: Int,
+        val url: String
+    )
+
+    private fun extractYouTubeVideoId(url: String): String? {
+        val matcher = YT_VIDEO_ID_PATTERN.matcher(url)
+        return if (matcher.find()) matcher.group(1) else null
+    }
+
+    private fun buildYouTubeHeadersForUrl(streamUrl: String): Map<String, String> {
+        val lower = streamUrl.lowercase()
+        return when {
+            lower.contains("c=android") -> mapOf("User-Agent" to YT_USER_AGENT)
+            lower.contains("c=visionos") -> mapOf("User-Agent" to YT_VISIONOS_USER_AGENT)
+            lower.contains("c=ios") -> mapOf(
+                "User-Agent" to "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)"
+            )
+            else -> mapOf(
+                "User-Agent" to DESKTOP_USER_AGENT,
+                "Referer" to "https://www.youtube.com/",
+                "Origin" to "https://www.youtube.com"
+            )
+        }
+    }
+
+    private fun parseInnerTubeCandidates(array: com.google.gson.JsonArray?): List<YtStreamCandidate> {
+        if (array == null) return emptyList()
+        val result = mutableListOf<YtStreamCandidate>()
+        for (elem in array) {
+            if (!elem.isJsonObject) continue
+            val obj = elem.asJsonObject
+            val streamUrl = obj.get("url")?.takeIf { !it.isJsonNull }?.asString?.trim() ?: continue
+            if (streamUrl.isBlank()) continue
+            val itag = obj.get("itag")?.takeIf { !it.isJsonNull }?.asInt ?: 0
+            val mime = obj.get("mimeType")?.takeIf { !it.isJsonNull }?.asString ?: ""
+            val height = obj.get("height")?.takeIf { !it.isJsonNull }?.asInt ?: 0
+            val bitrate = obj.get("bitrate")?.takeIf { !it.isJsonNull }?.asInt ?: 0
+            result.add(YtStreamCandidate(itag = itag, mime = mime, height = height, bitrate = bitrate, url = streamUrl))
+        }
+        return result
+    }
+
+    private fun prioritizeItag(list: List<YtStreamCandidate>, preferredItag: Int?): List<YtStreamCandidate> {
+        if (preferredItag == null) return list
+        val preferred = list.filter { it.itag == preferredItag }
+        if (preferred.isEmpty()) return list
+        return preferred + list.filter { it.itag != preferredItag }
+    }
+
+    private fun extractYouTubeInnerTube(
+        videoId: String,
+        requestedFormat: MediaFormat,
+        useVisionOs: Boolean,
+        preferredItag: Int? = null,
+        forceProgressiveOnly: Boolean = false
+    ): ExtractedMediaInfo? {
+        try {
+            val endpoint = "https://www.youtube.com/youtubei/v1/player?key=$YT_API_KEY"
+            val clientUserAgent = if (useVisionOs) YT_VISIONOS_USER_AGENT else YT_USER_AGENT
+            val clientHeaders = mapOf("User-Agent" to clientUserAgent)
+
+            val payload = if (useVisionOs) {
+                """
+                {
+                    "context": {
+                        "client": {
+                            "clientName": "VISIONOS",
+                            "clientVersion": "1.02",
+                            "deviceMake": "Apple",
+                            "deviceModel": "RealityDevice17,1",
+                            "osName": "visionOS",
+                            "osVersion": "26.5.23O471",
+                            "hl": "es",
+                            "gl": "US"
+                        },
+                        "user": {
+                            "lockedSafetyMode": false
+                        }
+                    },
+                    "videoId": "$videoId"
+                }
+                """.trimIndent()
+            } else {
+                """
+                {
+                    "context": {
+                        "client": {
+                            "clientName": "ANDROID",
+                            "clientVersion": "20.10.38",
+                            "hl": "es",
+                            "gl": "US",
+                            "androidSdkVersion": 34,
+                            "osName": "Android",
+                            "osVersion": "14"
+                        },
+                        "user": {
+                            "lockedSafetyMode": false
+                        }
+                    },
+                    "videoId": "$videoId"
+                }
+                """.trimIndent()
+            }
+
+            val req = Request.Builder()
+                .url(endpoint)
+                .post(payload.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .header("User-Agent", clientUserAgent)
+                .header("Content-Type", "application/json")
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return null
+                val body = resp.body?.string() ?: ""
+                if (body.isBlank()) return null
+
+                val root = JsonParser.parseString(body).asJsonObject
+                val videoDetails = root.getAsJsonObject("videoDetails")
+                val rawTitle = videoDetails?.get("title")?.takeIf { !it.isJsonNull }?.asString ?: "YouTube Media"
+                val title = com.omnivault.media.utils.FilenameStandardizer.standardizeTitle(rawTitle)
+                val author = videoDetails?.get("author")?.takeIf { !it.isJsonNull }?.asString ?: "YouTube"
+                val lengthSec = videoDetails?.get("lengthSeconds")?.takeIf { !it.isJsonNull }?.asLong ?: 0L
+
+                val defaultThumb = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
+                val bestThumb = videoDetails
+                    ?.getAsJsonObject("thumbnail")
+                    ?.getAsJsonArray("thumbnails")
+                    ?.mapNotNull { el ->
+                        val obj = el.asJsonObject
+                        val u = obj.get("url")?.takeIf { !it.isJsonNull }?.asString
+                        val w = obj.get("width")?.takeIf { !it.isJsonNull }?.asInt ?: 0
+                        val h = obj.get("height")?.takeIf { !it.isJsonNull }?.asInt ?: 0
+                        if (!u.isNullOrBlank()) (w * h) to u else null
+                    }
+                    ?.maxByOrNull { it.first }
+                    ?.second
+                    ?: defaultThumb
+
+                val streaming = root.getAsJsonObject("streamingData") ?: return null
+                val adaptiveList = parseInnerTubeCandidates(streaming.getAsJsonArray("adaptiveFormats"))
+                val progressiveList = parseInnerTubeCandidates(streaming.getAsJsonArray("formats"))
+
+                val audioMp4 = adaptiveList
+                    .filter { it.mime.startsWith("audio/mp4") }
+                    .sortedByDescending { it.bitrate }
+                val audioOther = adaptiveList
+                    .filter { it.mime.startsWith("audio/") && !it.mime.startsWith("audio/mp4") }
+                    .sortedByDescending { it.bitrate }
+                val progressiveMp4 = progressiveList
+                    .filter { it.mime.startsWith("video/mp4") }
+                    .sortedWith(compareByDescending<YtStreamCandidate> { it.height }.thenByDescending { it.bitrate })
+
+                if (requestedFormat.isAudio) {
+                    val orderedAudios = prioritizeItag((audioMp4 + audioOther).distinctBy { it.url }, preferredItag)
+                    val orderedProg = prioritizeItag(progressiveMp4.distinctBy { it.url }, preferredItag)
+                    val primaryUrl = orderedAudios.firstOrNull()?.url ?: orderedProg.firstOrNull()?.url
+                    if (!primaryUrl.isNullOrBlank()) {
+                        val backups = (orderedAudios.drop(1).map { it.url } + orderedProg.map { it.url })
+                            .filter { it != primaryUrl }
+                            .distinct()
+                        return ExtractedMediaInfo(
+                            title = title,
+                            directStreamUrl = primaryUrl,
+                            format = requestedFormat,
+                            durationSeconds = lengthSec,
+                            author = author,
+                            thumbnailUrl = bestThumb,
+                            requestHeaders = clientHeaders,
+                            backupStreamUrls = backups
+                        )
+                    }
+                    return null
+                }
+
+                val progressiveUrls = progressiveMp4.map { it.url }.distinct()
+                if (forceProgressiveOnly) {
+                    val orderedProg = prioritizeItag(progressiveMp4.distinctBy { it.url }, preferredItag).map { it.url }
+                    if (orderedProg.isNotEmpty()) {
+                        return ExtractedMediaInfo(
+                            title = title,
+                            directStreamUrl = orderedProg.first(),
+                            format = requestedFormat,
+                            durationSeconds = lengthSec,
+                            author = author,
+                            thumbnailUrl = bestThumb,
+                            requestHeaders = clientHeaders,
+                            backupStreamUrls = orderedProg.drop(1),
+                            progressiveFallbackUrls = orderedProg
+                        )
+                    }
+                    return null
+                }
+
+                val targetHeight = if (requestedFormat == MediaFormat.MP4_1080) 1080 else 720
+                val videoMp4Adaptive = adaptiveList.filter { it.mime.startsWith("video/mp4") }
+                val avc1Candidates = videoMp4Adaptive.filter { it.mime.contains("avc1", ignoreCase = true) }
+                val matchingAvc1 = avc1Candidates
+                    .filter { it.height in 1..targetHeight }
+                    .sortedWith(compareByDescending<YtStreamCandidate> { it.height }.thenByDescending { it.bitrate })
+                val fallbackAvc1 = avc1Candidates
+                    .filter { it.height > targetHeight }
+                    .sortedWith(compareBy<YtStreamCandidate> { it.height }.thenByDescending { it.bitrate })
+                val otherMp4 = videoMp4Adaptive
+                    .filter { !it.mime.contains("avc1", ignoreCase = true) }
+                    .sortedWith(compareByDescending<YtStreamCandidate> { it.height }.thenByDescending { it.bitrate })
+
+                val orderedVideos = prioritizeItag(
+                    (matchingAvc1 + fallbackAvc1 + otherMp4).distinctBy { it.url },
+                    preferredItag
+                )
+                val orderedDashAudios = prioritizeItag(
+                    (audioMp4.ifEmpty { audioOther }).distinctBy { it.url },
+                    preferredItag
+                )
+
+                if (orderedVideos.isNotEmpty() && orderedDashAudios.isNotEmpty()) {
+                    return ExtractedMediaInfo(
+                        title = title,
+                        directStreamUrl = orderedVideos.first().url,
+                        format = requestedFormat,
+                        durationSeconds = lengthSec,
+                        author = author,
+                        thumbnailUrl = bestThumb,
+                        requestHeaders = clientHeaders,
+                        audioStreamUrl = orderedDashAudios.first().url,
+                        backupStreamUrls = orderedVideos.drop(1).map { it.url },
+                        backupAudioUrls = orderedDashAudios.drop(1).map { it.url },
+                        progressiveFallbackUrls = progressiveUrls
+                    )
+                }
+
+                if (progressiveUrls.isNotEmpty()) {
+                    return ExtractedMediaInfo(
+                        title = title,
+                        directStreamUrl = progressiveUrls.first(),
+                        format = requestedFormat,
+                        durationSeconds = lengthSec,
+                        author = author,
+                        thumbnailUrl = bestThumb,
+                        requestHeaders = clientHeaders,
+                        backupStreamUrls = progressiveUrls.drop(1),
+                        progressiveFallbackUrls = progressiveUrls
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("MediaExtractor", "InnerTube (visionOs=$useVisionOs) failed: ${e.message}")
+        }
+        return null
+    }
+
+    suspend fun refreshYouTubeStreamUrl(
+        url: String,
+        requestedFormat: MediaFormat,
+        isAudioStream: Boolean,
+        preferVisionOs: Boolean = false,
+        targetItag: Int? = null
+    ): Pair<String, Map<String, String>>? = withContext(Dispatchers.IO) {
+        val videoId = extractYouTubeVideoId(url) ?: return@withContext null
+        val info = extractYouTubeInnerTube(
+            videoId = videoId,
+            requestedFormat = requestedFormat,
+            useVisionOs = preferVisionOs,
+            preferredItag = targetItag
+        ) ?: extractYouTubeInnerTube(
+            videoId = videoId,
+            requestedFormat = requestedFormat,
+            useVisionOs = !preferVisionOs,
+            preferredItag = targetItag
+        ) ?: return@withContext null
+
+        val candidate = if (isAudioStream) {
+            if (targetItag != null) {
+                val allAudio = listOfNotNull(info.audioStreamUrl) + info.backupAudioUrls +
+                    if (requestedFormat.isAudio) listOf(info.directStreamUrl) + info.backupStreamUrls else emptyList()
+                allAudio.firstOrNull { u ->
+                    u.contains("itag=$targetItag&") || u.endsWith("itag=$targetItag")
+                } ?: info.audioStreamUrl ?: if (requestedFormat.isAudio) info.directStreamUrl else null
+            } else {
+                info.audioStreamUrl ?: if (requestedFormat.isAudio) info.directStreamUrl else null
+            }
+        } else {
+            if (targetItag != null) {
+                val allVideo = listOf(info.directStreamUrl) + info.backupStreamUrls + info.progressiveFallbackUrls
+                allVideo.firstOrNull { u ->
+                    u.contains("itag=$targetItag&") || u.endsWith("itag=$targetItag")
+                } ?: info.directStreamUrl
+            } else {
+                info.directStreamUrl
+            }
+        } ?: return@withContext null
+
+        candidate to info.requestHeaders
+    }
+
+    private fun isUsablePipedStream(streamUrl: String, quality: String = "", format: String = ""): Boolean {
+        if (streamUrl.isBlank()) return false
+        val lowerUrl = streamUrl.lowercase()
+        val lowerQ = quality.lowercase()
+        val lowerF = format.lowercase()
+        return !lowerQ.contains("lbry") &&
+            !lowerF.contains("hls") &&
+            !lowerUrl.contains(".m3u8") &&
+            !lowerUrl.contains("odycdn.com")
+    }
+
+    private fun extractYouTubeFromPiped(videoId: String, requestedFormat: MediaFormat): ExtractedMediaInfo? {
+        val pipedInstances = listOf(
+            "https://api.piped.private.coffee",
+            "https://pipedapi.ducks.party",
+            "https://pipedapi.tokhmi.xyz"
+        )
+        val thumbUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
+
+        for (host in pipedInstances) {
+            try {
+                val pReq = Request.Builder()
+                    .url("$host/streams/$videoId")
+                    .header("User-Agent", BROWSER_USER_AGENT)
+                    .build()
+
+                client.newCall(pReq).execute().use { resp ->
+                    if (!resp.isSuccessful) continue
+                    val body = resp.body?.string() ?: ""
+                    val root = JsonParser.parseString(body).asJsonObject
+                    val title = root.get("title")?.takeIf { !it.isJsonNull }?.asString ?: "YouTube Media"
+
+                    val audioUrls = mutableListOf<String>()
+                    root.getAsJsonArray("audioStreams")?.forEach { elem ->
+                        val obj = elem.asJsonObject
+                        val sUrl = obj.get("url")?.takeIf { !it.isJsonNull }?.asString ?: ""
+                        val q = obj.get("quality")?.takeIf { !it.isJsonNull }?.asString ?: ""
+                        val fmt = obj.get("format")?.takeIf { !it.isJsonNull }?.asString ?: ""
+                        if (isUsablePipedStream(sUrl, q, fmt)) {
+                            audioUrls.add(sUrl)
+                        }
+                    }
+
+                    if (requestedFormat.isAudio) {
+                        if (audioUrls.isNotEmpty()) {
+                            return ExtractedMediaInfo(
+                                title = title,
+                                directStreamUrl = audioUrls.first(),
+                                format = requestedFormat,
+                                thumbnailUrl = thumbUrl,
+                                backupStreamUrls = audioUrls.drop(1)
+                            )
+                        }
+                        continue
+                    }
+
+                    val videos = root.getAsJsonArray("videoStreams")
+                    if (videos != null && videos.size() > 0) {
+                        val targetHeight = if (requestedFormat == MediaFormat.MP4_1080) 1080 else 720
+                        var vTargetUrl: String? = null
+                        val candidateVideoUrls = mutableListOf<String>()
+
+                        for (elem in videos) {
+                            val obj = elem.asJsonObject
+                            val q = obj.get("quality")?.takeIf { !it.isJsonNull }?.asString ?: ""
+                            val fmt = obj.get("format")?.takeIf { !it.isJsonNull }?.asString ?: ""
+                            val sUrl = obj.get("url")?.takeIf { !it.isJsonNull }?.asString ?: ""
+                            if (!isUsablePipedStream(sUrl, q, fmt)) continue
+                            candidateVideoUrls.add(sUrl)
+                            if (vTargetUrl == null && (q.contains("$targetHeight") || q.contains("${targetHeight}p")) && fmt.contains("mp4", ignoreCase = true)) {
+                                vTargetUrl = sUrl
+                            }
+                        }
+
+                        val aUrl = audioUrls.firstOrNull()
+                        if (vTargetUrl != null && aUrl != null) {
+                            return ExtractedMediaInfo(
+                                title = title,
+                                directStreamUrl = vTargetUrl,
+                                format = requestedFormat,
+                                thumbnailUrl = thumbUrl,
+                                audioStreamUrl = aUrl,
+                                backupStreamUrls = candidateVideoUrls.filter { it != vTargetUrl },
+                                backupAudioUrls = audioUrls.drop(1)
+                            )
+                        }
+
+                        if (candidateVideoUrls.isNotEmpty()) {
+                            return ExtractedMediaInfo(
+                                title = title,
+                                directStreamUrl = candidateVideoUrls.first(),
+                                format = requestedFormat,
+                                thumbnailUrl = thumbUrl,
+                                backupStreamUrls = candidateVideoUrls.drop(1)
+                            )
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        return null
+    }
+
     /**
-     * Extractor oficial de YouTube mediante la API InnerTube de Android con respaldo en Piped.
-     * Para video y canciones: utiliza flujos progresivos MP4 oficiales sin cifrado ni errores 403.
+     * Extractor oficial de YouTube mediante API InnerTube multi-cliente (ANDROID + VISIONOS),
+     * con respaldo secundario en NewPipeExtractor e instancias Piped filtradas.
      */
     private fun extractYouTube(url: String, requestedFormat: MediaFormat): ExtractedMediaInfo {
-        val matcher = YT_VIDEO_ID_PATTERN.matcher(url)
-        val videoId = if (matcher.find()) matcher.group(1) else null
+        val videoId = extractYouTubeVideoId(url)
             ?: throw Exception("No se pudo identificar el ID del video de YouTube en el enlace proporcionado")
 
         val thumbUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
 
-        // 1. MOTOR PRIMARIO: NewPipeExtractor (Descifrado nativo, soporte 1080p, 720p y Audio M4A sin errores 403)
+        // 1. MOTOR PRIMARIO: InnerTube ANDROID (20.10.38) con VISIONOS (1.02) como respaldo inmediato
+        val androidInfo = extractYouTubeInnerTube(videoId, requestedFormat, useVisionOs = false)
+        if (androidInfo != null) {
+            return androidInfo
+        }
+
+        val visionOsInfo = extractYouTubeInnerTube(videoId, requestedFormat, useVisionOs = true)
+        if (visionOsInfo != null) {
+            return visionOsInfo
+        }
+
+        // 2. RESPALDO SECUNDARIO: NewPipeExtractor
         try {
             if (NewPipe.getDownloader() == null) {
                 NewPipe.init(NewPipeDownloader())
@@ -568,49 +982,27 @@ object MediaExtractor {
 
             if (!requestedFormat.isAudio) {
                 val targetHeight = if (requestedFormat == MediaFormat.MP4_1080) 1080 else 720
-
-                // 1A. Streams de video muxed (audio y video integrados para 720p o menor sin necesidad de remuxing)
                 val muxedList = extractor.videoStreams
-                val bestMuxed = muxedList
                     .filter { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }
+                val bestMuxed = muxedList
                     .filter { (it.resolution.replace("p", "").toIntOrNull() ?: 0) <= targetHeight }
                     .maxByOrNull { it.resolution.replace("p", "").toIntOrNull() ?: 0 }
+                    ?: muxedList.maxByOrNull { it.resolution.replace("p", "").toIntOrNull() ?: 0 }
+                val progBackups = muxedList.map { it.content }
 
-                if (bestMuxed != null && targetHeight <= 720) {
-                    val muxedBackups = muxedList.filter { it.content != bestMuxed.content }.map { it.content }
-                    return ExtractedMediaInfo(
-                        title = title,
-                        directStreamUrl = bestMuxed.content,
-                        format = requestedFormat,
-                        durationSeconds = lengthSec,
-                        author = author,
-                        thumbnailUrl = bestThumb,
-                        requestHeaders = mapOf(
-                            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                            "Referer" to "https://www.youtube.com/",
-                            "Origin" to "https://www.youtube.com"
-                        ),
-                        backupStreamUrls = muxedBackups
-                    )
-                }
-
-                // 1B. DASH Video Only (1080p FHD / 720p HD) + Audio M4A para muxing nativo
-                // Filtrar estrictamente por MPEG_4 (H.264 / AVC y AAC) para compatibilidad nativa absoluta con Android MediaMuxer
-                val videoOnlyList = extractor.videoOnlyStreams
-                val mp4VideoOnly = videoOnlyList.filter { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }
+                val mp4VideoOnly = extractor.videoOnlyStreams
+                    .filter { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }
                 val bestVideoOnly = mp4VideoOnly
                     .filter { (it.resolution.replace("p", "").toIntOrNull() ?: 0) <= targetHeight }
                     .maxByOrNull { it.resolution.replace("p", "").toIntOrNull() ?: 0 }
                     ?: mp4VideoOnly.maxByOrNull { it.resolution.replace("p", "").toIntOrNull() ?: 0 }
 
-                val audioList = extractor.audioStreams
-                val mp4Audio = audioList.filter { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }
-                val bestAudio = mp4Audio.maxByOrNull { it.averageBitrate }
-                    ?: audioList.firstOrNull { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }
+                val mp4Audio = extractor.audioStreams
+                    .filter { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }
+                    .sortedByDescending { it.averageBitrate }
+                val bestAudio = mp4Audio.firstOrNull()
 
                 if (bestVideoOnly != null && bestAudio != null) {
-                    val backupVideos = mp4VideoOnly.map { it.content }.filter { it != bestVideoOnly.content }
-                    val backupAudios = mp4Audio.map { it.content }.filter { it != bestAudio.content }
                     return ExtractedMediaInfo(
                         title = title,
                         directStreamUrl = bestVideoOnly.content,
@@ -618,17 +1010,13 @@ object MediaExtractor {
                         durationSeconds = lengthSec,
                         author = author,
                         thumbnailUrl = bestThumb,
-                        requestHeaders = mapOf(
-                            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                            "Referer" to "https://www.youtube.com/",
-                            "Origin" to "https://www.youtube.com"
-                        ),
+                        requestHeaders = buildYouTubeHeadersForUrl(bestVideoOnly.content),
                         audioStreamUrl = bestAudio.content,
-                        backupStreamUrls = backupVideos,
-                        backupAudioUrls = backupAudios
+                        backupStreamUrls = mp4VideoOnly.map { it.content }.filter { it != bestVideoOnly.content },
+                        backupAudioUrls = mp4Audio.drop(1).map { it.content },
+                        progressiveFallbackUrls = progBackups
                     )
                 } else if (bestMuxed != null) {
-                    val muxedBackups = muxedList.filter { it.content != bestMuxed.content }.map { it.content }
                     return ExtractedMediaInfo(
                         title = title,
                         directStreamUrl = bestMuxed.content,
@@ -636,16 +1024,12 @@ object MediaExtractor {
                         durationSeconds = lengthSec,
                         author = author,
                         thumbnailUrl = bestThumb,
-                        requestHeaders = mapOf(
-                            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                            "Referer" to "https://www.youtube.com/",
-                            "Origin" to "https://www.youtube.com"
-                        ),
-                        backupStreamUrls = muxedBackups
+                        requestHeaders = buildYouTubeHeadersForUrl(bestMuxed.content),
+                        backupStreamUrls = progBackups.filter { it != bestMuxed.content },
+                        progressiveFallbackUrls = progBackups
                     )
                 }
             } else {
-                // Formato de audio solicitado (M4A / MP3)
                 val audioList = extractor.audioStreams
                 val bestAudio = audioList
                     .filter { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }
@@ -653,7 +1037,6 @@ object MediaExtractor {
                     ?: audioList.maxByOrNull { it.averageBitrate }
 
                 if (bestAudio != null) {
-                    val backups = audioList.map { it.content }.filter { it != bestAudio.content }
                     return ExtractedMediaInfo(
                         title = title,
                         directStreamUrl = bestAudio.content,
@@ -661,403 +1044,34 @@ object MediaExtractor {
                         durationSeconds = lengthSec,
                         author = author,
                         thumbnailUrl = bestThumb,
-                        requestHeaders = mapOf(
-                            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                            "Referer" to "https://www.youtube.com/",
-                            "Origin" to "https://www.youtube.com"
-                        ),
-                        backupStreamUrls = backups
+                        requestHeaders = buildYouTubeHeadersForUrl(bestAudio.content),
+                        backupStreamUrls = audioList.map { it.content }.filter { it != bestAudio.content }
                     )
                 }
             }
         } catch (e: Exception) {
-            android.util.Log.e("MediaExtractor", "NewPipeExtractor YouTube failed, attempting InnerTube/Piped fallback", e)
+            android.util.Log.e("MediaExtractor", "NewPipeExtractor YouTube failed, attempting Piped fallback", e)
         }
 
-        // 2. Respaldo mediante API InnerTube (Cliente Android)
-        try {
-            val endpoint = "https://www.youtube.com/youtubei/v1/player?key=$YT_API_KEY"
-            val payload = """
-                {
-                    "context": {
-                        "client": {
-                            "clientName": "ANDROID",
-                            "clientVersion": "20.10.38",
-                            "hl": "es",
-                            "gl": "US",
-                            "androidSdkVersion": 30
-                        },
-                        "user": {
-                            "lockedSafetyMode": false
-                        }
-                    },
-                    "videoId": "$videoId"
-                }
-            """.trimIndent()
-
-            val req = Request.Builder()
-                .url(endpoint)
-                .post(payload.toRequestBody("application/json; charset=utf-8".toMediaType()))
-                .header("User-Agent", YT_USER_AGENT)
-                .header("Content-Type", "application/json")
-                .build()
-
-            client.newCall(req).execute().use { resp ->
-                if (resp.isSuccessful) {
-                    val body = resp.body?.string() ?: ""
-                    val root = JsonParser.parseString(body).asJsonObject
-
-                    val videoDetails = root.getAsJsonObject("videoDetails")
-                    val rawTitle = videoDetails?.get("title")?.asString ?: "YouTube Media"
-                    val title = com.omnivault.media.utils.FilenameStandardizer.standardizeTitle(rawTitle)
-                    val author = videoDetails?.get("author")?.asString ?: "YouTube"
-                    val lengthSec = videoDetails?.get("lengthSeconds")?.asLong ?: 0L
-
-                    val streaming = root.getAsJsonObject("streamingData")
-
-                    if (streaming != null) {
-                        // Soporte para Video 1080p FHD y 720p HD mediante combinación de pistas DASH nativas
-                        if (!requestedFormat.isAudio) {
-                            val adaptive = streaming.getAsJsonArray("adaptiveFormats")
-                            if (adaptive != null) {
-                                val targetHeight = if (requestedFormat == MediaFormat.MP4_1080) 1080 else 720
-                                var vTargetUrl: String? = null
-                                var aUrl: String? = null
-
-                                // 1. Buscar video AVC1 (H.264) que MediaMuxer soporte nativamente
-                                for (elem in adaptive) {
-                                    val obj = elem.asJsonObject
-                                    val mime = if (obj.has("mimeType") && !obj.get("mimeType").isJsonNull) obj.get("mimeType").asString else ""
-                                    val url = if (obj.has("url") && !obj.get("url").isJsonNull) obj.get("url").asString else null
-                                    val height = if (obj.has("height") && !obj.get("height").isJsonNull) obj.get("height").asInt else 0
-                                    val quality = if (obj.has("qualityLabel") && !obj.get("qualityLabel").isJsonNull) obj.get("qualityLabel").asString else ""
-
-                                    if (url != null && vTargetUrl == null && mime.startsWith("video/mp4") && mime.contains("avc1")) {
-                                        if (height >= targetHeight || quality.contains("$targetHeight")) {
-                                            vTargetUrl = url
-                                        }
-                                    }
-
-                                    if (url != null && aUrl == null && mime.startsWith("audio/mp4")) {
-                                        aUrl = url
-                                    }
-                                }
-
-                                // 2. Si no encontró AVC1 exacto, buscar cualquier video MP4 que coincida
-                                if (vTargetUrl == null) {
-                                    for (elem in adaptive) {
-                                        val obj = elem.asJsonObject
-                                        val mime = if (obj.has("mimeType") && !obj.get("mimeType").isJsonNull) obj.get("mimeType").asString else ""
-                                        val url = if (obj.has("url") && !obj.get("url").isJsonNull) obj.get("url").asString else null
-                                        val height = if (obj.has("height") && !obj.get("height").isJsonNull) obj.get("height").asInt else 0
-
-                                        if (url != null && mime.startsWith("video/mp4") && height >= targetHeight) {
-                                            vTargetUrl = url
-                                            break
-                                        }
-                                    }
-                                }
-
-                                val finalVUrl = vTargetUrl
-                                val finalAUrl = aUrl
-                                if (finalVUrl != null && finalAUrl != null) {
-                                    val progBackups = mutableListOf<String>()
-                                    streaming.getAsJsonArray("formats")?.forEach { elem ->
-                                        val u = elem.asJsonObject.get("url")?.asString
-                                        if (!u.isNullOrBlank()) progBackups.add(u)
-                                    }
-                                    return ExtractedMediaInfo(
-                                        title = title,
-                                        directStreamUrl = finalVUrl,
-                                        format = requestedFormat,
-                                        durationSeconds = lengthSec,
-                                        author = author,
-                                        thumbnailUrl = thumbUrl,
-                                        requestHeaders = mapOf(
-                                            "User-Agent" to YT_USER_AGENT,
-                                            "Referer" to "https://www.youtube.com/",
-                                            "Origin" to "https://www.youtube.com"
-                                        ),
-                                        audioStreamUrl = finalAUrl,
-                                        backupStreamUrls = progBackups
-                                    )
-                                }
-                            }
-                        }
-
-                        // Para audio (M4A / MP3): seleccionar la mejor pista de audio AAC
-                        if (requestedFormat.isAudio) {
-                            val adaptive = streaming.getAsJsonArray("adaptiveFormats")
-                            val audioCandidates = mutableListOf<String>()
-                            if (adaptive != null) {
-                                for (elem in adaptive) {
-                                    val obj = elem.asJsonObject
-                                    val mime = if (obj.has("mimeType") && !obj.get("mimeType").isJsonNull) obj.get("mimeType").asString else ""
-                                    val url = if (obj.has("url") && !obj.get("url").isJsonNull) obj.get("url").asString else null
-                                    if (url != null && (mime.startsWith("audio/mp4") || mime.startsWith("audio/webm"))) {
-                                        audioCandidates.add(url)
-                                    }
-                                }
-                            }
-
-                            // Añadir también URLs progresivas de formatos completos como respaldo
-                            val progBackups = mutableListOf<String>()
-                            streaming.getAsJsonArray("formats")?.forEach { elem ->
-                                val u = elem.asJsonObject.get("url")?.asString
-                                if (!u.isNullOrBlank()) progBackups.add(u)
-                            }
-
-                            if (audioCandidates.isNotEmpty()) {
-                                val primaryAudio = audioCandidates.first()
-                                val backupAudios = audioCandidates.drop(1) + progBackups
-                                return ExtractedMediaInfo(
-                                    title = title,
-                                    directStreamUrl = primaryAudio,
-                                    format = requestedFormat,
-                                    durationSeconds = lengthSec,
-                                    author = author,
-                                    thumbnailUrl = thumbUrl,
-                                    requestHeaders = mapOf(
-                                        "User-Agent" to YT_USER_AGENT,
-                                        "Referer" to "https://www.youtube.com/",
-                                        "Origin" to "https://www.youtube.com"
-                                    ),
-                                    backupStreamUrls = backupAudios
-                                )
-                            }
-                        }
-
-                        // Los flujos progresivos (formats) contienen audio AAC + video MP4 sin restricciones ni errores 403
-                        val formats = streaming.getAsJsonArray("formats")
-                        if (formats != null && formats.size() > 0) {
-                            val progUrls = mutableListOf<String>()
-                            for (elem in formats) {
-                                val obj = elem.asJsonObject
-                                if (obj.has("url")) {
-                                    progUrls.add(obj.get("url").asString)
-                                }
-                            }
-                            if (progUrls.isNotEmpty()) {
-                                return ExtractedMediaInfo(
-                                    title = title,
-                                    directStreamUrl = progUrls.first(),
-                                    format = requestedFormat,
-                                    durationSeconds = lengthSec,
-                                    author = author,
-                                    thumbnailUrl = thumbUrl,
-                                    requestHeaders = mapOf(
-                                        "User-Agent" to YT_USER_AGENT,
-                                        "Referer" to "https://www.youtube.com/",
-                                        "Origin" to "https://www.youtube.com"
-                                    ),
-                                    backupStreamUrls = progUrls.drop(1)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (_: Exception) {}
-
-        // 2. Respaldo mediante instancia proxy Piped
-        val pipedInstances = listOf(
-            "https://api.piped.private.coffee",
-            "https://pipedapi.ducks.party",
-            "https://pipedapi.tokhmi.xyz"
-        )
-
-        for (host in pipedInstances) {
-            try {
-                val pReq = Request.Builder()
-                    .url("$host/streams/$videoId")
-                    .header("User-Agent", BROWSER_USER_AGENT)
-                    .build()
-
-                client.newCall(pReq).execute().use { resp ->
-                    if (resp.isSuccessful) {
-                        val body = resp.body?.string() ?: ""
-                        val root = JsonParser.parseString(body).asJsonObject
-                        val title = root.get("title")?.asString ?: "YouTube Video"
-
-                        if (requestedFormat.isAudio) {
-                            val audios = root.getAsJsonArray("audioStreams")
-                            if (audios != null && audios.size() > 0) {
-                                val streamUrl = audios[0].asJsonObject.get("url")?.asString
-                                if (!streamUrl.isNullOrBlank()) {
-                                    return ExtractedMediaInfo(
-                                        title = title,
-                                        directStreamUrl = streamUrl,
-                                        format = requestedFormat,
-                                        thumbnailUrl = thumbUrl
-                                    )
-                                }
-                            }
-                        }
-
-                        val videos = root.getAsJsonArray("videoStreams")
-                        val audios = root.getAsJsonArray("audioStreams")
-
-                        // Video DASH (1080p y 720p) con audio separado en Piped
-                        if (!requestedFormat.isAudio && videos != null && audios != null && audios.size() > 0) {
-                            val targetHeight = if (requestedFormat == MediaFormat.MP4_1080) 1080 else 720
-                            var vTargetUrl: String? = null
-                            for (elem in videos) {
-                                val obj = elem.asJsonObject
-                                val q = if (obj.has("quality") && !obj.get("quality").isJsonNull) obj.get("quality").asString else ""
-                                val fmt = if (obj.has("format") && !obj.get("format").isJsonNull) obj.get("format").asString else ""
-                                val sUrl = if (obj.has("url") && !obj.get("url").isJsonNull) obj.get("url").asString else ""
-                                if ((q.contains("$targetHeight") || q.contains("${targetHeight}p")) && fmt.contains("mp4", ignoreCase = true) && sUrl.isNotBlank()) {
-                                    vTargetUrl = sUrl
-                                    break
-                                }
-                            }
-                            val aUrl = if (audios[0].isJsonObject && audios[0].asJsonObject.has("url") && !audios[0].asJsonObject.get("url").isJsonNull) audios[0].asJsonObject.get("url").asString else null
-                            val finalVUrl = vTargetUrl
-                            if (finalVUrl != null && aUrl != null) {
-                                return ExtractedMediaInfo(
-                                    title = title,
-                                    directStreamUrl = finalVUrl,
-                                    format = requestedFormat,
-                                    thumbnailUrl = thumbUrl,
-                                    audioStreamUrl = aUrl
-                                )
-                            }
-                        }
-
-                        if (videos != null && videos.size() > 0) {
-                            for (elem in videos) {
-                                val obj = elem.asJsonObject
-                                val sUrl = obj.get("url")?.asString ?: ""
-                                if (sUrl.isNotBlank() && (sUrl.contains("proxy.piped") || sUrl.contains("googlevideo.com"))) {
-                                    return ExtractedMediaInfo(
-                                        title = title,
-                                        directStreamUrl = sUrl,
-                                        format = requestedFormat,
-                                        thumbnailUrl = thumbUrl
-                                    )
-                                }
-                            }
-                            val fallbackUrl = videos[0].asJsonObject.get("url")?.asString
-                            if (!fallbackUrl.isNullOrBlank()) {
-                                return ExtractedMediaInfo(
-                                    title = title,
-                                    directStreamUrl = fallbackUrl,
-                                    format = requestedFormat,
-                                    thumbnailUrl = thumbUrl
-                                )
-                            }
-                        }
-                    }
-                }
-            } catch (_: Exception) {}
-        }
+        // 3. Respaldo mediante instancias Piped filtradas
+        extractYouTubeFromPiped(videoId, requestedFormat)?.let { return it }
 
         throw Exception("No se pudo obtener el flujo de descarga de YouTube. Por favor revisa tu conexión a internet.")
     }
 
     /**
-     * Respaldo de emergencia directo para videos de YouTube cuando las conexiones directas
-     * al CDN de Google Video responden con error HTTP 403 (por IP-lock o firmas no resueltas).
-     * Consulta instancias públicas y proxies de Piped para entregar flujos accesibles y libres de bloqueo.
+     * Respaldo de emergencia directo para videos de YouTube cuando el flujo principal falla:
+     * 1) InnerTube VISIONOS (1.02) sin PoToken requerido para flujos GVS
+     * 2) Flujo progresivo oficial (itag 18) de ANDROID (20.10.38)
+     * 3) Instancias públicas de Piped filtrando flujos LBRY / HLS no compatibles
      */
     fun extractEmergencyFallback(url: String, requestedFormat: MediaFormat): ExtractedMediaInfo? {
-        val matcher = YT_VIDEO_ID_PATTERN.matcher(url)
-        val videoId = if (matcher.find()) matcher.group(1) else null ?: return null
+        val videoId = extractYouTubeVideoId(url) ?: return null
 
-        val pipedInstances = listOf(
-            "https://api.piped.private.coffee",
-            "https://pipedapi.ducks.party",
-            "https://pipedapi.tokhmi.xyz"
-        )
+        extractYouTubeInnerTube(videoId, requestedFormat, useVisionOs = true)?.let { return it }
+        extractYouTubeInnerTube(videoId, requestedFormat, useVisionOs = false, forceProgressiveOnly = true)?.let { return it }
 
-        for (host in pipedInstances) {
-            try {
-                val pReq = Request.Builder()
-                    .url("$host/streams/$videoId")
-                    .header("User-Agent", BROWSER_USER_AGENT)
-                    .build()
-
-                client.newCall(pReq).execute().use { resp ->
-                    if (resp.isSuccessful) {
-                        val body = resp.body?.string() ?: ""
-                        val root = JsonParser.parseString(body).asJsonObject
-                        val title = root.get("title")?.asString ?: "YouTube Media"
-                        val thumbUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
-
-                        if (requestedFormat.isAudio) {
-                            val audios = root.getAsJsonArray("audioStreams")
-                            if (audios != null && audios.size() > 0) {
-                                val audioUrls = mutableListOf<String>()
-                                for (elem in audios) {
-                                    val u = elem.asJsonObject.get("url")?.asString
-                                    if (!u.isNullOrBlank()) audioUrls.add(u)
-                                }
-                                if (audioUrls.isNotEmpty()) {
-                                    return ExtractedMediaInfo(
-                                        title = title,
-                                        directStreamUrl = audioUrls.first(),
-                                        format = requestedFormat,
-                                        thumbnailUrl = thumbUrl,
-                                        backupStreamUrls = audioUrls.drop(1)
-                                    )
-                                }
-                            }
-                        }
-
-                        val videos = root.getAsJsonArray("videoStreams")
-                        val audios = root.getAsJsonArray("audioStreams")
-
-                        // Video DASH (1080p y 720p) con audio separado
-                        if (!requestedFormat.isAudio && videos != null && audios != null && audios.size() > 0) {
-                            val targetHeight = if (requestedFormat == MediaFormat.MP4_1080) 1080 else 720
-                            var vTargetUrl: String? = null
-                            for (elem in videos) {
-                                val obj = elem.asJsonObject
-                                val q = if (obj.has("quality") && !obj.get("quality").isJsonNull) obj.get("quality").asString else ""
-                                val fmt = if (obj.has("format") && !obj.get("format").isJsonNull) obj.get("format").asString else ""
-                                val sUrl = if (obj.has("url") && !obj.get("url").isJsonNull) obj.get("url").asString else ""
-                                if ((q.contains("$targetHeight") || q.contains("${targetHeight}p")) && fmt.contains("mp4", ignoreCase = true) && sUrl.isNotBlank()) {
-                                    vTargetUrl = sUrl
-                                    break
-                                }
-                            }
-                            val aUrl = if (audios[0].isJsonObject && audios[0].asJsonObject.has("url") && !audios[0].asJsonObject.get("url").isJsonNull) audios[0].asJsonObject.get("url").asString else null
-                            if (vTargetUrl != null && aUrl != null) {
-                                return ExtractedMediaInfo(
-                                    title = title,
-                                    directStreamUrl = vTargetUrl,
-                                    format = requestedFormat,
-                                    thumbnailUrl = thumbUrl,
-                                    audioStreamUrl = aUrl
-                                )
-                            }
-                        }
-
-                        // Stream integrado progresivo
-                        if (videos != null && videos.size() > 0) {
-                            val candidateVideoUrls = mutableListOf<String>()
-                            for (elem in videos) {
-                                val obj = elem.asJsonObject
-                                val sUrl = obj.get("url")?.asString ?: ""
-                                if (sUrl.isNotBlank()) {
-                                    candidateVideoUrls.add(sUrl)
-                                }
-                            }
-                            if (candidateVideoUrls.isNotEmpty()) {
-                                return ExtractedMediaInfo(
-                                    title = title,
-                                    directStreamUrl = candidateVideoUrls.first(),
-                                    format = requestedFormat,
-                                    thumbnailUrl = thumbUrl,
-                                    backupStreamUrls = candidateVideoUrls.drop(1)
-                                )
-                            }
-                        }
-                    }
-                }
-            } catch (_: Exception) {}
-        }
-        return null
+        return extractYouTubeFromPiped(videoId, requestedFormat)
     }
 
     /**

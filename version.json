@@ -1,19 +1,19 @@
 {
-  "version": "2.5.6",
-  "version_code": 256,
-  "release_date": "2026-11-13",
-  "title": "Aura Player v2.5.6 — Rendimiento Ultra-Fluido a 120 FPS, Audio Focus en Videos y Protección contra OOM",
-  "changelog": "🚀 Caché O(1) en memoria para letras sincronizadas (.lrc): desplazamiento a 120 FPS sin micro-tirones (jank) en bibliotecas de más de 2200 canciones\n🛡️ Streaming seguro por búferes de 64KB en incrustación de carátulas ID3/M4A: eliminación total del riesgo de OutOfMemoryError en sesiones largas y podcasts\n🎵 Gestión inteligente de foco de audio: la música de fondo se pausa automáticamente al reproducir cualquier video en la pestaña Videos\n⚡ Ventana inteligente en persistencia de cola: reducción del tamaño de datos en disco de 1.2MB a 25KB, eliminando riesgo de TransactionTooLargeException\n🎛️ Aislamiento y resiliencia en DSPs: inicialización independiente de Ecualizador, BassBoost, Virtualizer y Super Volumen 300%\n🎬 Miniaturas de video aceleradas por hardware vía MediaStore ContentUris",
+  "version": "2.5.7",
+  "version_code": 257,
+  "release_date": "2026-11-14",
+  "title": "Aura Player & OmniVault v2.5.7 — Descarga de Videos de YouTube sin Error 403 y Eliminación Permanente de Canciones",
+  "changelog": "🎬 Descarga de videos de YouTube 720p/1080p por bloques de 2MB con renovación dinámica de token: elimina por completo el corte al 50%–70% y el error HTTP 403\n🍎 Motor multi-cliente InnerTube (ANDROID 20.10.38 + VISIONOS 1.02) con respaldo progresivo MP4 automático y filtrado de streams rotos en Piped\n🔊 Selección inteligente de audio AAC de alta calidad (itag 140 128kbps) con lista de pistas de respaldo dedicada para remuxing DASH\n🗑️ Corrección total de 'Eliminar canción': borrado inmediato de la biblioteca, bases de datos internas (DownloadDatabase, DownloadManager, AppDatabase), archivos .lrc/.jpg y MediaStore con soporte Scoped Storage\n⚡ Transiciones fluidas y sincronización instantánea con playlists y cola de reproducción al eliminar pistas",
   "android": {
-    "version": "2.5.6",
-    "version_code": 256,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.6/AuraPlayer-v2.5.6-Android.apk",
+    "version": "2.5.7",
+    "version_code": 257,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.7/AuraPlayer-v2.5.7-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.6",
-    "version_code": 256,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.6/AuraPlayer-v2.5.6-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.6/AuraPlayer-v2.5.6-Windows-x64-Portable.zip"
+    "version": "2.5.7",
+    "version_code": 257,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.7/OmniVault-v2.5.7-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.7/OmniVault-v2.5.7-Windows-x64-Portable.zip"
   }
 }

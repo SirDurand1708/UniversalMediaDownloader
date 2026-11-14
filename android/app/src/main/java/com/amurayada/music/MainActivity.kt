@@ -120,6 +120,8 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        } else if ((requestCode == 1003 || requestCode == 1002) && resultCode == android.app.Activity.RESULT_OK) {
+            libraryViewModel.loadLibrary()
         }
     }
     
@@ -133,6 +135,18 @@ class MainActivity : ComponentActivity() {
         } catch (_: Exception) {}
         setupFullScreen()
         handleSharedIntent(intent)
+
+        libraryViewModel.permissionEvent.observe(this) { request ->
+            if (request != null) {
+                try {
+                    startIntentSenderForResult(request.intentSender, 1003, null, 0, 0, 0, null)
+                } catch (e: Exception) {
+                    android.util.Log.e("MainActivity", "Error launching permission IntentSender", e)
+                } finally {
+                    libraryViewModel.clearPermissionEvent()
+                }
+            }
+        }
         
         setContent {
             val themeOverride by settingsViewModel.isDarkThemeOverride.collectAsState()
@@ -288,6 +302,23 @@ fun MusicPlayerApp(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     val context = LocalContext.current
+    val handleDeleteSong: (Song) -> Unit = { song ->
+        if (playbackViewModel.currentSong?.id == song.id) {
+            if (playbackViewModel.queue.size > 1) {
+                playbackViewModel.skipToNext()
+            } else {
+                playbackViewModel.pause()
+            }
+        }
+        playlistViewModel.playlists.value.forEach { playlist ->
+            if (playlist.songIds.contains(song.id)) {
+                playlistViewModel.removeSongFromPlaylist(playlist.id, song.id)
+            }
+        }
+        libraryViewModel.deleteSong(song, context) {
+            android.widget.Toast.makeText(context, "Canción eliminada", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
 
     // Tracker de Navegación para Depuración
     LaunchedEffect(navController) {
@@ -797,34 +828,7 @@ fun MusicPlayerApp(
                         onCreatePlaylist = {
                             navController.navigate(Screen.Playlists.route)
                         },
-                        onDeleteSong = { song ->
-                            scope.launch {
-                                try {
-                                    libraryViewModel.performDeleteSong(song.id)
-                                    android.widget.Toast.makeText(context, "Canción eliminada", android.widget.Toast.LENGTH_SHORT).show()
-                                } catch (e: android.app.RecoverableSecurityException) {
-                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                                        try {
-                                            val intentSender = e.userAction.actionIntent.intentSender
-                                            (context as android.app.Activity).startIntentSenderForResult(
-                                                intentSender, 
-                                                1003,
-                                                null, 
-                                                0, 
-                                                0, 
-                                                0, 
-                                                null
-                                            )
-                                        } catch (ex: Exception) {
-                                            ex.printStackTrace()
-                                        }
-                                    }
-                                } catch (e: Exception) {
-                                    android.widget.Toast.makeText(context, "Error al eliminar", android.widget.Toast.LENGTH_SHORT).show()
-                                    e.printStackTrace()
-                                }
-                            }
-                        },
+                        onDeleteSong = handleDeleteSong,
                         onDeleteDownload = { song ->
                             scope.launch {
                                 (context as MainActivity).downloadViewModel.deleteDownload(song.id)
@@ -1259,34 +1263,7 @@ fun MusicPlayerApp(
                                 }
                             }
                         },
-                        onDeleteSong = { song ->
-                            scope.launch {
-                                try {
-                                    libraryViewModel.performDeleteSong(song.id)
-                                    android.widget.Toast.makeText(context, "Canción eliminada", android.widget.Toast.LENGTH_SHORT).show()
-                                } catch (e: android.app.RecoverableSecurityException) {
-                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                                        try {
-                                            val intentSender = e.userAction.actionIntent.intentSender
-                                            (context as android.app.Activity).startIntentSenderForResult(
-                                                intentSender, 
-                                                1002, 
-                                                null, 
-                                                0, 
-                                                0, 
-                                                0, 
-                                                null
-                                            )
-                                        } catch (ex: Exception) {
-                                            ex.printStackTrace()
-                                        }
-                                    }
-                                } catch (e: Exception) {
-                                    android.widget.Toast.makeText(context, "Error al eliminar", android.widget.Toast.LENGTH_SHORT).show()
-                                    e.printStackTrace()
-                                }
-                            }
-                        },
+                        onDeleteSong = handleDeleteSong,
                         onDownloadSong = { song -> (context as MainActivity).downloadViewModel.downloadSong(song) },
                         onDownloadAlbum = { albumSongs -> (context as MainActivity).downloadViewModel.downloadAlbum(albumSongs) }
                     )

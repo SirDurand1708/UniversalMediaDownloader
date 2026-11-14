@@ -22,7 +22,10 @@ interface DownloadDao {
     
     @Query("DELETE FROM downloads WHERE songId = :songId")
     suspend fun deleteDownloadById(songId: Long)
-    
+
+    @Query("DELETE FROM downloads WHERE localPath = :path")
+    suspend fun deleteDownloadByPath(path: String)
+
     @Query("DELETE FROM downloads")
     suspend fun deleteAllDownloads()
     

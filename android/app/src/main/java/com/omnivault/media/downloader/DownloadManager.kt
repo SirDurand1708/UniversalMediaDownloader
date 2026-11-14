@@ -21,6 +21,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
@@ -122,284 +123,118 @@ class DownloadManager private constructor(private val context: Context) {
             if (tempDownloadFile.exists()) tempDownloadFile.delete()
             if (tempAudioFile.exists()) tempAudioFile.delete()
 
-            val hasSeparateAudio = !info.audioStreamUrl.isNullOrBlank()
-            val mainStreamMaxProgress = if (hasSeparateAudio) 70 else 100
+            var hasSeparateAudio = !item.format.isAudio && !info.audioStreamUrl.isNullOrBlank()
+            val mainStreamMaxProgress = if (hasSeparateAudio) 70 else 95
 
-            // Helper modular con múltiples capas de respaldo (OkHttp + HttpURLConnection + streams alternativos)
-            fun downloadStreamInternal(
-                primaryUrl: String,
-                backupUrls: List<String>,
-                targetFile: File,
-                startPct: Int,
-                endPct: Int,
-                isAudioStream: Boolean
-            ) {
-                val candidateUrls = (listOf(primaryUrl) + backupUrls).filter { it.isNotBlank() }.distinct()
-                var lastError: Exception? = null
-
-                for (streamUrl in candidateUrls) {
-                    if (targetFile.exists()) targetFile.delete()
-
-                    val lowerUrl = streamUrl.lowercase()
-                    val isYouTube = lowerUrl.contains("googlevideo.com") || lowerUrl.contains("youtube.com")
-                    val isTikTok = lowerUrl.contains("tiktok") || lowerUrl.contains("tikwm")
-                    val isAndroidStream = isYouTube && (lowerUrl.contains("c=android") || info.requestHeaders["User-Agent"]?.contains("android", ignoreCase = true) == true)
-                    val hasRangeInUrl = lowerUrl.contains("range=")
-
-                    val ua = when {
-                        isAndroidStream -> "com.google.android.youtube/20.10.38 (Linux; U; Android 11)"
-                        isYouTube -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-                        isTikTok -> "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
-                        else -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-                    }
-
-                    // Método 1: OkHttp con encabezados precisos adaptados al tipo de flujo
-                    try {
-                        val reqBuilder = Request.Builder()
-                            .url(streamUrl)
-                            .header("User-Agent", ua)
-                            .header("Accept", if (isAudioStream) "audio/webm,audio/ogg,audio/wav,audio/*;q=0.9,application/ogg;q=0.7,video/*;q=0.6,*/*;q=0.5" else "*/*")
-                            .header("Accept-Language", "en-US,en;q=0.9,es;q=0.8")
-                            .header("Accept-Encoding", "identity")
-                            .header("Connection", "keep-alive")
-
-                        if (!hasRangeInUrl) {
-                            reqBuilder.header("Range", "bytes=0-")
-                        }
-
-                        // Para clientes Android de YouTube NO se envían Referer ni Sec-Fetch para evitar bloqueos por spoofing
-                        if (isYouTube && !isAndroidStream) {
-                            reqBuilder.header("Referer", "https://www.youtube.com/")
-                            reqBuilder.header("Origin", "https://www.youtube.com")
-                            reqBuilder.header("Sec-Fetch-Dest", if (isAudioStream) "audio" else "video")
-                            reqBuilder.header("Sec-Fetch-Mode", "no-cors")
-                            reqBuilder.header("Sec-Fetch-Site", "cross-site")
-                        } else if (isTikTok) {
-                            reqBuilder.header("Referer", "https://www.tikwm.com/")
-                        }
-
-                        for ((k, v) in info.requestHeaders) {
-                            if (!k.equals("Range", ignoreCase = true) && !k.equals("Accept-Encoding", ignoreCase = true) && !k.equals("User-Agent", ignoreCase = true)) {
-                                if (!isAndroidStream || (!k.equals("Referer", ignoreCase = true) && !k.equals("Origin", ignoreCase = true))) {
-                                    reqBuilder.header(k, v)
-                                }
-                            }
-                        }
-
-                        val request = reqBuilder.build()
-                        client.newCall(request).execute().use { response ->
-                            if (response.code == 403) {
-                                throw Exception("Servidor respondió con código HTTP: 403")
-                            }
-                            if (!response.isSuccessful && response.code != 206) {
-                                throw Exception("Servidor respondió con código HTTP: ${response.code}")
-                            }
-
-                            val contentType = response.header("Content-Type") ?: ""
-                            if (contentType.contains("text/html", ignoreCase = true)) {
-                                throw Exception("El enlace proporcionó una página web en lugar de un flujo multimedia.")
-                            }
-
-                            val body = response.body ?: throw Exception("Cuerpo de respuesta vacío")
-                            val totalBytes = body.contentLength()
-                            val inputStream = BufferedInputStream(body.byteStream(), 65536)
-                            val outputStream = BufferedOutputStream(FileOutputStream(targetFile), 65536)
-
-                            val buffer = ByteArray(65536)
-                            var bytesRead: Int
-                            var totalRead = 0L
-                            var lastTime = System.currentTimeMillis()
-                            var lastBytes = 0L
-
-                            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                                outputStream.write(buffer, 0, bytesRead)
-                                totalRead += bytesRead
-
-                                val now = System.currentTimeMillis()
-                                val timeDiff = now - lastTime
-                                if (timeDiff >= 400) {
-                                    val speedBytesPerSec = ((totalRead - lastBytes) * 1000.0) / timeDiff
-                                    item.speedText = String.format("%.2f MB/s", speedBytesPerSec / (1024 * 1024))
-                                    if (totalBytes > 0) {
-                                        val ratio = (totalRead.toDouble() / totalBytes).coerceIn(0.0, 1.0)
-                                        item.progress = (startPct + ratio * (endPct - startPct)).toInt().coerceIn(1, 99)
-                                    }
-                                    lastTime = now
-                                    lastBytes = totalRead
-                                    notifyUpdate(item)
-                                }
-                            }
-
-                            outputStream.flush()
-                            outputStream.close()
-                            inputStream.close()
-                        }
-
-                        if (targetFile.exists() && targetFile.length() > 0L) {
-                            return // Descarga con OkHttp exitosa
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.w("DownloadManager", "OkHttp download attempt failed: ${e.message}")
-                        lastError = e
-                    }
-
-                    // Método 2 (Fallback): HttpURLConnection nativo con headers adaptados
-                    try {
-                        if (targetFile.exists()) targetFile.delete()
-                        val url = java.net.URL(streamUrl)
-                        val connection = url.openConnection() as java.net.HttpURLConnection
-                        connection.requestMethod = "GET"
-                        connection.instanceFollowRedirects = true
-                        connection.useCaches = false
-                        connection.connectTimeout = 30000
-                        connection.readTimeout = 120000
-
-                        connection.setRequestProperty("User-Agent", ua)
-                        connection.setRequestProperty("Accept", if (isAudioStream) "audio/webm,audio/ogg,audio/wav,audio/*;q=0.9,application/ogg;q=0.7,video/*;q=0.6,*/*;q=0.5" else "*/*")
-                        connection.setRequestProperty("Accept-Language", "en-US,en;q=0.9,es;q=0.8")
-                        connection.setRequestProperty("Accept-Encoding", "identity")
-                        connection.setRequestProperty("Connection", "keep-alive")
-
-                        if (!hasRangeInUrl) {
-                            connection.setRequestProperty("Range", "bytes=0-")
-                        }
-
-                        if (isYouTube && !isAndroidStream) {
-                            connection.setRequestProperty("Referer", "https://www.youtube.com/")
-                            connection.setRequestProperty("Origin", "https://www.youtube.com")
-                            connection.setRequestProperty("Sec-Fetch-Dest", if (isAudioStream) "audio" else "video")
-                            connection.setRequestProperty("Sec-Fetch-Mode", "no-cors")
-                            connection.setRequestProperty("Sec-Fetch-Site", "cross-site")
-                        } else if (isTikTok) {
-                            connection.setRequestProperty("Referer", "https://www.tikwm.com/")
-                        }
-
-                        for ((k, v) in info.requestHeaders) {
-                            if (!k.equals("Range", ignoreCase = true) && !k.equals("Accept-Encoding", ignoreCase = true) && !k.equals("User-Agent", ignoreCase = true)) {
-                                if (!isAndroidStream || (!k.equals("Referer", ignoreCase = true) && !k.equals("Origin", ignoreCase = true))) {
-                                    connection.setRequestProperty(k, v)
-                                }
-                            }
-                        }
-
-                        val responseCode = connection.responseCode
-                        if (responseCode != java.net.HttpURLConnection.HTTP_OK && responseCode != 206) {
-                            throw Exception("HttpURLConnection respondió con código HTTP: $responseCode")
-                        }
-
-                        val totalBytes = connection.contentLength.toLong()
-                        val inputStream = BufferedInputStream(connection.inputStream, 65536)
-                        val outputStream = BufferedOutputStream(FileOutputStream(targetFile), 65536)
-
-                        val buffer = ByteArray(65536)
-                        var bytesRead: Int
-                        var totalRead = 0L
-                        var lastTime = System.currentTimeMillis()
-                        var lastBytes = 0L
-
-                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                            outputStream.write(buffer, 0, bytesRead)
-                            totalRead += bytesRead
-
-                            val now = System.currentTimeMillis()
-                            val timeDiff = now - lastTime
-                            if (timeDiff >= 400) {
-                                val speedBytesPerSec = ((totalRead - lastBytes) * 1000.0) / timeDiff
-                                item.speedText = String.format("%.2f MB/s", speedBytesPerSec / (1024 * 1024))
-                                if (totalBytes > 0) {
-                                    val ratio = (totalRead.toDouble() / totalBytes).coerceIn(0.0, 1.0)
-                                    item.progress = (startPct + ratio * (endPct - startPct)).toInt().coerceIn(1, 99)
-                                }
-                                lastTime = now
-                                lastBytes = totalRead
-                                notifyUpdate(item)
-                            }
-                        }
-
-                        outputStream.flush()
-                        outputStream.close()
-                        inputStream.close()
-                        connection.disconnect()
-
-                        if (targetFile.exists() && targetFile.length() > 0L) {
-                            return // Descarga con HttpURLConnection exitosa
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.w("DownloadManager", "HttpURLConnection fallback failed: ${e.message}")
-                        lastError = e
-                    }
-
-                    // Método 3: Conexión con encabezados limpios mínimos (resuelve rechazos por spoofing en CDN)
-                    try {
-                        if (targetFile.exists()) targetFile.delete()
-                        val minimalReq = Request.Builder()
-                            .url(streamUrl)
-                            .header("User-Agent", ua)
-                            .apply {
-                                if (!hasRangeInUrl) header("Range", "bytes=0-")
-                            }
-                            .build()
-                        client.newCall(minimalReq).execute().use { response ->
-                            if (response.isSuccessful || response.code == 206) {
-                                val body = response.body
-                                if (body != null) {
-                                    val inStream = BufferedInputStream(body.byteStream(), 65536)
-                                    val outStream = BufferedOutputStream(FileOutputStream(targetFile), 65536)
-                                    val buf = ByteArray(65536)
-                                    var readBytes: Int
-                                    while (inStream.read(buf).also { readBytes = it } != -1) {
-                                        outStream.write(buf, 0, readBytes)
-                                    }
-                                    outStream.flush()
-                                    outStream.close()
-                                    inStream.close()
-                                    if (targetFile.exists() && targetFile.length() > 0L) {
-                                        return // Descarga limpia mínima exitosa
-                                    }
-                                }
-                            }
-                        }
-                    } catch (_: Exception) {}
-                }
-
-                throw lastError ?: Exception("No se pudo descargar el flujo multimedia después de probar todos los servidores de respaldo.")
-            }
-
-            // Descarga de flujos principales con failover automático a red de respaldo en caso de HTTP 403
+            // Descarga de flujos principales con soporte chunked + failover automático
             var primaryDownloadSuccess = false
             try {
-                // Descarga de flujo principal (video o audio)
-                downloadStreamInternal(info.directStreamUrl, info.backupStreamUrls, tempDownloadFile, 1, mainStreamMaxProgress, item.format.isAudio)
+                downloadStreamInternal(
+                    item = item,
+                    primaryUrl = info.directStreamUrl,
+                    backupUrls = info.backupStreamUrls,
+                    requestHeaders = info.requestHeaders,
+                    targetFile = tempDownloadFile,
+                    startPct = 1,
+                    endPct = mainStreamMaxProgress,
+                    isAudioStream = item.format.isAudio
+                )
                 if (hasSeparateAudio) {
                     item.speedText = "Descargando audio HQ…"
                     notifyUpdate(item)
-                    downloadStreamInternal(info.audioStreamUrl!!, info.backupAudioUrls, tempAudioFile, 70, 90, true)
+                    downloadStreamInternal(
+                        item = item,
+                        primaryUrl = info.audioStreamUrl!!,
+                        backupUrls = info.backupAudioUrls,
+                        requestHeaders = info.requestHeaders,
+                        targetFile = tempAudioFile,
+                        startPct = 70,
+                        endPct = 90,
+                        isAudioStream = true
+                    )
                 }
                 primaryDownloadSuccess = true
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                android.util.Log.w("DownloadManager", "Primary download failed: ${e.message}. Launching emergency proxy fallback...")
+                android.util.Log.w("DownloadManager", "Primary download failed: ${e.message}. Launching emergency fallback...")
             }
 
-            // Red de Respaldo de Emergencia (Proxy Piped): si Google Video CDN bloquea con HTTP 403
+            // Respaldo de Emergencia multi-etapa:
+            // 1) VISIONOS 1.02 / Progresivo ANDROID / Proxy Piped filtrado
+            // 2) Flujo MP4 progresivo directo (si el muxing DASH falló en alguna pista)
             if (!primaryDownloadSuccess) {
                 item.speedText = "Conectando servidor de respaldo…"
                 notifyUpdate(item)
 
+                var fallbackSuccess = false
                 val fallbackInfo = MediaExtractor.extractEmergencyFallback(item.url, item.format)
                 if (fallbackInfo != null) {
-                    if (tempDownloadFile.exists()) tempDownloadFile.delete()
-                    if (tempAudioFile.exists()) tempAudioFile.delete()
+                    try {
+                        if (tempDownloadFile.exists()) tempDownloadFile.delete()
+                        if (tempAudioFile.exists()) tempAudioFile.delete()
 
-                    val fallbackHasSeparateAudio = !fallbackInfo.audioStreamUrl.isNullOrBlank()
-                    val fallbackMainMaxProgress = if (fallbackHasSeparateAudio) 70 else 100
+                        hasSeparateAudio = !item.format.isAudio && !fallbackInfo.audioStreamUrl.isNullOrBlank()
+                        val fallbackMainMaxProgress = if (hasSeparateAudio) 70 else 95
 
-                    downloadStreamInternal(fallbackInfo.directStreamUrl, fallbackInfo.backupStreamUrls, tempDownloadFile, 1, fallbackMainMaxProgress, item.format.isAudio)
-                    if (fallbackHasSeparateAudio) {
-                        item.speedText = "Descargando audio de respaldo…"
-                        notifyUpdate(item)
-                        downloadStreamInternal(fallbackInfo.audioStreamUrl!!, fallbackInfo.backupAudioUrls, tempAudioFile, 70, 90, true)
+                        downloadStreamInternal(
+                            item = item,
+                            primaryUrl = fallbackInfo.directStreamUrl,
+                            backupUrls = fallbackInfo.backupStreamUrls,
+                            requestHeaders = fallbackInfo.requestHeaders,
+                            targetFile = tempDownloadFile,
+                            startPct = 1,
+                            endPct = fallbackMainMaxProgress,
+                            isAudioStream = item.format.isAudio
+                        )
+                        if (hasSeparateAudio) {
+                            item.speedText = "Descargando audio de respaldo…"
+                            notifyUpdate(item)
+                            downloadStreamInternal(
+                                item = item,
+                                primaryUrl = fallbackInfo.audioStreamUrl!!,
+                                backupUrls = fallbackInfo.backupAudioUrls,
+                                requestHeaders = fallbackInfo.requestHeaders,
+                                targetFile = tempAudioFile,
+                                startPct = 70,
+                                endPct = 90,
+                                isAudioStream = true
+                            )
+                        }
+                        fallbackSuccess = true
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        android.util.Log.w("DownloadManager", "Emergency fallback failed: ${e.message}")
                     }
-                } else {
+                }
+
+                if (!fallbackSuccess && !item.format.isAudio && info.progressiveFallbackUrls.isNotEmpty()) {
+                    try {
+                        if (tempDownloadFile.exists()) tempDownloadFile.delete()
+                        if (tempAudioFile.exists()) tempAudioFile.delete()
+                        hasSeparateAudio = false
+                        item.speedText = "Descargando versión compatible MP4…"
+                        notifyUpdate(item)
+                        downloadStreamInternal(
+                            item = item,
+                            primaryUrl = info.progressiveFallbackUrls.first(),
+                            backupUrls = info.progressiveFallbackUrls.drop(1),
+                            requestHeaders = info.requestHeaders,
+                            targetFile = tempDownloadFile,
+                            startPct = 1,
+                            endPct = 95,
+                            isAudioStream = false
+                        )
+                        fallbackSuccess = true
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        android.util.Log.w("DownloadManager", "Progressive fallback failed: ${e.message}")
+                    }
+                }
+
+                if (!fallbackSuccess) {
                     throw Exception("No se pudo descargar el video debido a restricciones del servidor (HTTP 403). Por favor intenta de nuevo en unos momentos.")
                 }
             }
@@ -557,6 +392,448 @@ class DownloadManager private constructor(private val context: Context) {
         }
     }
 
+    private fun extractClenFromUrl(streamUrl: String): Long? {
+        return Regex("""[?&]clen=(\d+)""").find(streamUrl)?.groupValues?.get(1)?.toLongOrNull()
+    }
+
+    private fun extractItagFromUrl(streamUrl: String): Int? {
+        return Regex("""[?&]itag=(\d+)""").find(streamUrl)?.groupValues?.get(1)?.toIntOrNull()
+    }
+
+    private fun buildUrlWithRange(rawUrl: String, start: Long, end: Long): String {
+        val cleaned = rawUrl.replace(Regex("""([?&])range=[^&]*""")) { m ->
+            if (m.groupValues[1] == "?") "?" else ""
+        }.replace("?&", "?").trimEnd('&', '?')
+        val sep = if (cleaned.contains("?")) "&" else "?"
+        return "${cleaned}${sep}range=${start}-${end}"
+    }
+
+    private fun resolveStreamHeaders(
+        streamUrl: String,
+        sourceHeaders: Map<String, String>,
+        isAudioStream: Boolean
+    ): Map<String, String> {
+        val lowerUrl = streamUrl.lowercase()
+        val isYouTube = lowerUrl.contains("googlevideo.com") || lowerUrl.contains("youtube.com")
+        val isTikTok = lowerUrl.contains("tiktok") || lowerUrl.contains("tikwm")
+        val isVisionOs = isYouTube && lowerUrl.contains("c=visionos")
+        val isIos = isYouTube && lowerUrl.contains("c=ios")
+        val isAndroid = isYouTube && (lowerUrl.contains("c=android") || (!isVisionOs && !isIos && sourceHeaders["User-Agent"]?.contains("android", ignoreCase = true) == true))
+        val isNativeMobileClient = isAndroid || isVisionOs || isIos
+
+        val ua = when {
+            isAndroid -> "com.google.android.youtube/20.10.38 (Linux; U; Android 14)"
+            isVisionOs -> "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"
+            isIos -> "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)"
+            isYouTube -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            isTikTok -> "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+            else -> sourceHeaders["User-Agent"] ?: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+        }
+
+        val headers = LinkedHashMap<String, String>()
+        headers["User-Agent"] = ua
+        headers["Accept"] = if (isAudioStream) {
+            "audio/webm,audio/ogg,audio/wav,audio/*;q=0.9,application/ogg;q=0.7,video/*;q=0.6,*/*;q=0.5"
+        } else {
+            "*/*"
+        }
+        headers["Accept-Language"] = "en-US,en;q=0.9,es;q=0.8"
+        headers["Accept-Encoding"] = "identity"
+        headers["Connection"] = "keep-alive"
+
+        if (isYouTube && !isNativeMobileClient) {
+            headers["Referer"] = "https://www.youtube.com/"
+            headers["Origin"] = "https://www.youtube.com"
+            headers["Sec-Fetch-Dest"] = if (isAudioStream) "audio" else "video"
+            headers["Sec-Fetch-Mode"] = "no-cors"
+            headers["Sec-Fetch-Site"] = "cross-site"
+        } else if (isTikTok) {
+            headers["Referer"] = "https://www.tikwm.com/"
+        }
+
+        for ((k, v) in sourceHeaders) {
+            if (k.equals("Range", ignoreCase = true) || k.equals("Accept-Encoding", ignoreCase = true) || k.equals("User-Agent", ignoreCase = true)) {
+                continue
+            }
+            if (isNativeMobileClient && (k.equals("Referer", ignoreCase = true) || k.equals("Origin", ignoreCase = true))) {
+                continue
+            }
+            headers[k] = v
+        }
+        return headers
+    }
+
+    private suspend fun downloadYouTubeChunkedStream(
+        item: DownloadItem,
+        initialUrl: String,
+        initialHeaders: Map<String, String>,
+        targetFile: File,
+        startPct: Int,
+        endPct: Int,
+        isAudioStream: Boolean,
+        totalBytes: Long
+    ) {
+        val targetItag = extractItagFromUrl(initialUrl)
+        val chunkSize = 2 * 1024 * 1024L
+        var activeUrl = initialUrl
+        var activeHeaders = initialHeaders
+        var downloadedBytes = 0L
+        var chunksSinceRefresh = 0
+        var lastNotifyTime = System.currentTimeMillis()
+        var lastNotifyBytes = 0L
+
+        if (targetFile.exists()) targetFile.delete()
+
+        BufferedOutputStream(FileOutputStream(targetFile, false), 65536).use { outStream ->
+            while (downloadedBytes < totalBytes) {
+                currentCoroutineContext().ensureActive()
+                val start = downloadedBytes
+                val end = minOf(start + chunkSize - 1, totalBytes - 1)
+                val expectedChunkBytes = end - start + 1
+
+                // Renovar token antes del umbral de cuota (~18 MB en cliente ANDROID)
+                if (chunksSinceRefresh >= 8 && activeUrl.contains("c=ANDROID", ignoreCase = true)) {
+                    MediaExtractor.refreshYouTubeStreamUrl(
+                        url = item.url,
+                        requestedFormat = item.format,
+                        isAudioStream = isAudioStream,
+                        preferVisionOs = false,
+                        targetItag = targetItag
+                    )?.let { (refreshedUrl, refreshedHeaders) ->
+                        val refreshedClen = extractClenFromUrl(refreshedUrl)
+                        if (refreshedClen == null || refreshedClen == totalBytes) {
+                            activeUrl = refreshedUrl
+                            activeHeaders = refreshedHeaders
+                            chunksSinceRefresh = 0
+                        }
+                    }
+                }
+
+                var chunkCompleted = false
+                var lastChunkError: Exception? = null
+
+                for (attempt in 0 until 4) {
+                    currentCoroutineContext().ensureActive()
+                    if (attempt > 0) {
+                        delay(250L * attempt)
+                        MediaExtractor.refreshYouTubeStreamUrl(
+                            url = item.url,
+                            requestedFormat = item.format,
+                            isAudioStream = isAudioStream,
+                            preferVisionOs = (attempt >= 2),
+                            targetItag = targetItag
+                        )?.let { (refreshedUrl, refreshedHeaders) ->
+                            val refreshedClen = extractClenFromUrl(refreshedUrl)
+                            if (refreshedClen == null || refreshedClen == totalBytes) {
+                                activeUrl = refreshedUrl
+                                activeHeaders = refreshedHeaders
+                                chunksSinceRefresh = 0
+                            }
+                        }
+                    }
+
+                    try {
+                        val lowerActive = activeUrl.lowercase()
+                        val useRangeParam = lowerActive.contains("c=android") || lowerActive.contains("c=ios")
+                        val reqUrl = if (useRangeParam) buildUrlWithRange(activeUrl, start, end) else activeUrl
+                        val headers = resolveStreamHeaders(activeUrl, activeHeaders, isAudioStream)
+
+                        val reqBuilder = Request.Builder().url(reqUrl)
+                        for ((k, v) in headers) {
+                            reqBuilder.header(k, v)
+                        }
+                        if (!useRangeParam) {
+                            reqBuilder.header("Range", "bytes=$start-$end")
+                        }
+
+                        client.newCall(reqBuilder.build()).execute().use { response ->
+                            if (response.code == 403) {
+                                throw Exception("Servidor respondió con código HTTP: 403")
+                            }
+                            if (!response.isSuccessful && response.code != 206) {
+                                throw Exception("Servidor respondió con código HTTP: ${response.code}")
+                            }
+                            val contentType = response.header("Content-Type") ?: ""
+                            if (contentType.contains("text/html", ignoreCase = true)) {
+                                throw Exception("El enlace proporcionó una página web en lugar de un flujo multimedia.")
+                            }
+
+                            val body = response.body ?: throw Exception("Cuerpo de respuesta vacío")
+                            val chunkBuffer = ByteArrayOutputStream(expectedChunkBytes.toInt())
+                            BufferedInputStream(body.byteStream(), 65536).use { inStream ->
+                                val buf = ByteArray(65536)
+                                var bytesRead: Int
+                                while (inStream.read(buf).also { bytesRead = it } != -1) {
+                                    currentCoroutineContext().ensureActive()
+                                    chunkBuffer.write(buf, 0, bytesRead)
+                                    if (chunkBuffer.size().toLong() > expectedChunkBytes + 4096L) {
+                                        throw Exception("El servidor ignoró el rango solicitado")
+                                    }
+
+                                    val now = System.currentTimeMillis()
+                                    val timeDiff = now - lastNotifyTime
+                                    if (timeDiff >= 300) {
+                                        val currentTotal = downloadedBytes + chunkBuffer.size()
+                                        val speedBytesPerSec = ((currentTotal - lastNotifyBytes).coerceAtLeast(0L) * 1000.0) / timeDiff
+                                        item.speedText = String.format("%.2f MB/s", speedBytesPerSec / (1024 * 1024))
+                                        val ratio = (currentTotal.toDouble() / totalBytes).coerceIn(0.0, 1.0)
+                                        item.progress = (startPct + ratio * (endPct - startPct)).toInt().coerceIn(1, 99)
+                                        lastNotifyTime = now
+                                        lastNotifyBytes = currentTotal
+                                        notifyUpdate(item)
+                                    }
+                                }
+                            }
+
+                            val chunkBytes = chunkBuffer.toByteArray()
+                            if (chunkBytes.size.toLong() != expectedChunkBytes) {
+                                throw Exception("Fragmento incompleto (${chunkBytes.size}/$expectedChunkBytes bytes)")
+                            }
+                            outStream.write(chunkBytes)
+                            downloadedBytes += chunkBytes.size
+                            chunksSinceRefresh++
+                            chunkCompleted = true
+                        }
+                        if (chunkCompleted) break
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        android.util.Log.w("DownloadManager", "Chunk $start-$end attempt $attempt failed: ${e.message}")
+                        lastChunkError = e
+                    }
+                }
+
+                if (!chunkCompleted) {
+                    throw lastChunkError ?: Exception("Error descargando fragmento de YouTube")
+                }
+            }
+            outStream.flush()
+        }
+
+        item.progress = endPct.coerceIn(1, 99)
+        notifyUpdate(item)
+    }
+
+    private suspend fun downloadStreamInternal(
+        item: DownloadItem,
+        primaryUrl: String,
+        backupUrls: List<String>,
+        requestHeaders: Map<String, String>,
+        targetFile: File,
+        startPct: Int,
+        endPct: Int,
+        isAudioStream: Boolean
+    ) {
+        val candidateUrls = (listOf(primaryUrl) + backupUrls).filter { it.isNotBlank() }.distinct()
+        var lastError: Exception? = null
+
+        for (streamUrl in candidateUrls) {
+            currentCoroutineContext().ensureActive()
+            if (targetFile.exists()) targetFile.delete()
+
+            val lowerUrl = streamUrl.lowercase()
+            val clen = if (lowerUrl.contains("googlevideo.com")) extractClenFromUrl(streamUrl) else null
+            if (clen != null && clen > 0L) {
+                try {
+                    downloadYouTubeChunkedStream(
+                        item = item,
+                        initialUrl = streamUrl,
+                        initialHeaders = requestHeaders,
+                        targetFile = targetFile,
+                        startPct = startPct,
+                        endPct = endPct,
+                        isAudioStream = isAudioStream,
+                        totalBytes = clen
+                    )
+                    if (targetFile.exists() && targetFile.length() >= clen) {
+                        return
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    android.util.Log.w("DownloadManager", "Chunked download failed: ${e.message}")
+                    lastError = e
+                    if (targetFile.exists()) targetFile.delete()
+                }
+            }
+
+            val headers = resolveStreamHeaders(streamUrl, requestHeaders, isAudioStream)
+            val hasRangeInUrl = lowerUrl.contains("range=")
+
+            // Método 1: OkHttp con encabezados precisos adaptados al tipo de flujo
+            try {
+                val reqBuilder = Request.Builder().url(streamUrl)
+                for ((k, v) in headers) {
+                    reqBuilder.header(k, v)
+                }
+                if (!hasRangeInUrl) {
+                    reqBuilder.header("Range", "bytes=0-")
+                }
+
+                client.newCall(reqBuilder.build()).execute().use { response ->
+                    if (response.code == 403) {
+                        throw Exception("Servidor respondió con código HTTP: 403")
+                    }
+                    if (!response.isSuccessful && response.code != 206) {
+                        throw Exception("Servidor respondió con código HTTP: ${response.code}")
+                    }
+
+                    val contentType = response.header("Content-Type") ?: ""
+                    if (contentType.contains("text/html", ignoreCase = true)) {
+                        throw Exception("El enlace proporcionó una página web en lugar de un flujo multimedia.")
+                    }
+
+                    val body = response.body ?: throw Exception("Cuerpo de respuesta vacío")
+                    val totalBytes = body.contentLength()
+                    BufferedInputStream(body.byteStream(), 65536).use { inputStream ->
+                        BufferedOutputStream(FileOutputStream(targetFile), 65536).use { outputStream ->
+                            val buffer = ByteArray(65536)
+                            var bytesRead: Int
+                            var totalRead = 0L
+                            var lastTime = System.currentTimeMillis()
+                            var lastBytes = 0L
+
+                            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                                currentCoroutineContext().ensureActive()
+                                outputStream.write(buffer, 0, bytesRead)
+                                totalRead += bytesRead
+
+                                val now = System.currentTimeMillis()
+                                val timeDiff = now - lastTime
+                                if (timeDiff >= 400) {
+                                    val speedBytesPerSec = ((totalRead - lastBytes) * 1000.0) / timeDiff
+                                    item.speedText = String.format("%.2f MB/s", speedBytesPerSec / (1024 * 1024))
+                                    if (totalBytes > 0) {
+                                        val ratio = (totalRead.toDouble() / totalBytes).coerceIn(0.0, 1.0)
+                                        item.progress = (startPct + ratio * (endPct - startPct)).toInt().coerceIn(1, 99)
+                                    }
+                                    lastTime = now
+                                    lastBytes = totalRead
+                                    notifyUpdate(item)
+                                }
+                            }
+                            outputStream.flush()
+                        }
+                    }
+                }
+
+                if (targetFile.exists() && targetFile.length() > 0L) {
+                    return
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.w("DownloadManager", "OkHttp download attempt failed: ${e.message}")
+                lastError = e
+            }
+
+            // Método 2 (Fallback): HttpURLConnection nativo con headers adaptados
+            var connection: java.net.HttpURLConnection? = null
+            try {
+                if (targetFile.exists()) targetFile.delete()
+                val url = java.net.URL(streamUrl)
+                connection = url.openConnection() as java.net.HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.instanceFollowRedirects = true
+                connection.useCaches = false
+                connection.connectTimeout = 30000
+                connection.readTimeout = 120000
+
+                for ((k, v) in headers) {
+                    connection.setRequestProperty(k, v)
+                }
+                if (!hasRangeInUrl) {
+                    connection.setRequestProperty("Range", "bytes=0-")
+                }
+
+                val responseCode = connection.responseCode
+                if (responseCode != java.net.HttpURLConnection.HTTP_OK && responseCode != 206) {
+                    throw Exception("HttpURLConnection respondió con código HTTP: $responseCode")
+                }
+
+                val totalBytes = connection.contentLength.toLong()
+                BufferedInputStream(connection.inputStream, 65536).use { inputStream ->
+                    BufferedOutputStream(FileOutputStream(targetFile), 65536).use { outputStream ->
+                        val buffer = ByteArray(65536)
+                        var bytesRead: Int
+                        var totalRead = 0L
+                        var lastTime = System.currentTimeMillis()
+                        var lastBytes = 0L
+
+                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                            currentCoroutineContext().ensureActive()
+                            outputStream.write(buffer, 0, bytesRead)
+                            totalRead += bytesRead
+
+                            val now = System.currentTimeMillis()
+                            val timeDiff = now - lastTime
+                            if (timeDiff >= 400) {
+                                val speedBytesPerSec = ((totalRead - lastBytes) * 1000.0) / timeDiff
+                                item.speedText = String.format("%.2f MB/s", speedBytesPerSec / (1024 * 1024))
+                                if (totalBytes > 0) {
+                                    val ratio = (totalRead.toDouble() / totalBytes).coerceIn(0.0, 1.0)
+                                    item.progress = (startPct + ratio * (endPct - startPct)).toInt().coerceIn(1, 99)
+                                }
+                                lastTime = now
+                                lastBytes = totalRead
+                                notifyUpdate(item)
+                            }
+                        }
+                        outputStream.flush()
+                    }
+                }
+
+                if (targetFile.exists() && targetFile.length() > 0L) {
+                    return
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.w("DownloadManager", "HttpURLConnection fallback failed: ${e.message}")
+                lastError = e
+            } finally {
+                try { connection?.disconnect() } catch (_: Exception) {}
+            }
+
+            // Método 3: Conexión con encabezados limpios mínimos
+            try {
+                if (targetFile.exists()) targetFile.delete()
+                val minimalReq = Request.Builder()
+                    .url(streamUrl)
+                    .header("User-Agent", headers["User-Agent"] ?: "Mozilla/5.0")
+                    .apply {
+                        if (!hasRangeInUrl) header("Range", "bytes=0-")
+                    }
+                    .build()
+                client.newCall(minimalReq).execute().use { response ->
+                    if (response.isSuccessful || response.code == 206) {
+                        val body = response.body
+                        if (body != null) {
+                            BufferedInputStream(body.byteStream(), 65536).use { inStream ->
+                                BufferedOutputStream(FileOutputStream(targetFile), 65536).use { outStream ->
+                                    val buf = ByteArray(65536)
+                                    var readBytes: Int
+                                    while (inStream.read(buf).also { readBytes = it } != -1) {
+                                        currentCoroutineContext().ensureActive()
+                                        outStream.write(buf, 0, readBytes)
+                                    }
+                                    outStream.flush()
+                                }
+                            }
+                            if (targetFile.exists() && targetFile.length() > 0L) {
+                                return
+                            }
+                        }
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {}
+        }
+
+        throw lastError ?: Exception("No se pudo descargar el flujo multimedia después de probar todos los servidores de respaldo.")
+    }
+
     private fun notifyUpdate(item: DownloadItem) {
         // Notificar a oyente principal
         onDownloadUpdatedListener?.invoke(item)
@@ -570,23 +847,50 @@ class DownloadManager private constructor(private val context: Context) {
     }
 
     private fun addToHistory(item: DownloadItem) {
-        historyList.add(0, item)
+        synchronized(historyList) {
+            historyList.add(0, item)
+        }
         saveHistory()
-        onHistoryUpdatedListener?.invoke(historyList)
+        onHistoryUpdatedListener?.invoke(historyList.toList())
     }
 
     fun removeHistoryItem(item: DownloadItem) {
-        historyList.removeAll { it.id == item.id }
+        synchronized(historyList) {
+            historyList.removeAll { it.id == item.id }
+        }
         // Eliminar archivo si existe
         item.localFilePath?.let { File(it).delete() }
         saveHistory()
-        onHistoryUpdatedListener?.invoke(historyList)
+        onHistoryUpdatedListener?.invoke(historyList.toList())
+    }
+
+    fun removeHistoryByPath(path: String) {
+        if (path.isBlank()) return
+        val targetName = File(path).name
+        var removed = false
+        synchronized(historyList) {
+            removed = historyList.removeAll { item ->
+                val itemPath = item.localFilePath ?: return@removeAll false
+                itemPath.equals(path, ignoreCase = true) ||
+                    (targetName.isNotBlank() && File(itemPath).name.equals(targetName, ignoreCase = true))
+            }
+        }
+        try {
+            val file = File(path)
+            if (file.exists()) file.delete()
+        } catch (_: Exception) {}
+        if (removed) {
+            saveHistory()
+            onHistoryUpdatedListener?.invoke(historyList.toList())
+        }
     }
 
     fun clearAllHistory() {
-        historyList.clear()
+        synchronized(historyList) {
+            historyList.clear()
+        }
         saveHistory()
-        onHistoryUpdatedListener?.invoke(historyList)
+        onHistoryUpdatedListener?.invoke(historyList.toList())
     }
 
     suspend fun syncWithDeviceMedia(context: Context): Pair<Int, Int> = withContext(Dispatchers.IO) {
