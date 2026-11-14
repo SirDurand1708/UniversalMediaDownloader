@@ -867,7 +867,7 @@ object MediaExtractor {
                     .build()
 
                 client.newCall(pReq).execute().use { resp ->
-                    if (!resp.isSuccessful) continue
+                    if (!resp.isSuccessful) return@use
                     val body = resp.body?.string() ?: ""
                     val root = JsonParser.parseString(body).asJsonObject
                     val title = root.get("title")?.takeIf { !it.isJsonNull }?.asString ?: "YouTube Media"
@@ -893,7 +893,7 @@ object MediaExtractor {
                                 backupStreamUrls = audioUrls.drop(1)
                             )
                         }
-                        continue
+                        return@use
                     }
 
                     val videos = root.getAsJsonArray("videoStreams")
