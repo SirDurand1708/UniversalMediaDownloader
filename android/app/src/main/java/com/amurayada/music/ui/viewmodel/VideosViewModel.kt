@@ -63,8 +63,47 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                val scanned = LocalMediaScanner.scanDeviceVideo(getApplication())
-                _rawVideos.value = scanned
+                val app = getApplication<Application>()
+                val scanned = LocalMediaScanner.scanDeviceVideo(app)
+                val dbVideos = withContext(Dispatchers.IO) {
+                    val dao = com.amurayada.music.data.database.DownloadDatabase.getDatabase(app).downloadDao()
+                    dao.getAllDownloads().first()
+                        .filter { entity ->
+                            val path = entity.localPath ?: ""
+                            val lower = path.lowercase()
+                            val mime = entity.mimeType ?: if (path.startsWith("content://")) {
+                                try { app.contentResolver.getType(android.net.Uri.parse(path)) } catch (_: Exception) { null }
+                            } else null
+                            entity.isVideo ||
+                                mime?.startsWith("video/", ignoreCase = true) == true ||
+                                path.contains("/video/", ignoreCase = true) ||
+                                lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".webm")
+                        }
+                        .mapNotNull { entity ->
+                            val path = entity.localPath ?: return@mapNotNull null
+                            val sec = (entity.duration / 1000L).coerceAtLeast(0L)
+                            val durFormatted = if (sec > 0L) String.format("%02d:%02d", sec / 60, sec % 60) else ""
+                            DownloadItem(
+                                id = "db_video_${entity.songId}",
+                                url = entity.youtubeUrl,
+                                title = entity.title,
+                                format = com.omnivault.media.model.MediaFormat.MP4_1080,
+                                platform = com.omnivault.media.model.PlatformType.fromUrl(entity.youtubeUrl),
+                                progress = 100,
+                                speedText = "Descargado",
+                                status = com.omnivault.media.model.DownloadStatus.COMPLETED,
+                                localFilePath = path,
+                                fileSizeFormatted = com.omnivault.media.utils.StorageHelper.formatFileSize(entity.fileSize),
+                                fileSizeBytes = entity.fileSize,
+                                durationFormatted = durFormatted,
+                                thumbnailUrl = entity.thumbnailUrl ?: path,
+                                artist = entity.artist,
+                                timestamp = entity.downloadedAt
+                            )
+                        }
+                }
+                val merged = (dbVideos + scanned).distinctBy { it.localFilePath ?: it.id }
+                _rawVideos.value = merged
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {

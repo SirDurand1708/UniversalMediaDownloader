@@ -599,12 +599,14 @@ class DownloadManager private constructor(private val context: Context) {
                         songId = Math.abs(item.url.hashCode().toLong()),
                         title = item.title,
                         artist = item.artist?.takeIf { it.isNotBlank() } ?: "OmniVault",
-                        album = item.artist?.takeIf { it.isNotBlank() } ?: "OmniVault",
+                        album = if (item.format.isAudio) (item.artist?.takeIf { it.isNotBlank() } ?: "OmniVault") else "Video",
                         duration = info.durationSeconds * 1000L,
                         youtubeUrl = item.url,
                         localPath = finalOutputFile.absolutePath,
                         thumbnailUrl = item.thumbnailUrl,
-                        fileSize = finalOutputFile.length()
+                        fileSize = finalOutputFile.length(),
+                        isVideo = !item.format.isAudio,
+                        mimeType = finalMimeType
                     )
                 )
             } catch (dbErr: Exception) {

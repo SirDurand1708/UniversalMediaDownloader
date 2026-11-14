@@ -71,6 +71,8 @@ fun NowPlayingScreen(
     lyricsLoadingState: LyricsLoadingState = LyricsLoadingState.Idle,
     sleepTimerDuration: Long? = null,
     isSleepTimerRunning: Boolean = false,
+    playbackSpeed: Float = 1.0f,
+    onPlaybackSpeedChange: (Float) -> Unit = {},
     onPlayPauseClick: () -> Unit,
     onSkipNextClick: () -> Unit,
     onSkipPreviousClick: () -> Unit,
@@ -216,6 +218,7 @@ fun NowPlayingScreen(
     var showLyricsDialog by remember { mutableStateOf(false) }
     var showSongInfoDialog by remember { mutableStateOf(false) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
+    var showSpeedDialog by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
 
     if (showShareDialog) {
@@ -418,9 +421,11 @@ fun NowPlayingScreen(
                         NowPlayingBottomOptions(
                             showSyncedLyrics = showSyncedLyrics,
                             isSleepTimerRunning = isSleepTimerRunning,
+                            playbackSpeed = playbackSpeed,
                             effectivePrimaryColor = effectivePrimaryColor,
                             onToggleLyrics = { showSyncedLyrics = !showSyncedLyrics },
                             onShowSleepTimer = { showSleepTimerDialog = true },
+                            onShowSpeedSelector = { showSpeedDialog = true },
                             onShowShare = { showShareDialog = true },
                             onShowQueue = { showQueueSheet = true },
                             onOpenHandsFree = onOpenHandsFree,
@@ -535,9 +540,11 @@ fun NowPlayingScreen(
                         NowPlayingBottomOptions(
                             showSyncedLyrics = showSyncedLyrics,
                             isSleepTimerRunning = isSleepTimerRunning,
+                            playbackSpeed = playbackSpeed,
                             effectivePrimaryColor = effectivePrimaryColor,
                             onToggleLyrics = { showSyncedLyrics = !showSyncedLyrics },
                             onShowSleepTimer = { showSleepTimerDialog = true },
+                            onShowSpeedSelector = { showSpeedDialog = true },
                             onShowShare = { showShareDialog = true },
                             onShowQueue = { showQueueSheet = true },
                             onOpenHandsFree = onOpenHandsFree,
@@ -598,6 +605,48 @@ fun NowPlayingScreen(
             onCancelTimer = {
                 onCancelSleepTimer()
                 showSleepTimerDialog = false
+            }
+        )
+    }
+
+    if (showSpeedDialog) {
+        AlertDialog(
+            onDismissRequest = { showSpeedDialog = false },
+            title = { Text("Velocidad de reproducción", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).chunked(3).forEach { rowSpeeds ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            rowSpeeds.forEach { speed ->
+                                val selected = playbackSpeed == speed
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = {
+                                        onPlaybackSpeedChange(speed)
+                                        showSpeedDialog = false
+                                    },
+                                    label = {
+                                        Text(
+                                            text = "${speed}x",
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSpeedDialog = false }) {
+                    Text("Cerrar")
+                }
             }
         )
     }

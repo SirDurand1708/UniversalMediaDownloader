@@ -39,6 +39,21 @@ class DownloadViewModel(
     
     private val _downloadedSongs = MutableStateFlow<List<Song>>(emptyList())
     val downloadedSongs: StateFlow<List<Song>> = _downloadedSongs.asStateFlow()
+
+    val downloadedAudioSongs: StateFlow<List<Song>> = _downloadedSongs
+        .map { list ->
+            list.filterNot { song ->
+                val lower = song.path.lowercase()
+                val mime = if (song.path.startsWith("content://")) {
+                    try { context.contentResolver.getType(Uri.parse(song.path)) } catch (_: Exception) { null }
+                } else null
+                mime?.startsWith("video/", ignoreCase = true) == true ||
+                    song.album.equals("Video", ignoreCase = true) ||
+                    song.path.contains("/video/", ignoreCase = true) ||
+                    lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".webm")
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     
     private val _activeDownloads = MutableStateFlow<List<DownloadProgress>>(emptyList())
     val activeDownloads: StateFlow<List<DownloadProgress>> = _activeDownloads.asStateFlow()

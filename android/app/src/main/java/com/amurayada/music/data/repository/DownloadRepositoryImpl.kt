@@ -115,25 +115,32 @@ class DownloadRepositoryImpl(
         removeActiveDownload(songId)
     }
     
-    override suspend fun getDownloadedSongs(): List<Song> = withContext(Dispatchers.IO) {
-        downloadDao.getAllDownloads().first().map { entity ->
-            Song(
-                id = entity.songId,
-                title = entity.title,
-                artist = entity.artist,
-                album = entity.album,
-                duration = entity.duration,
-                albumArtUri = entity.thumbnailUrl?.let { Uri.parse(it) },
-                path = entity.localPath ?: entity.youtubeUrl,
-                dateAdded = entity.downloadedAt,
-                albumId = entity.album.hashCode().toLong()
-            )
+    private fun isVideoDownload(entity: DownloadEntity): Boolean {
+        if (entity.isVideo) return true
+        if (entity.mimeType?.startsWith("video/", ignoreCase = true) == true) return true
+        val path = entity.localPath ?: return false
+        if (path.startsWith("content://")) {
+            val resolvedMime = try {
+                context.contentResolver.getType(Uri.parse(path))
+            } catch (_: Exception) {
+                null
+            }
+            if (resolvedMime?.startsWith("video/", ignoreCase = true) == true) return true
+            if (path.contains("/video/", ignoreCase = true)) return true
         }
+        val lower = path.lowercase()
+        return lower.endsWith(".mp4") ||
+            lower.endsWith(".mkv") ||
+            lower.endsWith(".webm") ||
+            lower.endsWith(".mov") ||
+            lower.endsWith(".avi") ||
+            entity.album.equals("Video", ignoreCase = true)
     }
-    
-    override fun observeDownloadedSongs(): Flow<List<Song>> {
-        return downloadDao.getAllDownloads().map { entities ->
-            entities.map { entity ->
+
+    override suspend fun getDownloadedSongs(): List<Song> = withContext(Dispatchers.IO) {
+        downloadDao.getAllDownloads().first()
+            .filterNot { isVideoDownload(it) }
+            .map { entity ->
                 Song(
                     id = entity.songId,
                     title = entity.title,
@@ -146,6 +153,25 @@ class DownloadRepositoryImpl(
                     albumId = entity.album.hashCode().toLong()
                 )
             }
+    }
+    
+    override fun observeDownloadedSongs(): Flow<List<Song>> {
+        return downloadDao.getAllDownloads().map { entities ->
+            entities
+                .filterNot { isVideoDownload(it) }
+                .map { entity ->
+                    Song(
+                        id = entity.songId,
+                        title = entity.title,
+                        artist = entity.artist,
+                        album = entity.album,
+                        duration = entity.duration,
+                        albumArtUri = entity.thumbnailUrl?.let { Uri.parse(it) },
+                        path = entity.localPath ?: entity.youtubeUrl,
+                        dateAdded = entity.downloadedAt,
+                        albumId = entity.album.hashCode().toLong()
+                    )
+                }
         }
     }
     

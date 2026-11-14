@@ -418,9 +418,11 @@ fun NowPlayingControls(
 fun NowPlayingBottomOptions(
     showSyncedLyrics: Boolean,
     isSleepTimerRunning: Boolean,
+    playbackSpeed: Float = 1.0f,
     effectivePrimaryColor: Color,
     onToggleLyrics: () -> Unit,
     onShowSleepTimer: () -> Unit,
+    onShowSpeedSelector: () -> Unit = {},
     onShowShare: () -> Unit,
     onShowQueue: () -> Unit,
     onOpenHandsFree: () -> Unit,
@@ -446,6 +448,20 @@ fun NowPlayingBottomOptions(
                 contentDescription = "Temporizador",
                 tint = if (isSleepTimerRunning) effectivePrimaryColor else Color.White.copy(alpha = 0.7f),
                 modifier = Modifier.size(24.dp)
+            )
+        }
+
+        TextButton(
+            onClick = onShowSpeedSelector,
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = if (playbackSpeed == 1.0f) "1.0x" else "${playbackSpeed}x",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = if (playbackSpeed != 1.0f) effectivePrimaryColor else Color.White.copy(alpha = 0.85f),
+                maxLines = 1,
+                softWrap = false
             )
         }
         

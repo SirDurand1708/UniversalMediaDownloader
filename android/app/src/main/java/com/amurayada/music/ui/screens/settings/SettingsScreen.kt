@@ -231,7 +231,18 @@ fun SettingsScreen(
 
             // Library Section
             item {
+                val filterShortAudio by settingsViewModel.filterShortAudio.collectAsState()
                 SettingsSection(title = "Biblioteca", icon = Icons.Rounded.LibraryMusic) {
+                    SettingsToggleItem(
+                        title = "Ocultar audios cortos (< 30s)",
+                        subtitle = "Filtra notas de voz de WhatsApp y efectos de sonido",
+                        icon = Icons.Rounded.FilterAlt,
+                        checked = filterShortAudio,
+                        onCheckedChange = { enabled ->
+                            settingsViewModel.setFilterShortAudio(enabled)
+                            onRescanLibrary()
+                        }
+                    )
                     SettingsItem(
                         title = "Reescanear biblioteca",
                         subtitle = "Buscar nuevas canciones",
@@ -534,12 +545,16 @@ private fun SettingsItem(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
         }
         Icon(
@@ -580,12 +595,16 @@ private fun SettingsToggleItem(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge.copy(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)
-                )
+                ),
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
         }
         Switch(

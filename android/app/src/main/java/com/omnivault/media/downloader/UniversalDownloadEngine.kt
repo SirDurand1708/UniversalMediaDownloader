@@ -381,12 +381,14 @@ class UniversalDownloadEngine private constructor(context: Context) {
                 songId = entitySongId,
                 title = metadata.title,
                 artist = metadata.artist,
-                album = metadata.album,
+                album = if (format.isAudio) metadata.album else "Video",
                 duration = metadata.durationMs,
                 youtubeUrl = cleanUrl,
                 localPath = exported.first,
                 thumbnailUrl = localCoverPath ?: metadata.thumbnailUrl,
-                fileSize = exported.third
+                fileSize = exported.third,
+                isVideo = !format.isAudio,
+                mimeType = finalMimeType
             )
             downloadDao.insertDownload(entity)
 

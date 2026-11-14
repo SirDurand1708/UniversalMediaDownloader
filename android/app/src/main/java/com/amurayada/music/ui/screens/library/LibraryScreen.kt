@@ -54,6 +54,32 @@ fun LibraryScreen(
     onDeleteDownload: (Song) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val audioOnlySongs = remember(songs) {
+        songs.filterNot { song ->
+            val lower = song.path.lowercase()
+            val mime = if (song.path.startsWith("content://")) {
+                try { context.contentResolver.getType(android.net.Uri.parse(song.path)) } catch (_: Exception) { null }
+            } else null
+            mime?.startsWith("video/", ignoreCase = true) == true ||
+                song.album.equals("Video", ignoreCase = true) ||
+                song.path.contains("/video/", ignoreCase = true) ||
+                lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".webm")
+        }
+    }
+    val audioOnlyDownloads = remember(downloadedSongs) {
+        downloadedSongs.filterNot { song ->
+            val lower = song.path.lowercase()
+            val mime = if (song.path.startsWith("content://")) {
+                try { context.contentResolver.getType(android.net.Uri.parse(song.path)) } catch (_: Exception) { null }
+            } else null
+            mime?.startsWith("video/", ignoreCase = true) == true ||
+                song.album.equals("Video", ignoreCase = true) ||
+                song.path.contains("/video/", ignoreCase = true) ||
+                lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".webm")
+        }
+    }
+
     val pagerState = rememberPagerState(
         initialPage = selectedTab.ordinal,
         pageCount = { LibraryTab.entries.size }
@@ -74,7 +100,10 @@ fun LibraryScreen(
             title = {
                 Text(
                     "Biblioteca",
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
             },
             actions = {
@@ -114,7 +143,10 @@ fun LibraryScreen(
                                 LibraryTab.ARTISTS -> "Artistas"
                                 LibraryTab.DOWNLOADS -> "Descargas"
                             },
-                            fontWeight = if (pagerState.currentPage == index) FontWeight.Bold else FontWeight.Normal
+                            fontWeight = if (pagerState.currentPage == index) FontWeight.Bold else FontWeight.Normal,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                     }
                 )
@@ -131,17 +163,17 @@ fun LibraryScreen(
             when (LibraryTab.entries[page]) {
                 LibraryTab.SONGS -> {
                     SongsListScreen(
-                        songs = songs,
+                        songs = audioOnlySongs,
                         playlists = playlists,
-                        onSongClick = { song -> onSongClick(song, songs) },
+                        onSongClick = { song -> onSongClick(song, audioOnlySongs) },
                         onPlayAll = { 
-                            if (songs.isNotEmpty()) {
-                                onSongClick(songs.first(), songs)
+                            if (audioOnlySongs.isNotEmpty()) {
+                                onSongClick(audioOnlySongs.first(), audioOnlySongs)
                             }
                         },
                         onShuffle = {
-                            if (songs.isNotEmpty()) {
-                                val shuffled = songs.shuffled()
+                            if (audioOnlySongs.isNotEmpty()) {
+                                val shuffled = audioOnlySongs.shuffled()
                                 onSongClick(shuffled.first(), shuffled)
                             }
                         },
@@ -166,8 +198,8 @@ fun LibraryScreen(
                 }
                 LibraryTab.DOWNLOADS -> {
                     DownloadsListScreen(
-                        downloadedSongs = downloadedSongs,
-                        onSongClick = { song -> onSongClick(song, downloadedSongs) },
+                        downloadedSongs = audioOnlyDownloads,
+                        onSongClick = { song -> onSongClick(song, audioOnlyDownloads) },
                         onDeleteDownload = onDeleteDownload,
                         playlists = playlists,
                         onAddToPlaylist = onAddToPlaylist,

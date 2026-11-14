@@ -39,7 +39,8 @@ import java.io.File
 fun VideoPlayerScreen(
     videoPath: String,
     videoTitle: String,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    onPlayInBackground: (videoPath: String, videoTitle: String, currentPositionMs: Long) -> Unit = { _, _, _ -> }
 ) {
     val context = LocalContext.current
     var isPlaying by remember { mutableStateOf(true) }
@@ -47,6 +48,8 @@ fun VideoPlayerScreen(
     var duration by remember { mutableLongStateOf(0L) }
     var controlsVisible by remember { mutableStateOf(true) }
     var resizeMode by remember { mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
+    var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
+    var showSpeedMenu by remember { mutableStateOf(false) }
 
     val exoPlayer = remember {
         val audioAttributes = androidx.media3.common.AudioAttributes.Builder()
@@ -168,9 +171,64 @@ fun VideoPlayerScreen(
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White,
                         maxLines = 1,
+                        softWrap = false,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
+                    // Botón de Velocidad (0.5x - 2.0x)
+                    Box {
+                        TextButton(
+                            onClick = { showSpeedMenu = true },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = if (playbackSpeed == 1.0f) "1.0x" else "${playbackSpeed}x",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showSpeedMenu,
+                            onDismissRequest = { showSpeedMenu = false }
+                        ) {
+                            listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { speed ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = "${speed}x",
+                                            fontWeight = if (playbackSpeed == speed) FontWeight.Bold else FontWeight.Normal,
+                                            maxLines = 1,
+                                            softWrap = false
+                                        )
+                                    },
+                                    onClick = {
+                                        playbackSpeed = speed
+                                        exoPlayer.setPlaybackParameters(
+                                            androidx.media3.common.PlaybackParameters(speed)
+                                        )
+                                        showSpeedMenu = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    // Botón Video a Audio en Segundo Plano (Auriculares)
+                    IconButton(
+                        onClick = {
+                            val pos = exoPlayer.currentPosition.coerceAtLeast(0L)
+                            exoPlayer.pause()
+                            onPlayInBackground(videoPath, videoTitle, pos)
+                            onBackClick()
+                        }
+                    ) {
+                        Icon(
+                            Icons.Rounded.Headphones,
+                            contentDescription = "Reproducir en segundo plano",
+                            tint = Color.White
+                        )
+                    }
                     IconButton(
                         onClick = {
                             resizeMode = when (resizeMode) {

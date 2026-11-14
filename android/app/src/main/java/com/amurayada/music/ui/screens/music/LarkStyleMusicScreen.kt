@@ -93,7 +93,12 @@ fun LarkStyleMusicScreen(
         libraryViewModel.deletedSongPaths
     ) {
         libraryViewModel.songs.filter {
-            !libraryViewModel.hiddenSongIds.contains(it.id) &&
+            val lower = it.path.lowercase()
+            val isVideo = it.album.equals("Video", ignoreCase = true) ||
+                it.path.contains("/video/", ignoreCase = true) ||
+                lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".webm")
+            !isVideo &&
+                !libraryViewModel.hiddenSongIds.contains(it.id) &&
                 (it.path.isBlank() || !libraryViewModel.deletedSongPaths.contains(it.path))
         }
     }
@@ -156,7 +161,10 @@ fun LarkStyleMusicScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Box(
                         modifier = Modifier
                             .size(36.dp)
@@ -181,7 +189,10 @@ fun LarkStyleMusicScreen(
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.ExtraBold,
                         color = Color.White,
-                        letterSpacing = (-0.5).sp
+                        letterSpacing = (-0.5).sp,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
@@ -278,6 +289,8 @@ fun LarkStyleMusicScreen(
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                         color = if (selected) Color.Black else Color.White.copy(alpha = 0.85f),
+                        maxLines = 1,
+                        softWrap = false,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }

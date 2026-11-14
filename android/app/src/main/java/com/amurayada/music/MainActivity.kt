@@ -798,7 +798,7 @@ fun MusicPlayerApp(
                     val selectedTab = com.amurayada.music.ui.screens.library.LibraryTab.entries.getOrElse(libraryViewModel.selectedLibraryTab) { com.amurayada.music.ui.screens.library.LibraryTab.SONGS }
                     val scope = rememberCoroutineScope()
                     val context = LocalContext.current
-                    val downloadedSongs by (context as MainActivity).downloadViewModel.downloadedSongs.collectAsState()
+                    val downloadedSongs by (context as MainActivity).downloadViewModel.downloadedAudioSongs.collectAsState()
                     
                     LibraryScreen(
                         songs = songs,
@@ -1198,7 +1198,25 @@ fun MusicPlayerApp(
                     VideoPlayerScreen(
                         videoPath = path,
                         videoTitle = title,
-                        onBackClick = { navController.popBackStack() }
+                        onBackClick = { navController.popBackStack() },
+                        onPlayInBackground = { videoPath, videoTitleArg, posMs ->
+                            val bgSong = Song(
+                                id = kotlin.math.abs(videoPath.hashCode().toLong()),
+                                title = videoTitleArg.ifBlank { "Audio en segundo plano" },
+                                artist = "Aura Player",
+                                album = "Video a Audio",
+                                duration = 0L,
+                                albumArtUri = null,
+                                path = videoPath,
+                                dateAdded = System.currentTimeMillis()
+                            )
+                            playbackViewModel.playSong(bgSong, listOf(bgSong), startPositionMs = posMs)
+                            android.widget.Toast.makeText(
+                                context,
+                                "Reproduciendo audio en segundo plano",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
                     )
                 }
 
@@ -1405,6 +1423,8 @@ fun MusicPlayerApp(
                 lyricsLoadingState = playbackViewModel.lyricsLoadingState,
                 sleepTimerDuration = playbackViewModel.sleepTimerDuration,
                 isSleepTimerRunning = playbackViewModel.isSleepTimerRunning,
+                playbackSpeed = playbackViewModel.playbackSpeed,
+                onPlaybackSpeedChange = playbackViewModel::setPlaybackSpeed,
                 onPlayPauseClick = playbackViewModel::togglePlayPause,
                 onSkipNextClick = playbackViewModel::skipToNext,
                 onSkipPreviousClick = playbackViewModel::skipToPrevious,

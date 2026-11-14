@@ -17,5 +17,7 @@ data class DownloadEntity(
     val canvasUrl: String? = null,
     val canvasThumbUrl: String? = null,
     val downloadedAt: Long = System.currentTimeMillis(),
-    val fileSize: Long = 0
+    val fileSize: Long = 0,
+    val isVideo: Boolean = false,
+    val mimeType: String? = null
 )

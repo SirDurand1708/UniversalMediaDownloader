@@ -117,6 +117,7 @@ fun MiniPlayer(
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
                             maxLines = 1,
+                            softWrap = false,
                             overflow = TextOverflow.Ellipsis,
                             color = titleColor
                         )
@@ -125,6 +126,7 @@ fun MiniPlayer(
                             style = MaterialTheme.typography.bodySmall,
                             color = subtitleColor,
                             maxLines = 1,
+                            softWrap = false,
                             overflow = TextOverflow.Ellipsis
                         )
                     }

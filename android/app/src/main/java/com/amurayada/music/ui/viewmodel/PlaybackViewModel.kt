@@ -113,6 +113,15 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     
     var playbackMode by mutableStateOf(PlaybackMode())
         private set
+
+    var playbackSpeed by mutableStateOf(1.0f)
+        private set
+
+    fun setPlaybackSpeed(speed: Float) {
+        val clamped = speed.coerceIn(0.5f, 2.0f)
+        playbackSpeed = clamped
+        mediaController?.setPlaybackParameters(androidx.media3.common.PlaybackParameters(clamped))
+    }
     
     var videoState by mutableStateOf(VideoState.AUDIO_ONLY)
         private set
@@ -742,7 +751,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
      * @param song La pista que se reproducirá de inmediato.
      * @param songList La lista completa que conformará la cola de reproducción actual.
      */
-    fun playSong(song: Song, songList: List<Song> = listOf(song)) {
+    fun playSong(song: Song, songList: List<Song> = listOf(song), startPositionMs: Long = 0L) {
         viewModelScope.launch {
             currentSong = song
             queue = songList
@@ -793,7 +802,8 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             val mediaItems = songList.map { createMediaItem(it) }
             
             mediaController?.apply {
-                setMediaItems(mediaItems, startIndex, 0)
+                setMediaItems(mediaItems, startIndex, startPositionMs.coerceAtLeast(0L))
+                setPlaybackParameters(androidx.media3.common.PlaybackParameters(playbackSpeed))
                 prepare()
                 play()
             }

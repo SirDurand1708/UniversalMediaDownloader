@@ -25,7 +25,13 @@ class MediaRepository(private val context: Context) {
             MediaStore.Audio.Media.ALBUM_ID
         )
 
-        val selection = "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.SIZE} >= 30000)"
+        val prefs = context.getSharedPreferences("music_settings", Context.MODE_PRIVATE)
+        val filterShortAudio = prefs.getBoolean("filter_short_audio", true)
+        val selection = if (filterShortAudio) {
+            "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.SIZE} >= 30000) AND ${MediaStore.Audio.Media.DURATION} >= 30000"
+        } else {
+            "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.SIZE} >= 30000)"
+        }
         val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
 
         context.contentResolver.query(
@@ -256,7 +262,13 @@ class MediaRepository(private val context: Context) {
             MediaStore.Audio.Media.ALBUM_ID
         )
 
-        val selection = "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.SIZE} >= 30000)"
+        val prefs = context.getSharedPreferences("music_settings", Context.MODE_PRIVATE)
+        val filterShortAudio = prefs.getBoolean("filter_short_audio", true)
+        val selection = if (filterShortAudio) {
+            "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.SIZE} >= 30000) AND ${MediaStore.Audio.Media.DURATION} >= 30000"
+        } else {
+            "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.SIZE} >= 30000)"
+        }
         val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
 
         context.contentResolver.query(
