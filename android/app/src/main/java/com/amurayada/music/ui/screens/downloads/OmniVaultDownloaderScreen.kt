@@ -55,6 +55,33 @@ fun OmniVaultDownloaderScreen(
         }
     }
 
+    var completedFilter by remember { mutableStateOf(0) } // 0 = Todos, 1 = Audios, 2 = Videos
+    var completedSearchQuery by remember { mutableStateOf("") }
+
+    val filteredCompletedSongs = remember(downloadedSongs, completedFilter, completedSearchQuery) {
+        val query = completedSearchQuery.trim()
+        downloadedSongs.filter { song ->
+            val mimeType = if (song.path.startsWith("content://")) {
+                try { context.contentResolver.getType(android.net.Uri.parse(song.path)) } catch (_: Exception) { null }
+            } else null
+            val isVideo = mimeType?.startsWith("video/") == true ||
+                song.album.contains("Video", ignoreCase = true) ||
+                song.path.contains("/video/", ignoreCase = true) ||
+                song.path.endsWith(".mp4", ignoreCase = true)
+
+            val matchesTab = when (completedFilter) {
+                1 -> !isVideo
+                2 -> isVideo
+                else -> true
+            }
+            val matchesQuery = query.isEmpty() ||
+                song.title.contains(query, ignoreCase = true) ||
+                song.artist.contains(query, ignoreCase = true)
+
+            matchesTab && matchesQuery
+        }
+    }
+
     val neonGreen = Color(0xFF00E676)
     val cardBg = Color(0xFF141923).copy(alpha = 0.85f)
     val borderCol = Color(0xFF263248)
@@ -75,7 +102,10 @@ fun OmniVaultDownloaderScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Box(
                         modifier = Modifier
                             .size(44.dp)
@@ -91,22 +121,31 @@ fun OmniVaultDownloaderScreen(
                         )
                     }
                     Spacer(Modifier.width(12.dp))
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "DESCARGAS",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
+                            color = Color.White,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = "Aura Player • Universal Engine (yt-dlp + FFmpeg)",
                             style = MaterialTheme.typography.labelSmall,
-                            color = neonGreen
+                            color = neonGreen,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
 
+                Spacer(Modifier.width(8.dp))
+
                 Surface(
+                    modifier = Modifier.wrapContentWidth(),
                     color = neonGreen.copy(alpha = 0.15f),
                     shape = RoundedCornerShape(20.dp),
                     border = BorderStroke(1.dp, neonGreen.copy(alpha = 0.4f))
@@ -119,7 +158,9 @@ fun OmniVaultDownloaderScreen(
                             text = "⚡ Auto-Sync",
                             style = MaterialTheme.typography.labelSmall,
                             color = neonGreen,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }
@@ -333,11 +374,11 @@ fun OmniVaultDownloaderScreen(
                     Spacer(Modifier.height(14.dp))
 
                     val btnLabel = when (selectedFormat) {
-                        MediaFormat.MP3_320 -> "⚡ DESCARGAR AHORA (MP3 320K)"
-                        MediaFormat.M4A -> "⚡ DESCARGAR AHORA (M4A HQ)"
-                        MediaFormat.MP4_1080 -> "⚡ DESCARGAR AHORA (MP4 1080P)"
-                        MediaFormat.MP4_720 -> "⚡ DESCARGAR AHORA (MP4 720P)"
-                        MediaFormat.MP4_480 -> "⚡ DESCARGAR AHORA (MP4 480P)"
+                        MediaFormat.MP3_320 -> "⚡ DESCARGAR (MP3 320K)"
+                        MediaFormat.M4A -> "⚡ DESCARGAR (M4A HQ)"
+                        MediaFormat.MP4_1080 -> "⚡ DESCARGAR (MP4 1080P)"
+                        MediaFormat.MP4_720 -> "⚡ DESCARGAR (MP4 720P)"
+                        MediaFormat.MP4_480 -> "⚡ DESCARGAR (MP4 480P)"
                     }
 
                     Button(
@@ -363,7 +404,10 @@ fun OmniVaultDownloaderScreen(
                             text = btnLabel,
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 0.5.sp
+                            letterSpacing = 0.5.sp,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -392,16 +436,67 @@ fun OmniVaultDownloaderScreen(
 
         // 5. Sección de Descargas Completadas (downloadedSongs)
         item {
-            Text(
-                text = "DESCARGAS COMPLETADAS (${downloadedSongs.size})",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = neonGreen,
-                letterSpacing = 1.sp
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "DESCARGAS COMPLETADAS (${filteredCompletedSongs.size})",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = neonGreen,
+                    letterSpacing = 1.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("Todos", "Audios", "Videos").forEachIndexed { index, label ->
+                        FilterChip(
+                            selected = completedFilter == index,
+                            onClick = { completedFilter = index },
+                            label = {
+                                Text(
+                                    text = label,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis,
+                                    fontSize = 12.sp
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = neonGreen.copy(alpha = 0.2f),
+                                selectedLabelColor = neonGreen
+                            )
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = completedSearchQuery,
+                    onValueChange = { completedSearchQuery = it },
+                    placeholder = { Text("Buscar en descargas...", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(18.dp)) },
+                    trailingIcon = {
+                        if (completedSearchQuery.isNotEmpty()) {
+                            IconButton(onClick = { completedSearchQuery = "" }) {
+                                Icon(Icons.Rounded.Clear, contentDescription = "Limpiar búsqueda", tint = Color.Gray, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = neonGreen,
+                        unfocusedBorderColor = borderCol
+                    )
+                )
+            }
         }
 
-        if (downloadedSongs.isEmpty()) {
+        if (filteredCompletedSongs.isEmpty()) {
             item {
                 Surface(
                     color = cardBg,
@@ -423,7 +518,11 @@ fun OmniVaultDownloaderScreen(
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = "Aún no tienes descargas completadas",
+                            text = if (downloadedSongs.isEmpty()) {
+                                "Aún no tienes descargas completadas"
+                            } else {
+                                "No hay descargas que coincidan con el filtro"
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.White.copy(alpha = 0.7f)
                         )
@@ -431,7 +530,7 @@ fun OmniVaultDownloaderScreen(
                 }
             }
         } else {
-            items(downloadedSongs, key = { it.id }) { song ->
+            items(filteredCompletedSongs, key = { it.id }) { song ->
                 val mimeType = remember(song.path) {
                     if (song.path.startsWith("content://")) {
                         try { context.contentResolver.getType(android.net.Uri.parse(song.path)) } catch (_: Exception) { null }
@@ -444,6 +543,7 @@ fun OmniVaultDownloaderScreen(
 
                 CompletedDownloadSongCard(
                     song = song,
+                    isVideo = isVideoSong,
                     onPlay = {
                         val format = if (isVideoSong) MediaFormat.MP4_1080 else MediaFormat.M4A
                         val item = DownloadItem(
@@ -487,17 +587,20 @@ fun FormatChip(
             if (selected) neonGreen else Color(0xFF263248)
         )
     ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (selected) {
-                    Text("✓ ", color = neonGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("✓ ", color = neonGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, softWrap = false)
                 }
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                     color = if (selected) Color.White else Color.White.copy(alpha = 0.7f),
-                    fontSize = 11.sp
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -588,13 +691,13 @@ fun UniversalActiveDownloadCard(
 @Composable
 fun CompletedDownloadSongCard(
     song: Song,
+    isVideo: Boolean = song.album.contains("Video", ignoreCase = true) ||
+        song.path.contains("/video/", ignoreCase = true) ||
+        song.path.endsWith(".mp4", ignoreCase = true),
     onPlay: () -> Unit,
     onDelete: () -> Unit
 ) {
     val neonGreen = Color(0xFF00E676)
-    val isVideo = song.album.contains("Video", ignoreCase = true) ||
-        song.path.contains("/video/", ignoreCase = true) ||
-        song.path.endsWith(".mp4", ignoreCase = true)
 
     Surface(
         onClick = onPlay,
@@ -641,6 +744,7 @@ fun CompletedDownloadSongCard(
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White,
                     maxLines = 1,
+                    softWrap = false,
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.height(2.dp))
@@ -649,6 +753,7 @@ fun CompletedDownloadSongCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.65f),
                     maxLines = 1,
+                    softWrap = false,
                     overflow = TextOverflow.Ellipsis,
                     fontSize = 11.sp
                 )
