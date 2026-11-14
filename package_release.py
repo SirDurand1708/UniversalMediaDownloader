@@ -16,7 +16,7 @@ if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
     except Exception:
         pass
 
-DEFAULT_VERSION = "2.5.7"
+DEFAULT_VERSION = "2.5.8"
 
 def get_release_version() -> str:
     """Obtiene la versión oficial de forma dinámica desde argumentos CLI, entorno CI/CD o version.json."""

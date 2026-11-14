@@ -72,8 +72,25 @@ class MusicApplication : Application(), ImageLoaderFactory {
         // 1. Initialize NewPipe with Localization
         initNewPipe()
         
-        // 2. Network Warm-up
+        // 2. Network Warm-up & Elite Engine Initialization (youtubedl-android: yt-dlp + FFmpeg + Aria2c)
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                com.yausername.youtubedl_android.YoutubeDL.getInstance().init(this@MusicApplication)
+                com.yausername.ffmpeg.FFmpeg.getInstance().init(this@MusicApplication)
+                com.yausername.aria2c.Aria2c.getInstance().init(this@MusicApplication)
+                android.util.Log.d("MusicApp", "youtubedl-android (yt-dlp + FFmpeg + Aria2c) initialized")
+                try {
+                    com.yausername.youtubedl_android.YoutubeDL.getInstance().updateYoutubeDL(
+                        this@MusicApplication,
+                        com.yausername.youtubedl_android.YoutubeDL.UpdateChannel.NIGHTLY
+                    )
+                } catch (updateErr: Exception) {
+                    android.util.Log.w("MusicApp", "yt-dlp nightly update skipped: ${updateErr.message}")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MusicApp", "Failed to initialize youtubedl-android", e)
+            }
+
             try {
                 // Dummy request to open TCP/TLS connection
                 val client = com.amurayada.music.data.newpipe.NewPipeDownloader.getClient()

@@ -94,10 +94,137 @@ class DownloadManager private constructor(private val context: Context) {
     }
 
     fun cancelDownload(taskId: String) {
+        try {
+            com.yausername.youtubedl_android.YoutubeDL.getInstance().destroyProcessById(taskId)
+        } catch (_: Exception) {}
         activeJobs[taskId]?.cancel()
         activeTasks.remove(taskId)?.let { item ->
             item.status = DownloadStatus.CANCELLED
             notifyUpdate(item)
+        }
+    }
+
+    @Synchronized
+    private fun ensureYoutubeDLReady() {
+        try {
+            com.yausername.youtubedl_android.YoutubeDL.getInstance().init(context)
+            com.yausername.ffmpeg.FFmpeg.getInstance().init(context)
+            com.yausername.aria2c.Aria2c.getInstance().init(context)
+        } catch (_: Exception) {}
+    }
+
+    private fun writeTempCookiesFile(workDir: File): File? {
+        return try {
+            val auth = com.amurayada.music.data.auth.YouTubeAuthManager.getInstance(context)
+            val cookieStr = auth.getCookies()?.takeIf { it.isNotBlank() } ?: return null
+            val cookieFile = File(workDir, "cookies.txt")
+            val sb = StringBuilder("# Netscape HTTP Cookie File\n")
+            val exp = (System.currentTimeMillis() / 1000L) + 31536000L
+            for (pair in cookieStr.split(";")) {
+                val trimmed = pair.trim()
+                val eq = trimmed.indexOf('=')
+                if (eq <= 0) continue
+                val name = trimmed.substring(0, eq).trim()
+                val value = trimmed.substring(eq + 1).trim()
+                if (name.isNotEmpty()) {
+                    sb.append(".youtube.com\tTRUE\t/\tTRUE\t$exp\t$name\t$value\n")
+                    sb.append(".google.com\tTRUE\t/\tTRUE\t$exp\t$name\t$value\n")
+                }
+            }
+            cookieFile.writeText(sb.toString())
+            cookieFile
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private suspend fun downloadWithYoutubeDL(item: DownloadItem, stagedFile: File): Boolean = withContext(Dispatchers.IO) {
+        val workDir = File(context.cacheDir, "ytdl_${item.id}")
+        try {
+            ensureYoutubeDLReady()
+            if (workDir.exists()) workDir.deleteRecursively()
+            workDir.mkdirs()
+
+            val request = com.yausername.youtubedl_android.YoutubeDLRequest(item.url)
+            request.addOption("--no-playlist")
+            request.addOption("--no-mtime")
+            request.addOption("--concurrent-fragments", 4)
+            request.addOption("--retries", 3)
+            request.addOption("--fragment-retries", 3)
+            request.addOption("--socket-timeout", 15)
+
+            writeTempCookiesFile(workDir)?.let { cookieFile ->
+                request.addOption("--cookies", cookieFile.absolutePath)
+            }
+
+            if (item.format.isAudio) {
+                if (item.format == MediaFormat.MP3_320) {
+                    request.addOption("-f", "bestaudio/best/18")
+                    request.addOption("-x")
+                    request.addOption("--audio-format", "mp3")
+                    request.addOption("--audio-quality", "0")
+                } else {
+                    request.addOption("-f", "bestaudio[ext=m4a]/bestaudio/best/18")
+                    request.addOption("-x")
+                    request.addOption("--audio-format", "m4a")
+                }
+            } else {
+                val maxH = if (item.format == MediaFormat.MP4_1080) 1080 else 720
+                request.addOption(
+                    "-f",
+                    "bestvideo[height<=$maxH][ext=mp4]+bestaudio[ext=m4a]/best[height<=$maxH][ext=mp4]/18/best"
+                )
+                request.addOption("--merge-output-format", "mp4")
+            }
+
+            val outTemplate = File(workDir, "output.%(ext)s").absolutePath
+            request.addOption("-o", outTemplate)
+
+            var lastUpdate = 0L
+            com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(
+                request,
+                item.id
+            ) { progress, etaInSeconds, line ->
+                val now = System.currentTimeMillis()
+                if (now - lastUpdate >= 250L) {
+                    lastUpdate = now
+                    if (progress > 0f && progress <= 100f) {
+                        item.progress = (progress * 0.94f).toInt().coerceIn(1, 95)
+                    }
+                    val speedMatch = Regex("""(\d+(?:\.\d+)?\s*[KMGT]?i?B/s)""").find(line)
+                    item.speedText = when {
+                        speedMatch != null -> speedMatch.groupValues[1]
+                        etaInSeconds > 0 -> "ETA ${etaInSeconds}s"
+                        else -> "Descargando (yt-dlp + FFmpeg)…"
+                    }
+                    notifyUpdate(item)
+                }
+            }
+
+            val producedFile = workDir.listFiles()
+                ?.filter {
+                    it.isFile &&
+                        it.name != "cookies.txt" &&
+                        !it.name.endsWith(".part") &&
+                        !it.name.endsWith(".ytdl") &&
+                        it.length() > 0L
+                }
+                ?.maxByOrNull { it.length() }
+
+            if (producedFile != null && producedFile.exists() && producedFile.length() > 0L) {
+                producedFile.copyTo(stagedFile, overwrite = true)
+                return@withContext true
+            }
+            false
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.w("DownloadManager", "youtubedl-android execution failed: ${e.message}")
+            false
+        } finally {
+            try {
+                if (workDir.exists()) workDir.deleteRecursively()
+            } catch (_: Exception) {}
         }
     }
 
@@ -107,7 +234,27 @@ class DownloadManager private constructor(private val context: Context) {
             item.status = DownloadStatus.FETCHING_METADATA
             notifyUpdate(item)
 
-            val info = MediaExtractor.extract(item.url, item.format)
+            val info = try {
+                MediaExtractor.extract(item.url, item.format)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.w("DownloadManager", "MediaExtractor failed (${e.message}), querying yt-dlp metadata...")
+                ensureYoutubeDLReady()
+                val ytdlInfo = try {
+                    com.yausername.youtubedl_android.YoutubeDL.getInstance().getInfo(item.url)
+                } catch (_: Exception) {
+                    null
+                }
+                ExtractedMediaInfo(
+                    title = ytdlInfo?.title?.takeIf { it.isNotBlank() } ?: "OmniVault Media",
+                    directStreamUrl = "",
+                    format = item.format,
+                    durationSeconds = (ytdlInfo?.duration ?: 0).toLong(),
+                    author = ytdlInfo?.uploader?.takeIf { it.isNotBlank() } ?: "YouTube",
+                    thumbnailUrl = ytdlInfo?.thumbnail ?: ""
+                )
+            }
             item.title = com.omnivault.media.utils.FilenameStandardizer.standardizeTitle(info.title)
             item.thumbnailUrl = info.thumbnailUrl
             item.artist = info.author
@@ -126,90 +273,111 @@ class DownloadManager private constructor(private val context: Context) {
             var hasSeparateAudio = !item.format.isAudio && !info.audioStreamUrl.isNullOrBlank()
             val mainStreamMaxProgress = if (hasSeparateAudio) 70 else 95
 
+            val preStagedExt = if (item.format.isAudio) {
+                if (item.format == MediaFormat.MP3_320) "mp3" else "m4a"
+            } else {
+                item.format.extension
+            }
+            val preStagedFile = File(context.cacheDir, "staged_${item.id}.${preStagedExt}")
+            if (preStagedFile.exists()) preStagedFile.delete()
+            var completedViaYoutubeDL = false
+
             // Descarga de flujos principales con soporte chunked + failover automático
             var primaryDownloadSuccess = false
-            try {
-                downloadStreamInternal(
-                    item = item,
-                    primaryUrl = info.directStreamUrl,
-                    backupUrls = info.backupStreamUrls,
-                    requestHeaders = info.requestHeaders,
-                    targetFile = tempDownloadFile,
-                    startPct = 1,
-                    endPct = mainStreamMaxProgress,
-                    isAudioStream = item.format.isAudio
-                )
-                if (hasSeparateAudio) {
-                    item.speedText = "Descargando audio HQ…"
-                    notifyUpdate(item)
+            if (info.directStreamUrl.isNotBlank()) {
+                try {
                     downloadStreamInternal(
                         item = item,
-                        primaryUrl = info.audioStreamUrl!!,
-                        backupUrls = info.backupAudioUrls,
+                        primaryUrl = info.directStreamUrl,
+                        backupUrls = info.backupStreamUrls,
                         requestHeaders = info.requestHeaders,
-                        targetFile = tempAudioFile,
-                        startPct = 70,
-                        endPct = 90,
-                        isAudioStream = true
+                        targetFile = tempDownloadFile,
+                        startPct = 1,
+                        endPct = mainStreamMaxProgress,
+                        isAudioStream = item.format.isAudio
                     )
+                    if (hasSeparateAudio) {
+                        item.speedText = "Descargando audio HQ…"
+                        notifyUpdate(item)
+                        downloadStreamInternal(
+                            item = item,
+                            primaryUrl = info.audioStreamUrl!!,
+                            backupUrls = info.backupAudioUrls,
+                            requestHeaders = info.requestHeaders,
+                            targetFile = tempAudioFile,
+                            startPct = 70,
+                            endPct = 90,
+                            isAudioStream = true
+                        )
+                    }
+                    primaryDownloadSuccess = true
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    android.util.Log.w("DownloadManager", "Primary download failed: ${e.message}. Launching elite fallback...")
                 }
-                primaryDownloadSuccess = true
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                android.util.Log.w("DownloadManager", "Primary download failed: ${e.message}. Launching emergency fallback...")
             }
 
-            // Respaldo de Emergencia multi-etapa:
-            // 1) VISIONOS 1.02 / Progresivo ANDROID / Proxy Piped filtrado
-            // 2) Flujo MP4 progresivo directo (si el muxing DASH falló en alguna pista)
+            // Respaldo de Élite multi-etapa:
+            // 1) Motor nativo youtubedl-android (yt-dlp + FFmpeg + QuickJS)
+            // 2) VISIONOS 1.02 / Progresivo ANDROID (itag 18) / Proxy Piped filtrado
+            // 3) Flujo MP4 progresivo directo (si el muxing DASH falló en alguna pista)
             if (!primaryDownloadSuccess) {
-                item.speedText = "Conectando servidor de respaldo…"
+                item.speedText = "Descargando con motor yt-dlp + FFmpeg…"
                 notifyUpdate(item)
 
                 var fallbackSuccess = false
-                val fallbackInfo = MediaExtractor.extractEmergencyFallback(item.url, item.format)
-                if (fallbackInfo != null) {
-                    try {
-                        if (tempDownloadFile.exists()) tempDownloadFile.delete()
-                        if (tempAudioFile.exists()) tempAudioFile.delete()
+                if (downloadWithYoutubeDL(item, preStagedFile)) {
+                    completedViaYoutubeDL = true
+                    fallbackSuccess = true
+                }
 
-                        hasSeparateAudio = !item.format.isAudio && !fallbackInfo.audioStreamUrl.isNullOrBlank()
-                        val fallbackMainMaxProgress = if (hasSeparateAudio) 70 else 95
+                if (!fallbackSuccess) {
+                    item.speedText = "Conectando servidor de respaldo…"
+                    notifyUpdate(item)
+                    val fallbackInfo = MediaExtractor.extractEmergencyFallback(item.url, item.format)
+                    if (fallbackInfo != null) {
+                        try {
+                            if (tempDownloadFile.exists()) tempDownloadFile.delete()
+                            if (tempAudioFile.exists()) tempAudioFile.delete()
 
-                        downloadStreamInternal(
-                            item = item,
-                            primaryUrl = fallbackInfo.directStreamUrl,
-                            backupUrls = fallbackInfo.backupStreamUrls,
-                            requestHeaders = fallbackInfo.requestHeaders,
-                            targetFile = tempDownloadFile,
-                            startPct = 1,
-                            endPct = fallbackMainMaxProgress,
-                            isAudioStream = item.format.isAudio
-                        )
-                        if (hasSeparateAudio) {
-                            item.speedText = "Descargando audio de respaldo…"
-                            notifyUpdate(item)
+                            hasSeparateAudio = !item.format.isAudio && !fallbackInfo.audioStreamUrl.isNullOrBlank()
+                            val fallbackMainMaxProgress = if (hasSeparateAudio) 70 else 95
+
                             downloadStreamInternal(
                                 item = item,
-                                primaryUrl = fallbackInfo.audioStreamUrl!!,
-                                backupUrls = fallbackInfo.backupAudioUrls,
+                                primaryUrl = fallbackInfo.directStreamUrl,
+                                backupUrls = fallbackInfo.backupStreamUrls,
                                 requestHeaders = fallbackInfo.requestHeaders,
-                                targetFile = tempAudioFile,
-                                startPct = 70,
-                                endPct = 90,
-                                isAudioStream = true
+                                targetFile = tempDownloadFile,
+                                startPct = 1,
+                                endPct = fallbackMainMaxProgress,
+                                isAudioStream = item.format.isAudio
                             )
+                            if (hasSeparateAudio) {
+                                item.speedText = "Descargando audio de respaldo…"
+                                notifyUpdate(item)
+                                downloadStreamInternal(
+                                    item = item,
+                                    primaryUrl = fallbackInfo.audioStreamUrl!!,
+                                    backupUrls = fallbackInfo.backupAudioUrls,
+                                    requestHeaders = fallbackInfo.requestHeaders,
+                                    targetFile = tempAudioFile,
+                                    startPct = 70,
+                                    endPct = 90,
+                                    isAudioStream = true
+                                )
+                            }
+                            fallbackSuccess = true
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            android.util.Log.w("DownloadManager", "Emergency fallback failed: ${e.message}")
                         }
-                        fallbackSuccess = true
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        android.util.Log.w("DownloadManager", "Emergency fallback failed: ${e.message}")
                     }
                 }
 
-                if (!fallbackSuccess && !item.format.isAudio && info.progressiveFallbackUrls.isNotEmpty()) {
+                if (!fallbackSuccess && info.progressiveFallbackUrls.isNotEmpty()) {
                     try {
                         if (tempDownloadFile.exists()) tempDownloadFile.delete()
                         if (tempAudioFile.exists()) tempAudioFile.delete()
@@ -240,7 +408,9 @@ class DownloadManager private constructor(private val context: Context) {
             }
 
             // 4. Procesamiento y empaquetado en staging
-            val isMp3Stream = info.directStreamUrl.contains(".mp3", ignoreCase = true) || tempDownloadFile.name.endsWith(".mp3", ignoreCase = true)
+            val isMp3Stream = (completedViaYoutubeDL && item.format == MediaFormat.MP3_320) ||
+                info.directStreamUrl.contains(".mp3", ignoreCase = true) ||
+                tempDownloadFile.name.endsWith(".mp3", ignoreCase = true)
             val extension = if (item.format.isAudio) {
                 if (isMp3Stream) "mp3" else "m4a"
             } else {
@@ -248,10 +418,20 @@ class DownloadManager private constructor(private val context: Context) {
             }
 
             val stagedFile = File(context.cacheDir, "staged_${item.id}.${extension}")
-            if (stagedFile.exists()) stagedFile.delete()
+            if (!completedViaYoutubeDL && stagedFile.exists()) stagedFile.delete()
 
             val finalMimeType: String
-            if (hasSeparateAudio) {
+            if (completedViaYoutubeDL && preStagedFile.exists() && preStagedFile.length() > 0L) {
+                if (preStagedFile.absolutePath != stagedFile.absolutePath) {
+                    preStagedFile.copyTo(stagedFile, overwrite = true)
+                    preStagedFile.delete()
+                }
+                finalMimeType = if (item.format.isAudio) {
+                    if (extension == "mp3") "audio/mpeg" else "audio/mp4"
+                } else {
+                    "video/mp4"
+                }
+            } else if (hasSeparateAudio) {
                 // Remuxing nativo DASH en Android para video 1080p Full HD
                 item.status = DownloadStatus.PROCESSING
                 item.speedText = "Remuxing 1080p FHD…"
@@ -474,7 +654,7 @@ class DownloadManager private constructor(private val context: Context) {
         totalBytes: Long
     ) {
         val targetItag = extractItagFromUrl(initialUrl)
-        val chunkSize = 2 * 1024 * 1024L
+        val chunkSize = 8 * 1024 * 1024L
         var activeUrl = initialUrl
         var activeHeaders = initialHeaders
         var downloadedBytes = 0L
@@ -491,28 +671,10 @@ class DownloadManager private constructor(private val context: Context) {
                 val end = minOf(start + chunkSize - 1, totalBytes - 1)
                 val expectedChunkBytes = end - start + 1
 
-                // Renovar token antes del umbral de cuota (~18 MB en cliente ANDROID)
-                if (chunksSinceRefresh >= 8 && activeUrl.contains("c=ANDROID", ignoreCase = true)) {
-                    MediaExtractor.refreshYouTubeStreamUrl(
-                        url = item.url,
-                        requestedFormat = item.format,
-                        isAudioStream = isAudioStream,
-                        preferVisionOs = false,
-                        targetItag = targetItag
-                    )?.let { (refreshedUrl, refreshedHeaders) ->
-                        val refreshedClen = extractClenFromUrl(refreshedUrl)
-                        if (refreshedClen == null || refreshedClen == totalBytes) {
-                            activeUrl = refreshedUrl
-                            activeHeaders = refreshedHeaders
-                            chunksSinceRefresh = 0
-                        }
-                    }
-                }
-
                 var chunkCompleted = false
                 var lastChunkError: Exception? = null
 
-                for (attempt in 0 until 4) {
+                for (attempt in 0 until 3) {
                     currentCoroutineContext().ensureActive()
                     if (attempt > 0) {
                         delay(250L * attempt)
@@ -520,7 +682,7 @@ class DownloadManager private constructor(private val context: Context) {
                             url = item.url,
                             requestedFormat = item.format,
                             isAudioStream = isAudioStream,
-                            preferVisionOs = (attempt >= 2),
+                            preferVisionOs = true,
                             targetItag = targetItag
                         )?.let { (refreshedUrl, refreshedHeaders) ->
                             val refreshedClen = extractClenFromUrl(refreshedUrl)
@@ -534,7 +696,9 @@ class DownloadManager private constructor(private val context: Context) {
 
                     try {
                         val lowerActive = activeUrl.lowercase()
-                        val useRangeParam = lowerActive.contains("c=android") || lowerActive.contains("c=ios")
+                        val useRangeParam = lowerActive.contains("c=android") ||
+                            lowerActive.contains("c=ios") ||
+                            lowerActive.contains("c=visionos")
                         val reqUrl = if (useRangeParam) buildUrlWithRange(activeUrl, start, end) else activeUrl
                         val headers = resolveStreamHeaders(activeUrl, activeHeaders, isAudioStream)
 
@@ -624,7 +788,7 @@ class DownloadManager private constructor(private val context: Context) {
         endPct: Int,
         isAudioStream: Boolean
     ) {
-        val candidateUrls = (listOf(primaryUrl) + backupUrls).filter { it.isNotBlank() }.distinct()
+        val candidateUrls = (listOf(primaryUrl) + backupUrls).filter { it.isNotBlank() }.distinct().take(3)
         var lastError: Exception? = null
 
         for (streamUrl in candidateUrls) {

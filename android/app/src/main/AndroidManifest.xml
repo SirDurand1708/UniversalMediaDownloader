@@ -26,6 +26,7 @@
     <application
         android:name=".MusicApplication"
         android:allowBackup="true"
+        android:extractNativeLibs="true"
         android:largeHeap="true"
         android:requestLegacyExternalStorage="true"
         android:dataExtractionRules="@xml/data_extraction_rules"

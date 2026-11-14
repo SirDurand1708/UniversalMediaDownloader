@@ -22,13 +22,19 @@ android {
         applicationId = "com.omnivault.media"
         minSdk = 24
         targetSdk = 36
-        versionCode = 257
-        versionName = "2.5.7"
+        versionCode = 258
+        versionName = "2.5.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
         }
     }
 
@@ -140,8 +146,11 @@ dependencies {
     // ProfileInstaller for baseline profiles
     implementation("androidx.profileinstaller:profileinstaller:1.3.1")
 
-    // SimpMusic Architecture
+    // SimpMusic Architecture & Elite Downloader Stack (yt-dlp + FFmpeg + Aria2c)
     implementation(libs.newpipe.extractor)
+    implementation(libs.youtubedl.android)
+    implementation(libs.youtubedl.ffmpeg)
+    implementation(libs.youtubedl.aria2c)
     
     // JSON & Image/Video decoders
     implementation("com.google.code.gson:gson:2.10.1")

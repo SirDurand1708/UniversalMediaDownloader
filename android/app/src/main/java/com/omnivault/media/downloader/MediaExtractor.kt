@@ -594,6 +594,37 @@ object MediaExtractor {
         return preferred + list.filter { it.itag != preferredItag }
     }
 
+    @Volatile
+    private var cachedVisitorData: String? = null
+
+    private fun fetchYouTubeVisitorData(videoId: String): String {
+        try {
+            val watchReq = Request.Builder()
+                .url("https://www.youtube.com/watch?v=$videoId")
+                .header("User-Agent", "Mozilla/5.0")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .build()
+            client.newCall(watchReq).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val html = resp.body?.string() ?: ""
+                    val m = Regex(""""VISITOR_DATA"\s*:\s*"([^"]+)"""").find(html)
+                    val vd = m?.groupValues?.get(1)?.trim()
+                    if (!vd.isNullOrBlank()) {
+                        cachedVisitorData = vd
+                        return vd
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        cachedVisitorData?.takeIf { it.isNotBlank() }?.let { return it }
+        return try {
+            com.amurayada.music.data.youtube.YouTubeMusicClient.visitorData ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
     private fun extractYouTubeInnerTube(
         videoId: String,
         requestedFormat: MediaFormat,
@@ -602,9 +633,14 @@ object MediaExtractor {
         forceProgressiveOnly: Boolean = false
     ): ExtractedMediaInfo? {
         try {
-            val endpoint = "https://www.youtube.com/youtubei/v1/player?key=$YT_API_KEY"
+            val endpoint = if (useVisionOs) {
+                "https://www.youtube.com/youtubei/v1/player?prettyPrint=false"
+            } else {
+                "https://www.youtube.com/youtubei/v1/player?key=$YT_API_KEY"
+            }
             val clientUserAgent = if (useVisionOs) YT_VISIONOS_USER_AGENT else YT_USER_AGENT
             val clientHeaders = mapOf("User-Agent" to clientUserAgent)
+            val visitorData = if (useVisionOs) fetchYouTubeVisitorData(videoId) else ""
 
             val payload = if (useVisionOs) {
                 """
@@ -615,16 +651,16 @@ object MediaExtractor {
                             "clientVersion": "1.02",
                             "deviceMake": "Apple",
                             "deviceModel": "RealityDevice17,1",
+                            "hl": "en",
                             "osName": "visionOS",
                             "osVersion": "26.5.23O471",
-                            "hl": "es",
-                            "gl": "US"
-                        },
-                        "user": {
-                            "lockedSafetyMode": false
+                            "userAgent": "$YT_VISIONOS_USER_AGENT",
+                            "visitorData": "$visitorData"
                         }
                     },
-                    "videoId": "$videoId"
+                    "videoId": "$videoId",
+                    "contentCheckOk": true,
+                    "racyCheckOk": true
                 }
                 """.trimIndent()
             } else {
@@ -644,19 +680,29 @@ object MediaExtractor {
                             "lockedSafetyMode": false
                         }
                     },
-                    "videoId": "$videoId"
+                    "videoId": "$videoId",
+                    "contentCheckOk": true,
+                    "racyCheckOk": true
                 }
                 """.trimIndent()
             }
 
-            val req = Request.Builder()
+            val reqBuilder = Request.Builder()
                 .url(endpoint)
                 .post(payload.toRequestBody("application/json; charset=utf-8".toMediaType()))
                 .header("User-Agent", clientUserAgent)
                 .header("Content-Type", "application/json")
-                .build()
 
-            client.newCall(req).execute().use { resp ->
+            if (useVisionOs) {
+                if (visitorData.isNotBlank()) {
+                    reqBuilder.header("X-Goog-Visitor-Id", visitorData)
+                }
+                reqBuilder.header("X-YouTube-Client-Name", "101")
+                reqBuilder.header("X-YouTube-Client-Version", "1.02")
+                reqBuilder.header("Origin", "https://www.youtube.com")
+            }
+
+            client.newCall(reqBuilder.build()).execute().use { resp ->
                 if (!resp.isSuccessful) return null
                 val body = resp.body?.string() ?: ""
                 if (body.isBlank()) return null
@@ -700,9 +746,15 @@ object MediaExtractor {
                 if (requestedFormat.isAudio) {
                     val orderedAudios = prioritizeItag((audioMp4 + audioOther).distinctBy { it.url }, preferredItag)
                     val orderedProg = prioritizeItag(progressiveMp4.distinctBy { it.url }, preferredItag)
-                    val primaryUrl = orderedAudios.firstOrNull()?.url ?: orderedProg.firstOrNull()?.url
+                    // En ANDROID sin PoToken, los flujos adaptativos tienen límite GVS de 60s, mientras que progressiveMp4 (itag 18) no tiene límite.
+                    val candidateList = if (useVisionOs && !forceProgressiveOnly) {
+                        orderedAudios + orderedProg
+                    } else {
+                        orderedProg + orderedAudios
+                    }
+                    val primaryUrl = candidateList.firstOrNull()?.url
                     if (!primaryUrl.isNullOrBlank()) {
-                        val backups = (orderedAudios.drop(1).map { it.url } + orderedProg.map { it.url })
+                        val backups = candidateList.drop(1).map { it.url }
                             .filter { it != primaryUrl }
                             .distinct()
                         return ExtractedMediaInfo(
@@ -713,14 +765,17 @@ object MediaExtractor {
                             author = author,
                             thumbnailUrl = bestThumb,
                             requestHeaders = clientHeaders,
-                            backupStreamUrls = backups
+                            backupStreamUrls = backups,
+                            progressiveFallbackUrls = orderedProg.map { it.url }.distinct()
                         )
                     }
                     return null
                 }
 
                 val progressiveUrls = progressiveMp4.map { it.url }.distinct()
-                if (forceProgressiveOnly) {
+                // En ANDROID sin PoToken, los flujos adaptativos se cortan a los ~60s con HTTP 403,
+                // por lo que para ANDROID usamos directamente el flujo progresivo completo (itag 18).
+                if (forceProgressiveOnly || !useVisionOs) {
                     val orderedProg = prioritizeItag(progressiveMp4.distinctBy { it.url }, preferredItag).map { it.url }
                     if (orderedProg.isNotEmpty()) {
                         return ExtractedMediaInfo(
@@ -735,7 +790,7 @@ object MediaExtractor {
                             progressiveFallbackUrls = orderedProg
                         )
                     }
-                    return null
+                    if (forceProgressiveOnly) return null
                 }
 
                 val targetHeight = if (requestedFormat == MediaFormat.MP4_1080) 1080 else 720
@@ -800,7 +855,7 @@ object MediaExtractor {
         url: String,
         requestedFormat: MediaFormat,
         isAudioStream: Boolean,
-        preferVisionOs: Boolean = false,
+        preferVisionOs: Boolean = true,
         targetItag: Int? = null
     ): Pair<String, Map<String, String>>? = withContext(Dispatchers.IO) {
         val videoId = extractYouTubeVideoId(url) ?: return@withContext null
@@ -953,15 +1008,31 @@ object MediaExtractor {
 
         val thumbUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
 
-        // 1. MOTOR PRIMARIO: InnerTube ANDROID (20.10.38) con VISIONOS (1.02) como respaldo inmediato
-        val androidInfo = extractYouTubeInnerTube(videoId, requestedFormat, useVisionOs = false)
-        if (androidInfo != null) {
-            return androidInfo
+        // 1. MOTOR PRIMARIO: InnerTube VISIONOS (1.02 + visitorData, sin requisito de PoToken GVS para 1080p/720p/M4A)
+        // adjuntando también el flujo progresivo oficial (itag 18) de ANDROID (20.10.38) como respaldo libre de límite de 60s.
+        val visionOsInfo = extractYouTubeInnerTube(videoId, requestedFormat, useVisionOs = true)
+        val androidProgInfo = extractYouTubeInnerTube(videoId, requestedFormat, useVisionOs = false, forceProgressiveOnly = true)
+
+        if (visionOsInfo != null) {
+            if (androidProgInfo != null) {
+                val combinedProg = (visionOsInfo.progressiveFallbackUrls + androidProgInfo.progressiveFallbackUrls + listOf(androidProgInfo.directStreamUrl))
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                val combinedBackups = if (requestedFormat.isAudio) {
+                    (visionOsInfo.backupStreamUrls + combinedProg).distinct()
+                } else {
+                    visionOsInfo.backupStreamUrls
+                }
+                return visionOsInfo.copy(
+                    backupStreamUrls = combinedBackups,
+                    progressiveFallbackUrls = combinedProg
+                )
+            }
+            return visionOsInfo
         }
 
-        val visionOsInfo = extractYouTubeInnerTube(videoId, requestedFormat, useVisionOs = true)
-        if (visionOsInfo != null) {
-            return visionOsInfo
+        if (androidProgInfo != null) {
+            return androidProgInfo
         }
 
         // 2. RESPALDO SECUNDARIO: NewPipeExtractor
