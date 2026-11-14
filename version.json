@@ -1,13 +1,13 @@
 {
-  "version": "2.5.12",
-  "version_code": 262,
+  "version": "2.5.13",
+  "version_code": 263,
   "release_date": "2026-11-14",
-  "title": "OmniVault v2.5.12 — Windows PC & Android",
+  "title": "OmniVault v2.5.13 — Windows PC & Android",
   "changelog": "⚔️ Integración del Stack de Élite completo en Android: youtubedl-android (yt-dlp + FFmpeg + QuickJS + Aria2c) con auto-actualización en segundo plano\n🍎 Motor primario VISIONOS 1.02 autenticado con visitorData dinámico: descarga 100% de videos 1080p/720p y audios M4A/MP3 sin bloqueo GVS PoToken ni corte a los 60 segundos (HTTP 403)\n🎬 Bloques de transferencia acelerados de 8MB con parámetro nativo range=start-end y conversión/muxing real con FFmpeg\n🛡️ Respaldo progresivo inmediato (itag 18 ANDROID 20.10.38) libre de límite de 60s y soporte de cookies de sesión de YouTube\n🗑️ Eliminación permanente e instantánea de canciones en biblioteca, bases de datos y almacenamiento del dispositivo",
   "android": {
-    "version": "2.5.12",
-    "version_code": 262,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.12/OmniVault-v2.5.12-Android.apk",
+    "version": "2.5.13",
+    "version_code": 263,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.13/OmniVault-v2.5.13-Android.apk",
     "min_version_code": 201
   },
   "windows": {

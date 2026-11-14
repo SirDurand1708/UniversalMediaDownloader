@@ -114,12 +114,12 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     var playbackMode by mutableStateOf(PlaybackMode())
         private set
 
-    var playbackSpeed by mutableStateOf(1.0f)
-        private set
+    private var _playbackSpeed by mutableStateOf(1.0f)
+    val playbackSpeed: Float get() = _playbackSpeed
 
     fun setPlaybackSpeed(speed: Float) {
         val clamped = speed.coerceIn(0.5f, 2.0f)
-        playbackSpeed = clamped
+        _playbackSpeed = clamped
         mediaController?.setPlaybackParameters(androidx.media3.common.PlaybackParameters(clamped))
     }
     
