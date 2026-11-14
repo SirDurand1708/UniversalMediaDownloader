@@ -79,6 +79,7 @@ class UniversalDownloadEngine private constructor(context: Context) {
 
     private val _downloadsState = MutableStateFlow<Map<String, UniversalDownloadState>>(emptyMap())
     val downloadsState: StateFlow<Map<String, UniversalDownloadState>> = _downloadsState.asStateFlow()
+    private val activeProcesses = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
     companion object {
         private const val PUBLIC_FOLDER_NAME = "OmniVault"
@@ -206,6 +207,8 @@ class UniversalDownloadEngine private constructor(context: Context) {
         }
 
         try {
+            activeProcesses.add(processId)
+            cleanupOrphanCacheDirs()
             if (tempCacheDir.exists()) tempCacheDir.deleteRecursively()
             tempCacheDir.mkdirs()
 
@@ -234,12 +237,20 @@ class UniversalDownloadEngine private constructor(context: Context) {
             val request = YoutubeDLRequest(cleanUrl).apply {
                 addOption("--no-playlist")
                 addOption("--no-mtime")
-                addOption("--concurrent-fragments", 4)
+                addOption("--concurrent-fragments", 8)
+                addOption("--buffer-size", "64K")
+                addOption("--extractor-args", "youtube:player_client=android,web")
                 addOption("--retries", 3)
                 addOption("--fragment-retries", 3)
                 addOption("--socket-timeout", 20)
                 addOption("-P", tempCacheDir.absolutePath)
                 addOption("-o", outTemplate)
+
+                val hasAria2c = File(appContext.applicationInfo.nativeLibraryDir, "libaria2c.so").exists()
+                if (hasAria2c) {
+                    addOption("--downloader", "aria2c")
+                    addOption("--downloader-args", "aria2c:-x 16 -s 16 -k 1M --min-split-size=1M --file-allocation=none --summary-interval=0")
+                }
 
                 writeAuthCookiesIfAvailable(tempCacheDir)?.let { cookieFile ->
                     addOption("--cookies", cookieFile.absolutePath)
@@ -424,10 +435,24 @@ class UniversalDownloadEngine private constructor(context: Context) {
             publishState(failedState)
             throw e
         } finally {
+            activeProcesses.remove(processId)
             try {
                 if (tempCacheDir.exists()) tempCacheDir.deleteRecursively()
             } catch (_: Exception) {}
         }
+    }
+
+    private fun cleanupOrphanCacheDirs() {
+        try {
+            appContext.cacheDir.listFiles()?.forEach { file ->
+                if (file.isDirectory && file.name.startsWith("ytdl_cache_")) {
+                    val id = file.name.removePrefix("ytdl_cache_")
+                    if (id !in activeProcesses) {
+                        file.deleteRecursively()
+                    }
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     /**
@@ -459,7 +484,7 @@ class UniversalDownloadEngine private constructor(context: Context) {
                     if (targetDoc != null) {
                         appContext.contentResolver.openOutputStream(targetDoc.uri)?.use { out ->
                             sourceFile.inputStream().use { input ->
-                                input.copyTo(out)
+                                input.copyTo(out, bufferSize = 262_144)
                             }
                         }
                         return Triple(targetDoc.uri.toString(), null, fileLength)
@@ -495,7 +520,7 @@ class UniversalDownloadEngine private constructor(context: Context) {
                 if (insertedUri != null) {
                     appContext.contentResolver.openOutputStream(insertedUri)?.use { out ->
                         sourceFile.inputStream().use { input ->
-                            input.copyTo(out)
+                            input.copyTo(out, bufferSize = 262_144)
                         }
                     }
                     val completeValues = ContentValues().apply {
