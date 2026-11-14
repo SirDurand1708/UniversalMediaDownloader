@@ -7,6 +7,7 @@ import androidx.media3.datasource.TransferListener
 import com.amurayada.music.data.model.Song
 import com.amurayada.music.data.repository.StreamRepository
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * A [DataSource] that resolves YouTube URLs to actual stream URLs just-in-time.
@@ -40,9 +41,11 @@ class ResolvingDataSource(
              // Resolve synchronously (we are already on a background thread in ExoPlayer)
              try {
                  val resolvedString = runBlocking {
-                     // Create a dummy song just to pass the path
-                     val dummySong = Song(0, "", "", "", 0, null, originalUri.toString(), 0L)
-                     streamRepository.getStreamUrl(dummySong)
+                     withTimeoutOrNull(8_000L) {
+                         // Create a dummy song just to pass the path
+                         val dummySong = Song(0, "", "", "", 0, null, originalUri.toString(), 0L)
+                         streamRepository.getStreamUrl(dummySong)
+                     }
                  }
                  
                  if (resolvedString != null) {

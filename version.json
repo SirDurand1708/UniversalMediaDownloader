@@ -1,19 +1,19 @@
 {
-  "version": "2.5.16",
-  "version_code": 266,
+  "version": "2.5.17",
+  "version_code": 267,
   "release_date": "2026-11-14",
-  "title": "OmniVault v2.5.16 — Windows PC & Android",
-  "changelog": "⚔️ Integración del Stack de Élite completo en Android: youtubedl-android (yt-dlp + FFmpeg + QuickJS + Aria2c) con auto-actualización en segundo plano\n🍎 Motor primario VISIONOS 1.02 autenticado con visitorData dinámico: descarga 100% de videos 1080p/720p y audios M4A/MP3 sin bloqueo GVS PoToken ni corte a los 60 segundos (HTTP 403)\n🛡️ Escudo Anti-Doze, auto-actualizador de APK en 1 clic y cola dinámica de reproducción\n🧹 Auditoría y limpieza de OmniVault Desktop con threading.excepthook para trazabilidad total en hilos secundarios",
+  "title": "OmniVault v2.5.17 — Windows PC & Android",
+  "changelog": "⚡ Análisis ultrarrápido de enlaces (flat extraction sin manifiestos DASH/HLS y timeouts estrictos de 6-8s)\n🚀 Blindaje de descargas con Aria2c a 16 conexiones paralelas y búferes de I/O de 256 KB en exportación a almacenamiento\n🎧 Caché LRU en memoria para URLs de streaming (pausa/reanudación/seek instantáneos sin re-extraer) y resolución protegida por timeout",
   "android": {
-    "version": "2.5.16",
-    "version_code": 266,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.16/OmniVault-v2.5.16-Android.apk",
+    "version": "2.5.17",
+    "version_code": 267,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.17/OmniVault-v2.5.17-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.16",
-    "version_code": 266,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.16/OmniVault-v2.5.16-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.16/OmniVault-v2.5.16-Windows-x64-Portable.zip"
+    "version": "2.5.17",
+    "version_code": 267,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.17/OmniVault-v2.5.17-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.17/OmniVault-v2.5.17-Windows-x64-Portable.zip"
   }
 }

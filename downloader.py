@@ -597,7 +597,7 @@ def _fetch_tiktok_api(url: str) -> Optional[Dict[str, Any]]:
         'Accept': 'application/json',
     })
     try:
-        with urllib.request.urlopen(req, timeout=12) as resp:
+        with urllib.request.urlopen(req, timeout=7) as resp:
             res = json.loads(resp.read().decode('utf-8'))
         if res.get('code') == 0 and 'data' in res:
             d = res['data']
@@ -884,6 +884,10 @@ class DownloaderEngine:
         ydl_opts.update({
             'extract_flat': True,
             'skip_download': True,
+            'socket_timeout': 7,
+            'retries': 1,
+            'ignore_no_formats_error': True,
+            'extractor_args': {'youtube': {'skip': ['dash', 'hls']}},
         })
 
         res = None
@@ -901,27 +905,17 @@ class DownloaderEngine:
                     e = retry_e
                     err = str(e).lower()
             err = str(e).lower()
-            # Si TikTok falló en yt-dlp, reintentar con el motor directo
-            if is_tiktok_url(url):
-                tt_data = _fetch_tiktok_api(url)
-                if tt_data:
-                    return {
-                        'is_playlist': False,
-                        'id': tt_data['id'],
-                        'title': tt_data['title'],
-                        'uploader': tt_data['uploader'],
-                        'duration': format_duration(tt_data['duration']),
-                        'raw_duration': tt_data['duration'],
-                        'thumbnail': tt_data['thumbnail'],
-                        'url': url,
-                        'available_heights': [1080, 720],
-                        'extractor': 'TikTok (HD Directo)',
-                        '_tiktok_data': tt_data,
-                    }
 
             if any(k in err for k in ['sign in', 'age', 'confirm your age', 'private', 'login', 'bot', 'confirm you']):
                 ydl_opts_cookies = self._base_opts(browser=browser, cookiefile=cookiefile, use_cookies=True)
-                ydl_opts_cookies.update({'extract_flat': True, 'skip_download': True})
+                ydl_opts_cookies.update({
+                    'extract_flat': True,
+                    'skip_download': True,
+                    'socket_timeout': 7,
+                    'retries': 1,
+                    'ignore_no_formats_error': True,
+                    'extractor_args': {'youtube': {'skip': ['dash', 'hls']}},
+                })
                 try:
                     with yt_dlp.YoutubeDL(ydl_opts_cookies) as ydl:
                         res = ydl.extract_info(url, download=False)
@@ -929,25 +923,6 @@ class DownloaderEngine:
                     raise Exception(clean_error_text(str(e2)))
             else:
                 raise Exception(clean_error_text(str(e)))
-
-        if not res and is_tiktok_url(url):
-            tt_data = _fetch_tiktok_api(url)
-            if tt_data:
-                tt_dur = tt_data.get('duration', 0)
-                return {
-                    'is_playlist': False,
-                    'id': tt_data['id'],
-                    'title': tt_data['title'],
-                    'uploader': tt_data['uploader'],
-                    'duration': format_duration(tt_dur),
-                    'raw_duration': tt_dur,
-                    'thumbnail': tt_data['thumbnail'],
-                    'url': url,
-                    'available_heights': [1080, 720],
-                    'extractor': 'TikTok (HD Directo)',
-                    '_tiktok_data': tt_data,
-                    'estimated_sizes': estimate_sizes_for_video(tt_dur, []),
-                }
 
         if not res:
             raise Exception("No se pudo obtener la información del contenido multimedia.")

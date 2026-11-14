@@ -88,6 +88,8 @@ class AudioPlayer:
         with self._lock:
             if not self._loaded_path:
                 return False
+            if self._is_paused:
+                return True
             res, _ = self._exec(f'pause {self._alias}')
             self._is_paused = True
             return res == 0
@@ -97,6 +99,8 @@ class AudioPlayer:
         with self._lock:
             if not self._loaded_path:
                 return False
+            if not self._is_paused:
+                return True
             res, _ = self._exec(f'resume {self._alias}')
             self._is_paused = False
             return res == 0

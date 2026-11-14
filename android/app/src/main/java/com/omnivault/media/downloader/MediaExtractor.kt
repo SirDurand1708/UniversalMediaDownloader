@@ -50,6 +50,13 @@ object MediaExtractor {
         .followRedirects(true)
         .build()
 
+    private val previewClient = OkHttpClient.Builder()
+        .connectTimeout(6, TimeUnit.SECONDS)
+        .readTimeout(7, TimeUnit.SECONDS)
+        .callTimeout(8, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .build()
+
     private const val YT_API_KEY = "AIzaSyAO_FJ2SlqAE4An4Ek78YsFubnuhRlzQ"
     private const val YT_USER_AGENT = "com.google.android.youtube/20.10.38 (Linux; U; Android 14)"
     private const val YT_VISIONOS_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"
@@ -65,12 +72,17 @@ object MediaExtractor {
      * Resuelve redirecciones para enlaces acortados (vm.tiktok.com, vt.tiktok.com, fb.watch, ig.me, t.co).
      */
     private fun resolveRedirect(url: String): String {
+        val lower = url.lowercase()
+        val isShortener = lower.contains("vm.tiktok.com") || lower.contains("vt.tiktok.com") ||
+            lower.contains("fb.watch") || lower.contains("ig.me") || lower.contains("t.co/") ||
+            lower.contains("bit.ly/") || lower.contains("tinyurl.com/") || lower.contains("on.soundcloud.com")
+        if (!isShortener) return url
         return try {
             val req = Request.Builder()
                 .url(url)
                 .header("User-Agent", DESKTOP_USER_AGENT)
                 .build()
-            client.newCall(req).execute().use { resp ->
+            previewClient.newCall(req).execute().use { resp ->
                 resp.request.url.toString()
             }
         } catch (_: Exception) {
@@ -181,7 +193,7 @@ object MediaExtractor {
             try {
                 val oembedUrl = "https://www.youtube.com/oembed?url=https://www.youtube.com/playlist?list=$listId&format=json"
                 val req = Request.Builder().url(oembedUrl).header("User-Agent", BROWSER_USER_AGENT).build()
-                client.newCall(req).execute().use { resp ->
+                previewClient.newCall(req).execute().use { resp ->
                     if (resp.isSuccessful) {
                         val body = resp.body?.string() ?: ""
                         val root = JsonParser.parseString(body).asJsonObject

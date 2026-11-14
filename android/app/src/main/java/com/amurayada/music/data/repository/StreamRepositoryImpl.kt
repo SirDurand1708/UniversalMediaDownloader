@@ -1,5 +1,6 @@
 package com.amurayada.music.data.repository
 
+import android.util.LruCache
 import com.amurayada.music.data.model.Song
 import com.amurayada.music.data.newpipe.NewPipeDownloader
 import kotlinx.coroutines.Dispatchers
@@ -10,6 +11,15 @@ import org.schabi.newpipe.extractor.stream.StreamExtractor
 
 class StreamRepositoryImpl : StreamRepository {
 
+    private data class CachedStream<T>(val value: T, val timestampMs: Long)
+
+    companion object {
+        private const val STREAM_CACHE_TTL_MS = 2 * 60 * 60 * 1000L // 2 horas (enlaces googlevideo duran ~6h)
+        private const val MAX_CACHE_ENTRIES = 128
+        private val audioStreamCache = LruCache<String, CachedStream<String>>(MAX_CACHE_ENTRIES)
+        private val videoStreamCache = LruCache<String, CachedStream<Pair<String, Long>>>(MAX_CACHE_ENTRIES)
+    }
+
     init {
         if (NewPipe.getDownloader() == null) {
             NewPipe.init(NewPipeDownloader())
@@ -19,6 +29,12 @@ class StreamRepositoryImpl : StreamRepository {
     override suspend fun getStreamUrl(song: Song): String? = withContext(Dispatchers.IO) {
         try {
             if (!song.path.startsWith("http")) return@withContext song.path
+
+            val now = System.currentTimeMillis()
+            val cached = synchronized(audioStreamCache) { audioStreamCache.get(song.path) }
+            if (cached != null && (now - cached.timestampMs) < STREAM_CACHE_TTL_MS) {
+                return@withContext cached.value
+            }
 
             val service = ServiceList.YouTube
             val extractor = service.getStreamExtractor(song.path) as StreamExtractor
@@ -31,12 +47,24 @@ class StreamRepositoryImpl : StreamRepository {
                     it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 
                 }.thenByDescending { it.averageBitrate }).firstOrNull()
                 
-                return@withContext best?.content
+                val resolved = best?.content
+                if (!resolved.isNullOrBlank()) {
+                    synchronized(audioStreamCache) {
+                        audioStreamCache.put(song.path, CachedStream(resolved, System.currentTimeMillis()))
+                    }
+                }
+                return@withContext resolved
             }
             
             val videoStreams = extractor.videoStreams
             if (videoStreams.isNotEmpty()) {
-                return@withContext videoStreams.firstOrNull()?.content
+                val resolved = videoStreams.firstOrNull()?.content
+                if (!resolved.isNullOrBlank()) {
+                    synchronized(audioStreamCache) {
+                        audioStreamCache.put(song.path, CachedStream(resolved, System.currentTimeMillis()))
+                    }
+                }
+                return@withContext resolved
             }
 
             null
@@ -159,6 +187,12 @@ class StreamRepositoryImpl : StreamRepository {
                 return@withContext null
             }
 
+            val now = System.currentTimeMillis()
+            val cachedVideo = synchronized(videoStreamCache) { videoStreamCache.get(song.path) }
+            if (cachedVideo != null && (now - cachedVideo.timestampMs) < STREAM_CACHE_TTL_MS) {
+                return@withContext cachedVideo.value
+            }
+
             android.util.Log.d("StreamRepo", "Obteniendo stream de video para: ${song.path}")
 
             val service = ServiceList.YouTube
@@ -169,16 +203,32 @@ class StreamRepositoryImpl : StreamRepository {
             val title = extractor.name ?: ""
             if (uploader.endsWith("- Topic") || title.contains("Official Audio", ignoreCase = true)) {
                 android.util.Log.d("StreamRepo", "Video es imagen estática (Topic: '$uploader', Titulo: '$title'). Intentando búsqueda de respaldo...")
-                return@withContext searchFallbackVideo(song)
+                val fallback = searchFallbackVideo(song)
+                if (fallback != null) {
+                    synchronized(videoStreamCache) {
+                        videoStreamCache.put(song.path, CachedStream(fallback, System.currentTimeMillis()))
+                    }
+                }
+                return@withContext fallback
             }
 
             val result = selectBestVideoStream(extractor)
             if (result == null) {
-                return@withContext searchFallbackVideo(song)
+                val fallback = searchFallbackVideo(song)
+                if (fallback != null) {
+                    synchronized(videoStreamCache) {
+                        videoStreamCache.put(song.path, CachedStream(fallback, System.currentTimeMillis()))
+                    }
+                }
+                return@withContext fallback
             }
             
-            // Primario es bueno, retornar con duración
-            Pair(result, extractor.length)
+            // Primario es bueno, retornar con duración y cachear en LRU
+            val pair = Pair(result, extractor.length)
+            synchronized(videoStreamCache) {
+                videoStreamCache.put(song.path, CachedStream(pair, System.currentTimeMillis()))
+            }
+            pair
         } catch (e: Exception) {
             android.util.Log.e("StreamRepo", "Fallo al obtener stream de video, intentando respaldo", e)
             searchFallbackVideo(song)

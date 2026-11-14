@@ -118,7 +118,7 @@ object StorageHelper {
                 if (contentUri != null) {
                     appContext.contentResolver.openOutputStream(contentUri)?.use { outputStream ->
                         sourceFile.inputStream().use { inputStream ->
-                            inputStream.copyTo(outputStream)
+                            inputStream.copyTo(outputStream, bufferSize = 262_144)
                         }
                     }
 
@@ -159,7 +159,7 @@ object StorageHelper {
         // Método 2 (Legacy o almacenamiento directo): Escritura en directorio público o Downloads
         val targetDir = getOutputDirectory(isAudio, appContext)
         val targetFile = File(targetDir, displayName)
-        sourceFile.copyTo(targetFile, overwrite = true)
+        sourceFile.copyTo(targetFile, overwrite = true, bufferSize = 262_144)
         scanMediaFile(appContext, targetFile, mimeType)
         return targetFile
     }

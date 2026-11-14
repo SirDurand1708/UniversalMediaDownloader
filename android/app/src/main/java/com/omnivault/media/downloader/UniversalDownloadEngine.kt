@@ -137,7 +137,10 @@ class UniversalDownloadEngine private constructor(context: Context) {
         try {
             val infoRequest = YoutubeDLRequest(cleanUrl).apply {
                 addOption("--no-playlist")
-                addOption("--socket-timeout", 15)
+                addOption("--flat-playlist")
+                addOption("--socket-timeout", 7)
+                addOption("--retries", 1)
+                addOption("--extractor-args", "youtube:skip=dash,hls")
                 writeAuthCookiesIfAvailable(tempCookieDir)?.let { cookieFile ->
                     addOption("--cookies", cookieFile.absolutePath)
                 }
@@ -238,7 +241,7 @@ class UniversalDownloadEngine private constructor(context: Context) {
                 addOption("--no-playlist")
                 addOption("--no-mtime")
                 addOption("--concurrent-fragments", 8)
-                addOption("--buffer-size", "64K")
+                addOption("--buffer-size", "256K")
                 addOption("--extractor-args", "youtube:player_client=android,web")
                 addOption("--retries", 3)
                 addOption("--fragment-retries", 3)
@@ -249,7 +252,7 @@ class UniversalDownloadEngine private constructor(context: Context) {
                 val hasAria2c = File(appContext.applicationInfo.nativeLibraryDir, "libaria2c.so").exists()
                 if (hasAria2c) {
                     addOption("--downloader", "aria2c")
-                    addOption("--downloader-args", "aria2c:-x 16 -s 16 -k 1M --min-split-size=1M --file-allocation=none --summary-interval=0")
+                    addOption("--downloader-args", "aria2c:-x 16 -s 16 --max-connection-per-server=16 -k 1M --min-split-size=1M --file-allocation=none --summary-interval=0")
                 }
 
                 writeAuthCookiesIfAvailable(tempCacheDir)?.let { cookieFile ->
