@@ -2,6 +2,13 @@ package com.amurayada.music.ui.viewmodel
 
 import android.app.Application
 import android.content.Context
+import android.content.Intent
+import androidx.core.content.FileProvider
+import com.amurayada.music.BuildConfig
+import kotlinx.coroutines.Dispatchers
+import okhttp3.Request
+import java.io.File
+import java.io.FileOutputStream
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.AndroidViewModel
@@ -33,8 +40,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     // Repositorio para la gestión de versiones desde GitHub
     private val updateRepository: UpdateRepository = UpdateRepositoryImpl(client)
 
-    // Versión oficial de Aura Player
-    val CURRENT_VERSION = "2.5.0"
+    // Versión oficial de Aura Player / OmniVault
+    val CURRENT_VERSION: String
+        get() = BuildConfig.VERSION_NAME
 
     // --- Estados de Configuración ---
     
@@ -88,6 +96,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         object Idle : UpdateStatus()
         object Checking : UpdateStatus()
         data class UpdateAvailable(val release: ReleaseInfo) : UpdateStatus()
+        data class Downloading(val progress: Float) : UpdateStatus()
+        data class ReadyToInstall(val apkFile: File) : UpdateStatus()
         object UpToDate : UpdateStatus()
         data class Error(val message: String) : UpdateStatus()
     }
@@ -118,6 +128,82 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             }.onFailure { error ->
                 _updateStatus.value = UpdateStatus.Error(error.message ?: "Error desconocido")
             }
+        }
+    }
+
+    /**
+     * Descarga el APK de actualización en cacheDir con progreso real y dispara el instalador.
+     */
+    fun downloadAndInstallApk(downloadUrl: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                _updateStatus.value = UpdateStatus.Downloading(0f)
+                val request = Request.Builder().url(downloadUrl).build()
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        _updateStatus.value = UpdateStatus.Error("Error al descargar APK (${response.code})")
+                        return@launch
+                    }
+                    val body = response.body ?: run {
+                        _updateStatus.value = UpdateStatus.Error("Respuesta vacía del servidor")
+                        return@launch
+                    }
+                    val totalBytes = body.contentLength()
+                    val apkFile = File(getApplication<Application>().cacheDir, "omnivault_update.apk")
+                    if (apkFile.exists()) apkFile.delete()
+
+                    body.byteStream().use { input ->
+                        FileOutputStream(apkFile).use { output ->
+                            val buffer = ByteArray(65_536)
+                            var bytesRead: Int
+                            var downloaded = 0L
+                            var lastReportedPct = -1
+                            while (input.read(buffer).also { bytesRead = it } != -1) {
+                                output.write(buffer, 0, bytesRead)
+                                downloaded += bytesRead
+                                if (totalBytes > 0) {
+                                    val progress = (downloaded.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f)
+                                    val pct = (progress * 100).toInt()
+                                    if (pct != lastReportedPct) {
+                                        lastReportedPct = pct
+                                        _updateStatus.value = UpdateStatus.Downloading(progress)
+                                    }
+                                }
+                            }
+                            output.flush()
+                        }
+                    }
+
+                    if (!apkFile.exists() || apkFile.length() == 0L) {
+                        _updateStatus.value = UpdateStatus.Error("El archivo APK descargado está vacío")
+                        return@launch
+                    }
+                    _updateStatus.value = UpdateStatus.ReadyToInstall(apkFile)
+                }
+            } catch (e: Exception) {
+                _updateStatus.value = UpdateStatus.Error(e.localizedMessage ?: "Error al descargar la actualización")
+            }
+        }
+    }
+
+    /**
+     * Lanza el instalador del sistema usando FileProvider para el APK descargado.
+     */
+    fun installApk(context: Context, apkFile: File) {
+        try {
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                apkFile
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            _updateStatus.value = UpdateStatus.Error("No se pudo abrir el instalador: ${e.localizedMessage}")
         }
     }
 

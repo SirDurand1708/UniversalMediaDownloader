@@ -22,8 +22,8 @@ android {
         applicationId = "com.omnivault.media"
         minSdk = 24
         targetSdk = 36
-        versionCode = 264
-        versionName = "2.5.14"
+        versionCode = 265
+        versionName = "2.5.15"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -88,6 +88,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

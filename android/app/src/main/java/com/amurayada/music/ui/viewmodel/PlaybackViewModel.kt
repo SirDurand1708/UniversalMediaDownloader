@@ -747,6 +747,22 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
+     * Añade una canción al final de la cola de reproducción actual.
+     */
+    fun addToQueue(song: Song) {
+        viewModelScope.launch {
+            val newQueue = queue.toMutableList()
+            newQueue.add(song)
+            queue = newQueue
+            mediaController?.let { controller ->
+                val mediaItem = createMediaItem(song)
+                controller.addMediaItem(mediaItem)
+            }
+            saveQueue()
+        }
+    }
+
+    /**
      * Inicia la reproducción de una canción específica y establece la nueva cola.
      * @param song La pista que se reproducirá de inmediato.
      * @param songList La lista completa que conformará la cola de reproducción actual.

@@ -52,6 +52,8 @@ fun LibraryScreen(
     onCreatePlaylist: () -> Unit = {},
     onDeleteSong: (Song) -> Unit = {},
     onDeleteDownload: (Song) -> Unit = {},
+    onPlayNext: (Song) -> Unit = {},
+    onAddToQueue: (Song) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -180,6 +182,8 @@ fun LibraryScreen(
                         onAddToPlaylist = onAddToPlaylist,
                         onCreatePlaylist = onCreatePlaylist,
                         onDeleteSong = onDeleteSong,
+                        onPlayNext = onPlayNext,
+                        onAddToQueue = onAddToQueue,
                         currentSong = currentSong,
                         isPlaying = isPlaying
                     )
@@ -203,7 +207,9 @@ fun LibraryScreen(
                         onDeleteDownload = onDeleteDownload,
                         playlists = playlists,
                         onAddToPlaylist = onAddToPlaylist,
-                        onCreatePlaylist = onCreatePlaylist
+                        onCreatePlaylist = onCreatePlaylist,
+                        onPlayNext = onPlayNext,
+                        onAddToQueue = onAddToQueue
                     )
                 }
             }
@@ -219,6 +225,8 @@ fun DownloadsListScreen(
     playlists: List<Playlist>,
     onAddToPlaylist: (Playlist, Song) -> Unit,
     onCreatePlaylist: () -> Unit,
+    onPlayNext: (Song) -> Unit = {},
+    onAddToQueue: (Song) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (downloadedSongs.isEmpty()) {
@@ -267,6 +275,8 @@ fun DownloadsListScreen(
             onAddToPlaylist = onAddToPlaylist,
             onCreatePlaylist = onCreatePlaylist,
             onDeleteSong = onDeleteDownload,
+            onPlayNext = onPlayNext,
+            onAddToQueue = onAddToQueue,
             modifier = modifier
         )
     }

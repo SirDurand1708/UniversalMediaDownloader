@@ -2,7 +2,15 @@ package com.amurayada.music.ui.screens.downloads
 
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
 import android.widget.Toast
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -39,6 +47,26 @@ fun OmniVaultDownloaderScreen(
     onPlayMedia: (DownloadItem) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var isIgnoringBatteryOptimizations by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                pm?.isIgnoringBatteryOptimizations(context.packageName) ?: true
+            } else true
+        )
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                isIgnoringBatteryOptimizations = pm?.isIgnoringBatteryOptimizations(context.packageName) ?: true
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val urlInput by downloadViewModel.urlInput.collectAsState()
     val selectedFormat by downloadViewModel.selectedFormat.collectAsState()
     val mediaPreview by downloadViewModel.mediaPreview.collectAsState()
@@ -162,6 +190,76 @@ fun OmniVaultDownloaderScreen(
                             maxLines = 1,
                             softWrap = false
                         )
+                    }
+                }
+            }
+        }
+
+        // Escudo Anti-Doze (Optimización de batería)
+        if (!isIgnoringBatteryOptimizations) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFF2D2212).copy(alpha = 0.9f)
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, Color(0xFFFFB300).copy(alpha = 0.45f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Rounded.BatteryAlert,
+                                contentDescription = null,
+                                tint = Color(0xFFFFB300),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "Ahorro de batería activo",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFFFE082)
+                            )
+                        }
+                        Text(
+                            text = "Android puede pausar descargas largas al apagar la pantalla. Permite la ejecución sin restricciones para evitar cortes.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.85f)
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                try {
+                                    val intent = Intent(
+                                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                        Uri.parse("package:${context.packageName}")
+                                    )
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {
+                                    try {
+                                        context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                                    } catch (_: Exception) {
+                                        Toast.makeText(context, "Abre Ajustes > Batería para desactivar la optimización", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFFD54F)),
+                            border = BorderStroke(1.dp, Color(0xFFFFB300).copy(alpha = 0.6f))
+                        ) {
+                            Icon(Icons.Rounded.Shield, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "Permitir ejecución en 2º plano",
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }

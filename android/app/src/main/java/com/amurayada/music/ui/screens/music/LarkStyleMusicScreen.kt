@@ -319,6 +319,10 @@ fun LarkStyleMusicScreen(
                         playbackViewModel.playNext(song)
                         Toast.makeText(context, "Se reproducirá a continuación", Toast.LENGTH_SHORT).show()
                     },
+                    onAddToQueue = { song ->
+                        playbackViewModel.addToQueue(song)
+                        Toast.makeText(context, "Añadido a la cola", Toast.LENGTH_SHORT).show()
+                    },
                     onAddToPlaylist = { song ->
                         songForPlaylist = song
                     },
@@ -671,6 +675,7 @@ private fun SongsListContent(
     onSongClick: (Song) -> Unit,
     onShuffle: () -> Unit,
     onPlayNext: (Song) -> Unit,
+    onAddToQueue: (Song) -> Unit = {},
     onAddToPlaylist: (Song) -> Unit,
     onStandardize: (Song) -> Unit,
     onShare: (Song) -> Unit,
@@ -756,6 +761,7 @@ private fun SongsListContent(
                 isPlaying = isCurrent && isPlaying,
                 onClick = { onSongClick(song) },
                 onPlayNext = { onPlayNext(song) },
+                onAddToQueue = { onAddToQueue(song) },
                 onAddToPlaylist = { onAddToPlaylist(song) },
                 onStandardize = { onStandardize(song) },
                 onShare = { onShare(song) },
@@ -776,6 +782,7 @@ private fun LarkSongRow(
     isPlaying: Boolean,
     onClick: () -> Unit,
     onPlayNext: () -> Unit,
+    onAddToQueue: () -> Unit = {},
     onAddToPlaylist: () -> Unit,
     onStandardize: () -> Unit,
     onShare: () -> Unit,
@@ -922,11 +929,19 @@ private fun LarkSongRow(
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("Reproducir siguiente") },
+                    text = { Text("Reproducir a continuación") },
                     leadingIcon = { Icon(Icons.Rounded.QueueMusic, contentDescription = null) },
                     onClick = {
                         menuExpanded = false
                         onPlayNext()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Añadir a la cola") },
+                    leadingIcon = { Icon(Icons.Rounded.AddToQueue, contentDescription = null) },
+                    onClick = {
+                        menuExpanded = false
+                        onAddToQueue()
                     }
                 )
                 DropdownMenuItem(

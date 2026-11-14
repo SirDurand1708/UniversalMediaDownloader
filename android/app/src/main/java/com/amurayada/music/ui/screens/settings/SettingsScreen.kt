@@ -1,8 +1,16 @@
 package com.amurayada.music.ui.screens.settings
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.media.audiofx.AudioEffect
+import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -69,6 +77,28 @@ fun SettingsScreen(
     var showThemeDialog by remember { mutableStateOf(false) }
     var showRescanDialog by remember { mutableStateOf(false) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
+    var dismissedUpdateDialogVersion by remember { mutableStateOf<String?>(null) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var isIgnoringBatteryOptimizations by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                pm?.isIgnoringBatteryOptimizations(context.packageName) ?: true
+            } else true
+        )
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                isIgnoringBatteryOptimizations = pm?.isIgnoringBatteryOptimizations(context.packageName) ?: true
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     
     // Equalizer launcher
     val equalizerLauncher = rememberLauncherForActivityResult(
@@ -251,10 +281,218 @@ fun SettingsScreen(
                     )
                 }
             }
-            // Sección de información y actualizaciones
+            // Escudo Anti-Doze (Optimización de batería)
+            if (!isIgnoringBatteryOptimizations) {
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.65f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Rounded.BatteryAlert,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.tertiary
+                                )
+                                Text(
+                                    text = "Optimización de batería activa",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Text(
+                                text = "Para evitar que Android corte descargas largas con la pantalla apagada, permite que OmniVault se ejecute en segundo plano sin restricciones.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedButton(
+                                onClick = {
+                                    try {
+                                        val intent = Intent(
+                                            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                            Uri.parse("package:${context.packageName}")
+                                        )
+                                        context.startActivity(intent)
+                                    } catch (_: Exception) {
+                                        try {
+                                            context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                                        } catch (_: Exception) {
+                                            Toast.makeText(context, "Abre Ajustes > Batería para desactivar la optimización", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                }
+                            ) {
+                                Text("Permitir ejecución en 2º plano")
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Sección de Actualizaciones de la App
             item {
                 val updateStatus by settingsViewModel.updateStatus.collectAsState()
-                
+
+                LaunchedEffect(updateStatus) {
+                    if (updateStatus is SettingsViewModel.UpdateStatus.ReadyToInstall) {
+                        val apk = (updateStatus as SettingsViewModel.UpdateStatus.ReadyToInstall).apkFile
+                        settingsViewModel.installApk(context, apk)
+                    }
+                }
+
+                if (updateStatus is SettingsViewModel.UpdateStatus.UpdateAvailable) {
+                    val release = (updateStatus as SettingsViewModel.UpdateStatus.UpdateAvailable).release
+                    if (dismissedUpdateDialogVersion != release.versionName) {
+                        AlertDialog(
+                            onDismissRequest = { dismissedUpdateDialogVersion = release.versionName },
+                            icon = { Icon(Icons.Rounded.SystemUpdate, contentDescription = null) },
+                            title = { Text("Nueva versión disponible: v${release.versionName}") },
+                            text = {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        text = "Tu versión actual es v${settingsViewModel.CURRENT_VERSION}.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = release.changelog.ifBlank { "Mejoras de rendimiento, estabilidad y nuevas funciones." },
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        dismissedUpdateDialogVersion = release.versionName
+                                        if (release.downloadUrl.endsWith(".apk", ignoreCase = true)) {
+                                            settingsViewModel.downloadAndInstallApk(release.downloadUrl)
+                                        } else {
+                                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.downloadUrl)))
+                                        }
+                                    }
+                                ) {
+                                    Text("Descargar e Instalar")
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { dismissedUpdateDialogVersion = release.versionName }) {
+                                    Text("Más tarde")
+                                }
+                            }
+                        )
+                    }
+                }
+
+                SettingsSection(title = "Actualizaciones de la App", icon = Icons.Rounded.SystemUpdate) {
+                    SettingsItem(
+                        title = "Buscar Actualización",
+                        subtitle = "Versión instalada: v${settingsViewModel.CURRENT_VERSION}",
+                        icon = Icons.Rounded.Refresh,
+                        onClick = {
+                            dismissedUpdateDialogVersion = null
+                            settingsViewModel.checkForUpdates()
+                        }
+                    )
+
+                    when (val status = updateStatus) {
+                        is SettingsViewModel.UpdateStatus.Checking -> {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(22.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(Modifier.width(14.dp))
+                                Text("Consultando GitHub Releases...", style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                        is SettingsViewModel.UpdateStatus.UpdateAvailable -> {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                ),
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                            ) {
+                                Column(Modifier.padding(14.dp)) {
+                                    Text("¡Nueva versión v${status.release.versionName} disponible!", fontWeight = FontWeight.Bold)
+                                    Spacer(Modifier.height(6.dp))
+                                    Button(
+                                        onClick = {
+                                            if (status.release.downloadUrl.endsWith(".apk", ignoreCase = true)) {
+                                                settingsViewModel.downloadAndInstallApk(status.release.downloadUrl)
+                                            } else {
+                                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(status.release.downloadUrl)))
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("Descargar e Instalar")
+                                    }
+                                }
+                            }
+                        }
+                        is SettingsViewModel.UpdateStatus.Downloading -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Descargando actualización… ${(status.progress * 100).toInt()}%",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                LinearProgressIndicator(
+                                    progress = { status.progress },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                        is SettingsViewModel.UpdateStatus.ReadyToInstall -> {
+                            Button(
+                                onClick = { settingsViewModel.installApk(context, status.apkFile) },
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                            ) {
+                                Text("Instalar APK descargado")
+                            }
+                        }
+                        is SettingsViewModel.UpdateStatus.UpToDate -> {
+                            SettingsItem(
+                                title = "App actualizada",
+                                subtitle = "Ya tienes la última versión oficial",
+                                icon = Icons.Rounded.CheckCircle,
+                                onClick = { settingsViewModel.checkForUpdates() }
+                            )
+                        }
+                        is SettingsViewModel.UpdateStatus.Error -> {
+                            SettingsItem(
+                                title = "Error al actualizar",
+                                subtitle = status.message,
+                                icon = Icons.Rounded.Error,
+                                onClick = { settingsViewModel.checkForUpdates() }
+                            )
+                        }
+                        SettingsViewModel.UpdateStatus.Idle -> Unit
+                    }
+                }
+            }
+
+            // Sección de información
+            item {
                 SettingsSection(title = "Acerca de Aura Player", icon = Icons.Rounded.Info) {
                     SettingsItem(
                         title = "Nombre",
@@ -281,82 +519,6 @@ fun SettingsScreen(
                         title = "Licencia",
                         subtitle = "Código Abierto (GPL-3.0)",
                         icon = Icons.Rounded.VerifiedUser,
-                        onClick = { }
-                    )
-                    
-                    // Lógica de visualización del estado de actualización
-                    when (updateStatus) {
-                        is SettingsViewModel.UpdateStatus.Idle -> {
-                            SettingsItem(
-                                title = "Buscar actualizaciones",
-                                subtitle = "Consultar última versión en GitHub",
-                                icon = Icons.Rounded.SystemUpdate,
-                                onClick = { settingsViewModel.checkForUpdates() }
-                            )
-                        }
-                        is SettingsViewModel.UpdateStatus.Checking -> {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(Modifier.width(16.dp))
-                                Text("Buscando actualizaciones...", style = MaterialTheme.typography.bodyLarge)
-                            }
-                        }
-                        is SettingsViewModel.UpdateStatus.UpdateAvailable -> {
-                            val release = (updateStatus as SettingsViewModel.UpdateStatus.UpdateAvailable).release
-                            Card(
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                                ),
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-                            ) {
-                                Column(Modifier.padding(16.dp)) {
-                                    Text("¡Nueva versión disponible: ${release.versionName}!", fontWeight = FontWeight.Bold)
-                                    Spacer(Modifier.height(4.dp))
-                                    Text("Se ha encontrado una nueva versión en GitHub.", style = MaterialTheme.typography.bodySmall)
-                                    Spacer(Modifier.height(12.dp))
-                                    Button(
-                                        onClick = {
-                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(release.downloadUrl))
-                                            context.startActivity(intent)
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text("Descargar APK")
-                                    }
-                                }
-                            }
-                        }
-                        is SettingsViewModel.UpdateStatus.UpToDate -> {
-                             SettingsItem(
-                                title = "App actualizada",
-                                subtitle = "Ya tienes la última versión",
-                                icon = Icons.Rounded.CheckCircle,
-                                onClick = { settingsViewModel.checkForUpdates() }
-                            )
-                        }
-                        is SettingsViewModel.UpdateStatus.Error -> {
-                            SettingsItem(
-                                title = "Error al buscar",
-                                subtitle = (updateStatus as SettingsViewModel.UpdateStatus.Error).message,
-                                icon = Icons.Rounded.Error,
-                                onClick = { settingsViewModel.checkForUpdates() }
-                            )
-                        }
-                    }
-                    
-                    SettingsItem(
-                        title = "Desarrollador",
-                        subtitle = "Onedev22",
-                        icon = Icons.Rounded.Code,
                         onClick = { }
                     )
                 }

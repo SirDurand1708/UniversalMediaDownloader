@@ -1,5 +1,6 @@
 package com.amurayada.music.ui.screens.library
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -28,10 +29,13 @@ fun SongsListScreen(
     onAddToPlaylist: (com.amurayada.music.data.model.Playlist, Song) -> Unit,
     onCreatePlaylist: () -> Unit,
     onDeleteSong: (Song) -> Unit = {},
+    onPlayNext: (Song) -> Unit = {},
+    onAddToQueue: (Song) -> Unit = {},
     modifier: Modifier = Modifier,
     currentSong: Song? = null,
     isPlaying: Boolean = false
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var showAddToPlaylistDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Song?>(null) }
 
     if (songs.isEmpty()) {
@@ -119,7 +123,32 @@ fun SongsListScreen(
                                 onDismissRequest = { showMenu = false }
                             ) {
                                 DropdownMenuItem(
+                                    text = { Text("Reproducir a continuación") },
+                                    leadingIcon = {
+                                        Icon(Icons.Rounded.QueueMusic, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        onPlayNext(song)
+                                        Toast.makeText(context, "Se reproducirá a continuación", Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Añadir a la cola") },
+                                    leadingIcon = {
+                                        Icon(Icons.Rounded.AddToQueue, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        onAddToQueue(song)
+                                        Toast.makeText(context, "Añadido a la cola", Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                                DropdownMenuItem(
                                     text = { Text("Agregar a Playlist") },
+                                    leadingIcon = {
+                                        Icon(Icons.Rounded.PlaylistAdd, contentDescription = null)
+                                    },
                                     onClick = {
                                         showMenu = false
                                         showAddToPlaylistDialog = song

@@ -829,6 +829,8 @@ fun MusicPlayerApp(
                             navController.navigate(Screen.Playlists.route)
                         },
                         onDeleteSong = handleDeleteSong,
+                        onPlayNext = { song -> playbackViewModel.playNext(song) },
+                        onAddToQueue = { song -> playbackViewModel.addToQueue(song) },
                         onDeleteDownload = { song ->
                             scope.launch {
                                 (context as MainActivity).downloadViewModel.deleteDownload(song.id)
