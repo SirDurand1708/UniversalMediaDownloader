@@ -20,6 +20,7 @@ import com.omnivault.media.downloader.UniversalDownloadState
 import com.omnivault.media.model.DownloadItem
 import com.omnivault.media.model.DownloadStatus
 import com.omnivault.media.model.MediaFormat
+import com.omnivault.media.model.PlatformType
 import com.omnivault.media.service.MediaDownloadService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -186,7 +187,7 @@ class DownloadViewModel(
                     null
                 }
                 if (meta != null) {
-                    val platform = MediaExtractor.detectPlatform(trimmed)
+                    val platform = PlatformType.fromUrl(trimmed)
                     mediaPreview.value = MediaPreview(
                         title = meta.title,
                         author = meta.artist,

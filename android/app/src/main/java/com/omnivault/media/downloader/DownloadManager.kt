@@ -598,8 +598,8 @@ class DownloadManager private constructor(private val context: Context) {
                     com.amurayada.music.data.database.DownloadEntity(
                         songId = Math.abs(item.url.hashCode().toLong()),
                         title = item.title,
-                        artist = item.artist,
-                        album = item.artist.ifBlank { "OmniVault" },
+                        artist = item.artist?.takeIf { it.isNotBlank() } ?: "OmniVault",
+                        album = item.artist?.takeIf { it.isNotBlank() } ?: "OmniVault",
                         duration = info.durationSeconds * 1000L,
                         youtubeUrl = item.url,
                         localPath = finalOutputFile.absolutePath,

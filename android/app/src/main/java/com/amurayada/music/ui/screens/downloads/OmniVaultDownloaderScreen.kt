@@ -337,6 +337,7 @@ fun OmniVaultDownloaderScreen(
                         MediaFormat.M4A -> "⚡ DESCARGAR AHORA (M4A HQ)"
                         MediaFormat.MP4_1080 -> "⚡ DESCARGAR AHORA (MP4 1080P)"
                         MediaFormat.MP4_720 -> "⚡ DESCARGAR AHORA (MP4 720P)"
+                        MediaFormat.MP4_480 -> "⚡ DESCARGAR AHORA (MP4 480P)"
                     }
 
                     Button(

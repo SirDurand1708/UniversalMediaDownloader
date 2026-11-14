@@ -143,19 +143,16 @@ class UniversalDownloadEngine private constructor(context: Context) {
             }
 
             val videoInfo = YoutubeDL.getInstance().getInfo(infoRequest)
-            val rawTitle = videoInfo.title?.takeIf { it.isNotBlank() } ?: "OmniVault Media"
+            val rawTitle: String = videoInfo.title?.takeIf { it.isNotBlank() } ?: "OmniVault Media"
             val standardizedTitle = FilenameStandardizer.standardizeTitle(rawTitle)
-            val uploader = videoInfo.uploader?.takeIf { it.isNotBlank() }
-                ?: videoInfo.artist?.takeIf { it.isNotBlank() }
-                ?: "OmniVault"
-            val album = videoInfo.album?.takeIf { it.isNotBlank() } ?: uploader
-            val durationMs = (videoInfo.duration.toLong().coerceAtLeast(0L)) * 1000L
-            val thumbnail = videoInfo.thumbnail?.takeIf { it.isNotBlank() } ?: ""
+            val uploader: String = videoInfo.uploader?.takeIf { it.isNotBlank() } ?: "OmniVault"
+            val durationMs: Long = (videoInfo.duration.toLong().coerceAtLeast(0L)) * 1000L
+            val thumbnail: String = videoInfo.thumbnail?.takeIf { it.isNotBlank() } ?: ""
 
             return@withContext UniversalMediaMetadata(
                 title = standardizedTitle,
                 artist = uploader,
-                album = album,
+                album = uploader,
                 durationMs = durationMs,
                 thumbnailUrl = thumbnail,
                 sourceUrl = cleanUrl
@@ -277,6 +274,14 @@ class UniversalDownloadEngine private constructor(context: Context) {
                         addOption("--merge-output-format", "mp4")
                         addOption("--add-metadata")
                     }
+                    MediaFormat.MP4_480 -> {
+                        addOption(
+                            "-f",
+                            "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[ext=mp4]/best"
+                        )
+                        addOption("--merge-output-format", "mp4")
+                        addOption("--add-metadata")
+                    }
                 }
             }
 
@@ -326,7 +331,7 @@ class UniversalDownloadEngine private constructor(context: Context) {
             val finalExt = when (format) {
                 MediaFormat.MP3_320 -> "mp3"
                 MediaFormat.M4A -> if (downloadedCacheFile.extension.equals("mp3", ignoreCase = true)) "mp3" else "m4a"
-                MediaFormat.MP4_1080, MediaFormat.MP4_720 -> "mp4"
+                MediaFormat.MP4_1080, MediaFormat.MP4_720, MediaFormat.MP4_480 -> "mp4"
             }
             val finalMimeType = when (finalExt) {
                 "mp3" -> "audio/mpeg"
