@@ -364,7 +364,7 @@ fun SettingsScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text(
-                                        text = release.changelog.ifBlank { "Mejoras de rendimiento, estabilidad y nuevas funciones." },
+                                        text = release.body.ifBlank { "Mejoras de rendimiento, estabilidad y nuevas funciones." },
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                 }
