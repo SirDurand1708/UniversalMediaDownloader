@@ -28,8 +28,8 @@ class DownloadRepositoryImpl(
     private val activeDownloads = MutableStateFlow<Map<Long, DownloadProgress>>(emptyMap())
     
     override suspend fun downloadSong(song: Song): Flow<DownloadProgress> = flow {
+        val processId = "song_${song.id}"
         try {
-            // Emit queued status
             val queuedProgress = DownloadProgress(
                 songId = song.id,
                 progress = 0f,
@@ -37,211 +37,59 @@ class DownloadRepositoryImpl(
             )
             emit(queuedProgress)
             updateActiveDownload(song.id, queuedProgress)
-            
-            // (Directory creation handled dynamically below)
-            
-            // Sanitize filename
-            val sanitizedTitle = song.title.replace(Regex("[^a-zA-Z0-9\\s-]"), "")
-            val filename = "$sanitizedTitle.m4a"
-            
-            // Determine Output Stream and Path based on Preferences
-            val prefs = context.getSharedPreferences("music_settings", Context.MODE_PRIVATE)
-            val downloadMode = prefs.getString("download_path_mode", "default")
-            val customUriString = prefs.getString("download_path_uri", null)
-            
-            val (outputStream, savedPath) = if (downloadMode == "custom" && !customUriString.isNullOrEmpty()) {
-                try {
-                    val treeUri = Uri.parse(customUriString)
-                    val docFile = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, treeUri)
-                    
-                    if (docFile != null && docFile.canWrite()) {
-                        // Check if file exists to avoid duplicates or overwrite
-                        val existingFile = docFile.findFile(filename)
-                        val targetFile = existingFile ?: docFile.createFile("audio/mp4", filename)
-                        
-                        if (targetFile != null) {
-                            val stream = context.contentResolver.openOutputStream(targetFile.uri) 
-                                ?: throw Exception("Cannot open output stream for URI: ${targetFile.uri}")
-                            Pair(stream, targetFile.uri.toString())
-                        } else {
-                            throw Exception("Failed to create file in custom directory")
-                        }
+
+            val videoUrl = when {
+                song.path.startsWith("http") -> song.path
+                song.path.contains("watch?v=") -> song.path
+                song.path.matches(Regex("^[a-zA-Z0-9_-]{11}$")) -> "https://music.youtube.com/watch?v=${song.path}"
+                else -> {
+                    val videoIdRegex = Regex("(?:v=|/)([a-zA-Z0-9_-]{11})(?:[&?/]|$)")
+                    val match = videoIdRegex.find(song.path)
+                    if (match != null) {
+                        "https://music.youtube.com/watch?v=${match.groupValues[1]}"
                     } else {
-                        throw Exception("Cannot write to custom directory")
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("DownloadRepo", "Error using custom path, falling back to default", e)
-                    // Fallback to default
-                    val downloadDir = File(context.getExternalFilesDir(Environment.DIRECTORY_MUSIC), "Downloads")
-                    if (!downloadDir.exists()) downloadDir.mkdirs()
-                    val file = File(downloadDir, filename)
-                    Pair(java.io.FileOutputStream(file), file.absolutePath)
-                }
-            } else {
-                // Default Path
-                val downloadDir = File(context.getExternalFilesDir(Environment.DIRECTORY_MUSIC), "Downloads")
-                if (!downloadDir.exists()) downloadDir.mkdirs()
-                val file = File(downloadDir, filename)
-                Pair(java.io.FileOutputStream(file), file.absolutePath)
-            }
-            
-            // Configure youtubedl request
-            // Download with progress tracking using NewPipe Extractor
-            withContext(Dispatchers.IO) {
-                android.util.Log.d("DownloadRepo", "Iniciando descarga de: ${song.path}")
-                
-                // Obtener URL del stream usando NewPipe
-                // Extraer video ID del path de múltiples formas
-                val videoUrl = when {
-                    // Si ya es una URL completa de YouTube
-                    song.path.startsWith("http") && (song.path.contains("youtube.com") || song.path.contains("youtu.be")) -> song.path
-                    // Si el path contiene el video ID en formato watch?v=
-                    song.path.contains("watch?v=") -> song.path
-                    // Si el path es solo un video ID (11 caracteres alfanuméricos con - y _)
-                    song.path.matches(Regex("^[a-zA-Z0-9_-]{11}$")) -> "https://music.youtube.com/watch?v=${song.path}"
-                    // Intentar extraer video ID de cualquier URL que lo contenga
-                    else -> {
-                        val videoIdRegex = Regex("(?:v=|/)([a-zA-Z0-9_-]{11})(?:[&?/]|$)")
-                        val match = videoIdRegex.find(song.path)
-                        if (match != null) {
-                            "https://music.youtube.com/watch?v=${match.groupValues[1]}"
-                        } else {
-                            // Último recurso: si el path parece un ID válido aunque sea más corto/largo
-                            if (song.path.length in 8..15 && song.path.all { it.isLetterOrDigit() || it == '-' || it == '_' }) {
-                                "https://music.youtube.com/watch?v=${song.path}"
-                            } else {
-                                android.util.Log.e("DownloadRepo", "No se pudo extraer video ID del path: ${song.path}")
-                                throw Exception("No se pudo obtener video ID. Path original: ${song.path}")
-                            }
-                        }
+                        "https://music.youtube.com/watch?v=${song.path}"
                     }
                 }
-                
-                android.util.Log.d("DownloadRepo", "URL construida para descarga: $videoUrl")
-                
-                val streamUrl = streamRepository.getStreamUrl(song.copy(path = videoUrl))
-                    ?: throw Exception("No se pudo obtener enlace de descarga. URL construida: $videoUrl, Path original: ${song.path}")
-                
-                android.util.Log.d("DownloadRepo", "Stream URL obtenida: ${streamUrl.take(50)}...")
-                
-                // Descargar archivo usando HttpURLConnection con headers optimizados
-                val url = java.net.URL(streamUrl)
-                val connection = url.openConnection() as java.net.HttpURLConnection
-                connection.requestMethod = "GET"
-                // Headers para parecer un navegador real y evitar throttling
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                connection.setRequestProperty("Accept", "audio/webm,audio/ogg,audio/wav,audio/*;q=0.9,application/ogg;q=0.7,video/*;q=0.6,*/*;q=0.5")
-                connection.setRequestProperty("Accept-Language", "en-US,en;q=0.9,es;q=0.8")
-                connection.setRequestProperty("Accept-Encoding", "identity") // Sin compresión para streaming
-                connection.setRequestProperty("Connection", "keep-alive")
-                connection.setRequestProperty("Sec-Fetch-Dest", "audio")
-                connection.setRequestProperty("Sec-Fetch-Mode", "no-cors")
-                connection.setRequestProperty("Sec-Fetch-Site", "cross-site")
-                connection.setRequestProperty("Range", "bytes=0-") // Solicitar todo el archivo
-                connection.connectTimeout = 30000
-                connection.readTimeout = 120000  // 2 minutos timeout
-                connection.instanceFollowRedirects = true
-                connection.useCaches = false
-                
-                val responseCode = connection.responseCode
-                android.util.Log.d("DownloadRepo", "HTTP Response Code: $responseCode")
-                
-                if (responseCode != java.net.HttpURLConnection.HTTP_OK && responseCode != 206) {
-                    throw Exception("HTTP Error: $responseCode - ${connection.responseMessage}")
-                }
-                
-                val totalBytes = connection.contentLength.toLong()
-                android.util.Log.d("DownloadRepo", "Tamaño del archivo: $totalBytes bytes")
-                
-                // Usar BufferedInputStream con buffer grande para mejor rendimiento
-                java.io.BufferedInputStream(connection.inputStream, 1024 * 1024).use { input ->
-                    java.io.BufferedOutputStream(outputStream, 1024 * 1024).use { output ->
-                        val buffer = ByteArray(1024 * 1024)  // Buffer de 1MB (optimizado)
-                        var bytesRead: Int
-                        var totalRead = 0L
-                        var lastLogTime = System.currentTimeMillis()
-                        
-                        android.util.Log.d("DownloadRepo", "Comenzando a escribir archivo...")
-                        
-                        while (input.read(buffer).also { bytesRead = it } != -1) {
-                            output.write(buffer, 0, bytesRead)
-                            totalRead += bytesRead
-                            
-                            // Log progress cada 2 segundos
-                            val now = System.currentTimeMillis()
-                            if (now - lastLogTime > 2000) {
-                                val percent = if (totalBytes > 0) (totalRead * 100 / totalBytes) else 0
-                                android.util.Log.d("DownloadRepo", "Progreso: $percent% ($totalRead / $totalBytes bytes)")
-                                lastLogTime = now
-                            }
-                            
-                            val progress = if (totalBytes > 0) totalRead.toFloat() / totalBytes else 0f
-                            val downloadProgress = DownloadProgress(
-                                songId = song.id,
-                                progress = progress,
-                                status = DownloadStatus.DOWNLOADING
-                            )
-                            updateActiveDownload(song.id, downloadProgress)
-                        }
-                    }
-                }
-                
-                android.util.Log.d("DownloadRepo", "Descarga completada: $savedPath")
-            }
-            
-            // Download album art if available
-            val localAlbumArtPath = downloadAlbumArt(song, savedPath)
-            
-            // Write metadata to the downloaded file
-            writeMetadataToFile(song, savedPath, localAlbumArtPath)
-            
-            // Trigger MediaScanner for local files OR resolved SAF paths
-            val scannablePath = if (savedPath.startsWith("content://")) {
-                resolveSafToPhysicalPath(savedPath)
-            } else {
-                savedPath
-            }
-            
-            if (scannablePath != null) {
-                android.util.Log.d("DownloadRepo", "Scanning file: $scannablePath")
-                MediaScannerConnection.scanFile(context, arrayOf(scannablePath), null, null)
-            }
-            
-            // Fix fileSize for SAF
-            val actualFileSize = if (savedPath.startsWith("content://")) {
-                try {
-                    context.contentResolver.openFileDescriptor(Uri.parse(savedPath), "r")?.use { 
-                        it.statSize 
-                    } ?: 0L
-                } catch (e: Exception) { 0L }
-            } else {
-                File(savedPath).length()
             }
 
-            // Save to database
-            val downloadEntity = DownloadEntity(
-                songId = song.id,
-                title = song.title,
-                artist = song.artist,
-                album = song.album,
-                duration = song.duration,
-                youtubeUrl = song.path,
-                localPath = savedPath,
-                thumbnailUrl = localAlbumArtPath ?: song.albumArtUri?.toString(),
-                fileSize = actualFileSize
-            )
-            downloadDao.insertDownload(downloadEntity)
-            
-            // Emit completed status
+            val engine = com.omnivault.media.downloader.UniversalDownloadEngine.getInstance(context)
+            val result = engine.executeDownload(
+                url = videoUrl,
+                format = com.omnivault.media.model.MediaFormat.M4A,
+                processId = processId,
+                preloadedSongId = song.id
+            ) { state ->
+                val mappedStatus = when (state.status) {
+                    com.omnivault.media.model.DownloadStatus.QUEUED,
+                    com.omnivault.media.model.DownloadStatus.FETCHING_METADATA -> DownloadStatus.QUEUED
+                    com.omnivault.media.model.DownloadStatus.DOWNLOADING,
+                    com.omnivault.media.model.DownloadStatus.PROCESSING -> DownloadStatus.DOWNLOADING
+                    com.omnivault.media.model.DownloadStatus.COMPLETED -> DownloadStatus.COMPLETED
+                    com.omnivault.media.model.DownloadStatus.CANCELLED -> DownloadStatus.CANCELLED
+                    com.omnivault.media.model.DownloadStatus.ERROR -> DownloadStatus.FAILED
+                }
+                updateActiveDownload(
+                    song.id,
+                    DownloadProgress(
+                        songId = song.id,
+                        progress = state.progress.coerceIn(0f, 1f),
+                        status = mappedStatus,
+                        totalBytes = state.fileSizeBytes,
+                        error = state.errorReason
+                    )
+                )
+            }
+
             val completedProgress = DownloadProgress(
                 songId = song.id,
                 progress = 1f,
                 status = DownloadStatus.COMPLETED,
-                totalBytes = actualFileSize
+                totalBytes = result.fileSizeBytes
             )
             emit(completedProgress)
             removeActiveDownload(song.id)
-            
+
         } catch (e: Exception) {
             e.printStackTrace()
             val failedProgress = DownloadProgress(
@@ -256,7 +104,8 @@ class DownloadRepositoryImpl(
     }
     
     override suspend fun cancelDownload(songId: Long) {
-        // Update status to cancelled
+        com.omnivault.media.downloader.UniversalDownloadEngine.getInstance(context)
+            .cancelDownload("song_$songId")
         val cancelledProgress = DownloadProgress(
             songId = songId,
             progress = 0f,

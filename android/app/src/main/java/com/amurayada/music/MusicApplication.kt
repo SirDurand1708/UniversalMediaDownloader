@@ -47,6 +47,10 @@ class MusicApplication : Application(), ImageLoaderFactory {
     }
     
     companion object {
+        private const val PREFS_YTDLP = "ytdlp_engine_prefs"
+        private const val KEY_LAST_UPDATE_MS = "last_ytdlp_update_ms"
+        private const val SEVEN_DAYS_MS = 7L * 24 * 60 * 60 * 1000L
+
         private var instance: MusicApplication? = null
         fun getInstance(): MusicApplication? = instance
     }
@@ -79,14 +83,9 @@ class MusicApplication : Application(), ImageLoaderFactory {
                 com.yausername.ffmpeg.FFmpeg.getInstance().init(this@MusicApplication)
                 com.yausername.aria2c.Aria2c.getInstance().init(this@MusicApplication)
                 android.util.Log.d("MusicApp", "youtubedl-android (yt-dlp + FFmpeg + Aria2c) initialized")
-                try {
-                    com.yausername.youtubedl_android.YoutubeDL.getInstance().updateYoutubeDL(
-                        this@MusicApplication,
-                        com.yausername.youtubedl_android.YoutubeDL.UpdateChannel.NIGHTLY
-                    )
-                } catch (updateErr: Exception) {
-                    android.util.Log.w("MusicApp", "yt-dlp nightly update skipped: ${updateErr.message}")
-                }
+
+                // Solo actualizar binarios automáticamente si nunca se ha actualizado o han pasado más de 7 días
+                updateYoutubeDLIfNeeded(force = false)
             } catch (e: Exception) {
                 android.util.Log.e("MusicApp", "Failed to initialize youtubedl-android", e)
             }
@@ -103,6 +102,35 @@ class MusicApplication : Application(), ImageLoaderFactory {
             } catch (e: Exception) {
                 // Ignore
             }
+        }
+    }
+
+    /**
+     * Actualiza el motor yt-dlp de forma manual (desde Ajustes con force = true)
+     * o de forma diferida únicamente cuando han transcurrido más de 7 días desde la última actualización.
+     */
+    suspend fun updateYoutubeDLIfNeeded(
+        force: Boolean = false
+    ): com.yausername.youtubedl_android.YoutubeDL.UpdateStatus? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            val prefs = getSharedPreferences(PREFS_YTDLP, MODE_PRIVATE)
+            val lastUpdate = prefs.getLong(KEY_LAST_UPDATE_MS, 0L)
+            val now = System.currentTimeMillis()
+            if (!force && lastUpdate > 0L && (now - lastUpdate) < SEVEN_DAYS_MS) {
+                android.util.Log.d("MusicApp", "yt-dlp update skipped (< 7 days since last check)")
+                return@withContext null
+            }
+
+            val status = com.yausername.youtubedl_android.YoutubeDL.getInstance().updateYoutubeDL(
+                this@MusicApplication,
+                com.yausername.youtubedl_android.YoutubeDL.UpdateChannel.STABLE
+            )
+            prefs.edit().putLong(KEY_LAST_UPDATE_MS, now).apply()
+            android.util.Log.i("MusicApp", "yt-dlp update status: $status")
+            status
+        } catch (e: Exception) {
+            android.util.Log.w("MusicApp", "yt-dlp update failed: ${e.message}")
+            null
         }
     }
     

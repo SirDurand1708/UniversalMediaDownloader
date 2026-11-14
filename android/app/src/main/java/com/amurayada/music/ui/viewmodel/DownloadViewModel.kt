@@ -1,44 +1,49 @@
 package com.amurayada.music.ui.viewmodel
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.amurayada.music.data.database.DownloadDatabase
 import com.amurayada.music.data.model.DownloadProgress
+import com.amurayada.music.data.model.DownloadStatus as AppDownloadStatus
 import com.amurayada.music.data.model.Song
-import com.amurayada.music.data.repository.DownloadRepositoryImpl
-import com.amurayada.music.data.repository.StreamRepositoryImpl
 import com.amurayada.music.worker.DownloadWorker
 import com.omnivault.media.downloader.DownloadManager
 import com.omnivault.media.downloader.MediaExtractor
 import com.omnivault.media.downloader.MediaPreview
+import com.omnivault.media.downloader.UniversalDownloadEngine
+import com.omnivault.media.downloader.UniversalDownloadState
 import com.omnivault.media.model.DownloadItem
+import com.omnivault.media.model.DownloadStatus
 import com.omnivault.media.model.MediaFormat
 import com.omnivault.media.service.MediaDownloadService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class DownloadViewModel(
     application: Application
 ) : AndroidViewModel(application) {
     
     private val downloadDao = DownloadDatabase.getDatabase(application).downloadDao()
-    private val streamRepository = StreamRepositoryImpl()
-    private val downloadRepository = DownloadRepositoryImpl(application, downloadDao, streamRepository)
     private val context = application
     private val omniDownloadManager = DownloadManager.getInstance(application)
+    private val universalEngine = UniversalDownloadEngine.getInstance(application)
     
     private val _downloadedSongs = MutableStateFlow<List<Song>>(emptyList())
     val downloadedSongs: StateFlow<List<Song>> = _downloadedSongs.asStateFlow()
     
     private val _activeDownloads = MutableStateFlow<List<DownloadProgress>>(emptyList())
     val activeDownloads: StateFlow<List<DownloadProgress>> = _activeDownloads.asStateFlow()
+
+    // Estados en tiempo real (0f..1f) emitidos por UniversalDownloadEngine (youtubedl-android)
+    val universalDownloadStates: StateFlow<Map<String, UniversalDownloadState>> = universalEngine.downloadsState
 
     // OmniVault Universal Engine State
     val urlInput = MutableStateFlow("")
@@ -72,17 +77,54 @@ class DownloadViewModel(
     
     private fun observeDownloadedSongs() {
         viewModelScope.launch {
-            downloadRepository.observeDownloadedSongs().collect { songs ->
-                _downloadedSongs.value = songs
-            }
+            downloadDao.getAllDownloads()
+                .map { entities ->
+                    entities.map { entity ->
+                        Song(
+                            id = entity.songId,
+                            title = entity.title,
+                            artist = entity.artist,
+                            album = entity.album,
+                            duration = entity.duration,
+                            albumArtUri = entity.thumbnailUrl?.let { Uri.parse(it) },
+                            path = entity.localPath ?: entity.youtubeUrl,
+                            dateAdded = entity.downloadedAt,
+                            albumId = entity.album.hashCode().toLong()
+                        )
+                    }
+                }
+                .collect { songs ->
+                    _downloadedSongs.value = songs
+                }
         }
     }
     
     private fun observeActiveDownloads() {
         viewModelScope.launch {
-            downloadRepository.getActiveDownloads().collect { downloads ->
-                _activeDownloads.value = downloads
-            }
+            universalEngine.downloadsState
+                .map { stateMap ->
+                    stateMap.values.map { state ->
+                        val songId = state.processId.removePrefix("song_").toLongOrNull()
+                            ?: Math.abs(state.url.hashCode().toLong())
+                        val mappedStatus = when (state.status) {
+                            DownloadStatus.QUEUED, DownloadStatus.FETCHING_METADATA -> AppDownloadStatus.QUEUED
+                            DownloadStatus.DOWNLOADING, DownloadStatus.PROCESSING -> AppDownloadStatus.DOWNLOADING
+                            DownloadStatus.COMPLETED -> AppDownloadStatus.COMPLETED
+                            DownloadStatus.CANCELLED -> AppDownloadStatus.CANCELLED
+                            DownloadStatus.ERROR -> AppDownloadStatus.FAILED
+                        }
+                        DownloadProgress(
+                            songId = songId,
+                            progress = state.progress.coerceIn(0f, 1f),
+                            status = mappedStatus,
+                            totalBytes = state.fileSizeBytes,
+                            error = state.errorReason
+                        )
+                    }
+                }
+                .collect { downloads ->
+                    _activeDownloads.value = downloads
+                }
         }
     }
     
@@ -138,8 +180,23 @@ class DownloadViewModel(
         viewModelScope.launch {
             isAnalyzing.value = true
             try {
-                val preview = MediaExtractor.analyze(trimmed)
-                mediaPreview.value = preview
+                val meta = try {
+                    universalEngine.extractMetadata(trimmed, selectedFormat.value)
+                } catch (_: Exception) {
+                    null
+                }
+                if (meta != null) {
+                    val platform = MediaExtractor.detectPlatform(trimmed)
+                    mediaPreview.value = MediaPreview(
+                        title = meta.title,
+                        author = meta.artist,
+                        thumbnailUrl = meta.thumbnailUrl,
+                        platform = platform,
+                        originalUrl = meta.sourceUrl
+                    )
+                } else {
+                    mediaPreview.value = MediaExtractor.analyze(trimmed)
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -155,7 +212,7 @@ class DownloadViewModel(
         // 1. Asegurar canales del sistema
         com.omnivault.media.utils.NotificationHelper.createNotificationChannels(getApplication())
 
-        // 2. Iniciar Foreground Service de forma segura (encola la descarga y gestiona la notificación persistente)
+        // 2. Iniciar Foreground Service (que delega a DownloadManager -> UniversalDownloadEngine con yt-dlp + FFmpeg)
         try {
             MediaDownloadService.startDownload(getApplication(), trimmed, format)
         } catch (e: Exception) {
@@ -168,7 +225,15 @@ class DownloadViewModel(
     }
 
     fun cancelOmniDownload(taskId: String) {
+        universalEngine.cancelDownload(taskId)
         omniDownloadManager.cancelDownload(taskId)
+    }
+
+    fun updateYoutubeDLEngine(onResult: ((Boolean) -> Unit)? = null) {
+        viewModelScope.launch {
+            val status = com.amurayada.music.MusicApplication.getInstance()?.updateYoutubeDLIfNeeded(force = true)
+            onResult?.invoke(status != null)
+        }
     }
     
     private fun checkAndDownload(songs: List<Song>) {
@@ -210,15 +275,24 @@ class DownloadViewModel(
     }
     
     fun cancelDownload(songId: Long) {
-        viewModelScope.launch {
-            downloadRepository.cancelDownload(songId)
-        }
+        universalEngine.cancelDownload("song_$songId")
     }
     
     fun deleteDownload(songId: Long) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
-                downloadRepository.deleteDownload(songId)
+                val download = downloadDao.getDownload(songId)
+                download?.localPath?.let { path ->
+                    if (path.startsWith("content://")) {
+                        try {
+                            context.contentResolver.delete(Uri.parse(path), null, null)
+                        } catch (_: Exception) {}
+                    } else {
+                        val file = File(path)
+                        if (file.exists()) file.delete()
+                    }
+                }
+                downloadDao.deleteDownloadById(songId)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -226,10 +300,10 @@ class DownloadViewModel(
     }
     
     fun isDownloaded(songId: Long): Flow<Boolean> = flow {
-        emit(downloadRepository.isDownloaded(songId))
+        emit(withContext(Dispatchers.IO) { downloadDao.isDownloaded(songId) })
     }
     
     fun getDownloadProgress(songId: Long): Flow<DownloadProgress?> {
-        return downloadRepository.getDownloadProgress(songId)
+        return _activeDownloads.map { list -> list.firstOrNull { it.songId == songId } }
     }
 }

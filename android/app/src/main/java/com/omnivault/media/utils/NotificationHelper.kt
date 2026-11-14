@@ -192,7 +192,20 @@ object NotificationHelper {
         val notifId = NOTIFICATION_ID_BASE + Math.abs(item.id.hashCode() % 1000)
 
         val localPath = item.localFilePath
-        val file = if (localPath != null) File(localPath) else null
+        val mediaUri: Uri? = when {
+            localPath.isNullOrBlank() -> null
+            localPath.startsWith("content://") -> Uri.parse(localPath)
+            else -> {
+                val file = File(localPath)
+                if (file.exists()) {
+                    try {
+                        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                    } catch (_: Exception) {
+                        null
+                    }
+                } else null
+            }
+        }
 
         val builder = NotificationCompat.Builder(context, CHANNEL_COMPLETED_ID)
             .setSmallIcon(R.drawable.ic_notification_download)
@@ -208,13 +221,11 @@ object NotificationHelper {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
 
-        if (file != null && file.exists()) {
+        if (mediaUri != null) {
             try {
-                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-
                 // Toque sobre la notificación → Reproducir
                 val playIntent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(uri, item.format.mimeType)
+                    setDataAndType(mediaUri, item.format.mimeType)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 val playPendingIntent = PendingIntent.getActivity(
@@ -228,7 +239,7 @@ object NotificationHelper {
                 val shareIntent = Intent.createChooser(
                     Intent(Intent.ACTION_SEND).apply {
                         type = item.format.mimeType
-                        putExtra(Intent.EXTRA_STREAM, uri)
+                        putExtra(Intent.EXTRA_STREAM, mediaUri)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     },
                     "Compartir ${item.title}"

@@ -9,6 +9,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationManagerCompat
 import com.omnivault.media.downloader.DownloadManager
+import com.omnivault.media.downloader.UniversalDownloadEngine
 import com.omnivault.media.model.DownloadItem
 import com.omnivault.media.model.DownloadStatus
 import com.omnivault.media.model.MediaFormat
@@ -73,9 +74,10 @@ class MediaDownloadService : Service() {
     }
 
     private lateinit var downloadManager: DownloadManager
+    private lateinit var universalEngine: UniversalDownloadEngine
     private var wakeLock: PowerManager.WakeLock? = null
 
-    // Listener thread-safe para recibir cambios de progreso de DownloadManager
+    // Listener thread-safe para recibir cambios de progreso de DownloadManager / UniversalDownloadEngine
     private val downloadListener: (DownloadItem) -> Unit = { item ->
         handleDownloadUpdate(item)
     }
@@ -102,7 +104,8 @@ class MediaDownloadService : Service() {
             }
         } catch (_: Exception) {}
 
-        // 3. Conectar al DownloadManager Singleton mediante listener seguro
+        // 4. Conectar al UniversalDownloadEngine y DownloadManager Singleton mediante listener seguro
+        universalEngine = UniversalDownloadEngine.getInstance(this)
         downloadManager = DownloadManager.getInstance(this)
         downloadManager.addDownloadListener(downloadListener)
     }
@@ -124,6 +127,7 @@ class MediaDownloadService : Service() {
             ACTION_CANCEL_DOWNLOAD -> {
                 val taskId = intent.getStringExtra(EXTRA_TASK_ID)
                 if (!taskId.isNullOrBlank()) {
+                    universalEngine.cancelDownload(taskId)
                     downloadManager.cancelDownload(taskId)
                 }
             }
@@ -140,9 +144,9 @@ class MediaDownloadService : Service() {
                 acquireWakeLockIfNeeded()
                 val notif = NotificationHelper.buildForegroundProgressNotification(
                     context = this,
-                    title = item.title,
+                    title = item.title.ifBlank { "Analizando enlace…" },
                     progress = 0,
-                    speed = "Conectando…",
+                    speed = item.speedText.ifBlank { "Extrayendo metadatos…" },
                     indeterminate = true
                 ).build()
                 promoteToForeground(notif)
@@ -150,11 +154,11 @@ class MediaDownloadService : Service() {
 
             DownloadStatus.DOWNLOADING -> {
                 acquireWakeLockIfNeeded()
-                // Actualizar la notificación persistente del Foreground Service con la barra de carga
+                // Actualizar la notificación persistente del Foreground Service con la barra de carga (0..100%)
                 val notif = NotificationHelper.buildForegroundProgressNotification(
                     context = this,
                     title = item.title,
-                    progress = item.progress,
+                    progress = item.progress.coerceIn(0, 100),
                     speed = item.speedText,
                     indeterminate = item.progress <= 0
                 ).build()
@@ -165,9 +169,9 @@ class MediaDownloadService : Service() {
                 val notif = NotificationHelper.buildForegroundProgressNotification(
                     context = this,
                     title = item.title,
-                    progress = item.progress,
-                    speed = item.speedText,
-                    indeterminate = true
+                    progress = item.progress.coerceIn(0, 100),
+                    speed = item.speedText.ifBlank { "Procesando y exportando…" },
+                    indeterminate = item.progress <= 0
                 ).build()
                 promoteToForeground(notif)
             }

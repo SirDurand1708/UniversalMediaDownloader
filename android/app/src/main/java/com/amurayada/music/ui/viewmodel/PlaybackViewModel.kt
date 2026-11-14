@@ -78,14 +78,6 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     // Gestor de caché para URLs de video para reducir peticiones a la API de YouTube
     private val cacheManager = com.amurayada.music.data.cache.CacheManager.getInstance()
     
-    // Infraestructura de persistencia y lógica para canciones descargadas localmente
-    private val downloadDatabase = com.amurayada.music.data.database.DownloadDatabase.getDatabase(application)
-    private val downloadRepository = com.amurayada.music.data.repository.DownloadRepositoryImpl(
-        application,
-        downloadDatabase.downloadDao(),
-        streamRepository
-    )
-    
     // Mapeos temporales para evitar resoluciones repetitivas durante la sesión activa
     private val resolvedUrlCache = mutableMapOf<Long, String>()
     private val originalPathCache = mutableMapOf<Long, String>()
@@ -678,11 +670,8 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         val controller = mediaController ?: return
         var song = currentSong ?: return
         
-        // Check if this is truly an online song (not a downloaded file)
-        val isOnlineSong = song.path.startsWith("http") && !java.io.File(song.path).exists()
-        
-        // For online songs with no duration, try to get it from MediaController
-        if (isOnlineSong && song.duration == 0L && controller.duration > 0 && controller.duration != Long.MIN_VALUE + 1) {
+        // Si la canción (online o descargada con content://) no tenía duración registrada, sincronizarla desde ExoPlayer
+        if (song.duration == 0L && controller.duration > 0 && controller.duration != Long.MIN_VALUE + 1) {
             song = song.copy(duration = controller.duration)
             currentSong = song
         }
@@ -705,10 +694,9 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                             if (currentMediaId == currentSong?.id?.toString() && !isTransitioningToVideo) {
                                 currentPosition = controller.currentPosition
                                 
-                                // Update duration for online songs if not set
+                                // Sincronizar duración si no estaba definida
                                 currentSong?.let { song ->
-                                    val isOnlineSong = song.path.startsWith("http") && !java.io.File(song.path).exists()
-                                    if (isOnlineSong && song.duration == 0L && controller.duration > 0 && controller.duration != Long.MIN_VALUE + 1) {
+                                    if (song.duration == 0L && controller.duration > 0 && controller.duration != Long.MIN_VALUE + 1) {
                                         currentSong = song.copy(duration = controller.duration)
                                     }
                                 }
@@ -977,15 +965,26 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             .setArtworkUri(song.albumArtUri)
             .build()
         
+        val parsedUri = if (
+            song.path.startsWith("content://") ||
+            song.path.startsWith("http://") ||
+            song.path.startsWith("https://") ||
+            song.path.startsWith("file://")
+        ) {
+            Uri.parse(song.path)
+        } else {
+            Uri.fromFile(java.io.File(song.path))
+        }
+
         // Store the ORIGINAL path in RequestMetadata.
         // This ensures that even if ExoPlayer is playing a resolved googlevideo.com URL,
         // we can always recover the original YouTube URL/ID from the MediaItem.
         val requestMetadata = MediaItem.RequestMetadata.Builder()
-            .setMediaUri(Uri.parse(song.path))
+            .setMediaUri(parsedUri)
             .build()
         
         return MediaItem.Builder()
-            .setUri(Uri.parse(song.path))
+            .setUri(parsedUri)
             .setMediaMetadata(metadata)
             .setRequestMetadata(requestMetadata)
             .setMediaId(song.id.toString())

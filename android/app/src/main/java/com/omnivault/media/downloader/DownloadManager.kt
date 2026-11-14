@@ -95,6 +95,9 @@ class DownloadManager private constructor(private val context: Context) {
 
     fun cancelDownload(taskId: String) {
         try {
+            UniversalDownloadEngine.getInstance(context).cancelDownload(taskId)
+        } catch (_: Exception) {}
+        try {
             com.yausername.youtubedl_android.YoutubeDL.getInstance().destroyProcessById(taskId)
         } catch (_: Exception) {}
         activeJobs[taskId]?.cancel()
@@ -230,7 +233,48 @@ class DownloadManager private constructor(private val context: Context) {
 
     private suspend fun runDownloadPipeline(item: DownloadItem) {
         try {
-            // 1. Extraer Metadatos
+            // 0. Motor Principal Universal: UniversalDownloadEngine (youtubedl-android: yt-dlp + FFmpeg + Aria2c)
+            try {
+                val engine = UniversalDownloadEngine.getInstance(context)
+                val result = engine.executeDownload(
+                    url = item.url,
+                    format = item.format,
+                    processId = item.id
+                ) { state ->
+                    item.title = state.title
+                    item.artist = state.artist
+                    if (state.thumbnailUrl.isNotBlank()) {
+                        item.thumbnailUrl = state.thumbnailUrl
+                    }
+                    item.status = state.status
+                    item.progress = (state.progress * 100f).toInt().coerceIn(0, 100)
+                    item.speedText = state.speedText
+                    notifyUpdate(item)
+                }
+
+                item.title = result.metadata.title
+                item.artist = result.metadata.artist
+                item.thumbnailUrl = result.localThumbnailPath ?: result.metadata.thumbnailUrl
+                item.progress = 100
+                item.status = DownloadStatus.COMPLETED
+                item.localFilePath = result.savedPath
+                item.fileSizeBytes = result.fileSizeBytes
+                item.fileSizeFormatted = StorageHelper.formatFileSize(result.fileSizeBytes)
+
+                activeTasks.remove(item.id)
+                addToHistory(item)
+                notifyUpdate(item)
+                return
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.w(
+                    "DownloadManager",
+                    "UniversalDownloadEngine primary execution failed (${e.message}), activating VISIONOS/InnerTube fallback..."
+                )
+            }
+
+            // 1. Extraer Metadatos (Respaldo nativo VISIONOS 1.02 + visitorData)
             item.status = DownloadStatus.FETCHING_METADATA
             notifyUpdate(item)
 
@@ -546,8 +590,26 @@ class DownloadManager private constructor(private val context: Context) {
                 }
             }
 
-            // 7. Indexación inmediata en el escáner del sistema Android (MediaStore)
+            // 7. Indexación inmediata en el escáner del sistema Android (MediaStore) y registro en Room (DownloadDatabase)
             StorageHelper.scanMediaFile(context, finalOutputFile, finalMimeType)
+            try {
+                val downloadDao = com.amurayada.music.data.database.DownloadDatabase.getDatabase(context).downloadDao()
+                downloadDao.insertDownload(
+                    com.amurayada.music.data.database.DownloadEntity(
+                        songId = Math.abs(item.url.hashCode().toLong()),
+                        title = item.title,
+                        artist = item.artist,
+                        album = item.artist.ifBlank { "OmniVault" },
+                        duration = info.durationSeconds * 1000L,
+                        youtubeUrl = item.url,
+                        localPath = finalOutputFile.absolutePath,
+                        thumbnailUrl = item.thumbnailUrl,
+                        fileSize = finalOutputFile.length()
+                    )
+                )
+            } catch (dbErr: Exception) {
+                android.util.Log.w("DownloadManager", "Room insert warning: ${dbErr.message}")
+            }
 
             // 8. Finalización con éxito
             item.progress = 100

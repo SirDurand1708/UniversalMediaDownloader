@@ -1115,12 +1115,23 @@ class MusicPlaybackService : MediaSessionService() {
             .setArtworkUri(song.albumArtUri)
             .build()
         
+        val parsedUri = if (
+            song.path.startsWith("content://") ||
+            song.path.startsWith("http://") ||
+            song.path.startsWith("https://") ||
+            song.path.startsWith("file://")
+        ) {
+            android.net.Uri.parse(song.path)
+        } else {
+            android.net.Uri.fromFile(java.io.File(song.path))
+        }
+
         val requestMetadata = androidx.media3.common.MediaItem.RequestMetadata.Builder()
-            .setMediaUri(android.net.Uri.parse(song.path))
+            .setMediaUri(parsedUri)
             .build()
         
         return androidx.media3.common.MediaItem.Builder()
-            .setUri(android.net.Uri.parse(song.path))
+            .setUri(parsedUri)
             .setMediaMetadata(metadata)
             .setRequestMetadata(requestMetadata)
             .setMediaId(song.id.toString())

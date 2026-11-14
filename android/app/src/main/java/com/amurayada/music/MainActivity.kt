@@ -1148,14 +1148,16 @@ fun MusicPlayerApp(
                 }
 
                 composable(Screen.Downloads.route) {
+                    val downloadedSongs by downloadViewModel.downloadedSongs.collectAsState()
                     OmniVaultDownloaderScreen(
                         downloadViewModel = downloadViewModel,
                         onPlayMedia = { item: com.omnivault.media.model.DownloadItem ->
                             if (!item.format.isAudio) {
                                 navController.navigate(Screen.VideoPlayer.createRoute(item.localFilePath ?: item.url, item.title))
                             } else {
-                                val s = Song(
-                                    id = item.id.hashCode().toLong(),
+                                val songId = item.id.toLongOrNull() ?: item.id.hashCode().toLong()
+                                val s = downloadedSongs.firstOrNull { it.id == songId } ?: Song(
+                                    id = songId,
                                     title = item.title,
                                     artist = item.artist ?: "Desconocido",
                                     album = "OmniVault",
@@ -1164,7 +1166,12 @@ fun MusicPlayerApp(
                                     path = item.localFilePath ?: item.url,
                                     dateAdded = System.currentTimeMillis()
                                 )
-                                playbackViewModel.playSong(s, listOf(s))
+                                val audioQueue = downloadedSongs.filter {
+                                    !it.album.contains("Video", ignoreCase = true) &&
+                                        !it.path.contains("/video/", ignoreCase = true) &&
+                                        !it.path.endsWith(".mp4", ignoreCase = true)
+                                }.ifEmpty { listOf(s) }
+                                playbackViewModel.playSong(s, audioQueue)
                             }
                         }
                     )
