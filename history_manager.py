@@ -9,7 +9,7 @@ import sys
 import subprocess
 import threading
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from config_manager import get_data_dir
 
 HISTORY_FILE = os.path.join(get_data_dir(), "library.json")

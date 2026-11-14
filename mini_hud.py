@@ -4,14 +4,12 @@ Permite monitorear la velocidad de descarga en tiempo real, pausar/reanudar la c
 pegar URLs para descargas ultrarrápidas y controlar la música mientras usas otras aplicaciones o juegos.
 """
 
-import os
-import sys
 import tkinter as tk
 import customtkinter as ctk
 from typing import Optional, Callable
 
 import theme
-from downloader import is_url, normalize_url
+from downloader import is_url
 
 
 class MiniHUD:

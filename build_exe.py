@@ -34,7 +34,6 @@ def build():
         subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller"])
 
     dist_dir = os.path.join(base_dir, "dist")
-    build_dir = os.path.join(base_dir, "build")
 
     ico_file = os.path.join(base_dir, "assets", "icon.ico")
     icon_args = ["--icon", ico_file] if os.path.isfile(ico_file) else []

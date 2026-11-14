@@ -6,7 +6,6 @@ Permite convertir, comprimir y extraer audio de archivos locales en la PC usando
 import os
 import re
 import sys
-import time
 import shutil
 import subprocess
 import threading
@@ -229,7 +228,6 @@ class LocalConverter:
             status_callback("Iniciando conversión con FFmpeg...")
 
         flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0) if sys.platform == "win32" else 0
-        start_time = time.time()
 
         proc = subprocess.Popen(
             cmd,

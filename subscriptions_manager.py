@@ -5,7 +5,6 @@ detectando periódicamente nuevos videos/audios y descargándolos automáticamen
 """
 
 import os
-import sys
 import json
 import time
 import threading

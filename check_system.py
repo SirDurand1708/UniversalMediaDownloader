@@ -7,7 +7,6 @@ y aceleración por hardware necesarias para un rendimiento óptimo.
 import os
 import sys
 import shutil
-import subprocess
 import importlib
 
 # Manejo robusto de codificación en consolas de Windows (evita errores con cp1252)

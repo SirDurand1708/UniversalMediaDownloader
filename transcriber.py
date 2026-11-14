@@ -5,7 +5,6 @@ utilizando reconocimiento de voz y modelos de IA en español, inglés o multilin
 """
 
 import os
-import re
 import sys
 import wave
 import shutil

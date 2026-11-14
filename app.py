@@ -22,8 +22,7 @@ from mini_hud import MiniHUD
 from downloader import (
     DownloaderEngine, is_url, normalize_url, clean_error_text,
     is_ffmpeg_available, FFMPEG_DIR, is_browser_running,
-    is_aria2c_available, install_aria2, detect_hardware_acceleration, format_duration,
-    parse_timestamp_str, estimate_sizes_for_video
+    is_aria2c_available, install_aria2, detect_hardware_acceleration, format_duration
 )
 from queue_manager import QueueManager, DownloadTask
 from history_manager import HistoryManager
@@ -47,26 +46,52 @@ def get_app_dir() -> str:
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
 
+_CRASH_LOG_LOCK = threading.Lock()
+
+
+def _write_crash_log(header: str, err_text: str) -> None:
+    """Registra trazas de error de forma segura y atómica entre hilos."""
+    try:
+        log_path = os.path.join(get_data_dir(), "crash_log.txt")
+        with _CRASH_LOG_LOCK:
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(f"\n--- {header} {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")
+                f.write(err_text)
+    except Exception:
+        pass
+
+
 def _global_exception_handler(exc_type, exc_value, exc_traceback):
-    """Captura errores no manejados, escribe en crash_log.txt y muestra una alerta."""
+    """Captura errores no manejados en el hilo principal, escribe en crash_log.txt y muestra alerta."""
     if issubclass(exc_type, KeyboardInterrupt):
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
         return
     err_text = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
-    try:
-        log_path = os.path.join(get_data_dir(), "crash_log.txt")
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(f"\n--- ERROR {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")
-            f.write(err_text)
-    except Exception:
-        pass
+    _write_crash_log("ERROR", err_text)
     try:
         import tkinter.messagebox as mb
         mb.showerror("Error Inesperado en OmniVault", f"Ocurrió un error al ejecutar la aplicación:\n\n{err_text[:400]}")
     except Exception:
         pass
 
+
+def _thread_exception_handler(args: threading.ExceptHookArgs):
+    """Captura excepciones no controladas en hilos secundarios para evitar fallos silenciosos."""
+    if issubclass(args.exc_type, (KeyboardInterrupt, SystemExit)):
+        return
+    thread_name = getattr(args.thread, "name", "UnknownThread")
+    thread_id = getattr(args.thread, "ident", "?")
+    err_text = "".join(traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback))
+    _write_crash_log(f"THREAD ERROR [{thread_name} | tid={thread_id}]", err_text)
+    try:
+        if sys.stderr:
+            sys.stderr.write(f"\n[THREAD ERROR - {thread_name}] {err_text}\n")
+    except Exception:
+        pass
+
+
 sys.excepthook = _global_exception_handler
+threading.excepthook = _thread_exception_handler
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -477,7 +502,7 @@ class OmniVaultApp(ctk.CTk):
             self.after(90, self._lazy_preload_views)
 
     def _select_tab(self, tab_id: str):
-        target_view = self._get_or_create_view(tab_id)
+        self._get_or_create_view(tab_id)
 
         for t_id, btn in self.nav_btns.items():
             view = self.views.get(t_id)
@@ -534,30 +559,6 @@ class OmniVaultApp(ctk.CTk):
             except Exception: pass
             self.after(delay_ms, lambda: _step(cur - 1))
         _step(steps)
-
-    def _flash_button_feedback(self, btn, flash_text=None, original_text=None, duration_ms=180):
-        """Micro-interacción táctil: confirmación visual inmediata al pulsar un botón clave."""
-        if not btn:
-            return
-        orig_text = original_text or btn.cget("text")
-        orig_fg = btn.cget("fg_color")
-        highlight = self.theme_accent.get("hover", theme.BTN_PRIMARY_HOVER)
-
-        try:
-            if flash_text:
-                btn.configure(text=flash_text, fg_color=highlight)
-            else:
-                btn.configure(fg_color=highlight)
-        except Exception:
-            return
-
-        def _restore():
-            try:
-                btn.configure(text=orig_text, fg_color=orig_fg)
-            except Exception:
-                pass
-
-        self.after(duration_ms, _restore)
 
     def _smooth_progress_bar(self, p_bar, target_val, ui_dict):
         """Interpola suavemente el progreso de descarga para evitar saltos bruscos."""
@@ -935,7 +936,7 @@ class OmniVaultApp(ctk.CTk):
         )
         self.batch_dl_btn.pack(side="right", padx=10, pady=6)
 
-        for idx, item in enumerate(results):
+        for item in results:
             var = ctk.BooleanVar(value=False)
             self.search_check_vars.append(var)
 
@@ -2054,7 +2055,6 @@ class OmniVaultApp(ctk.CTk):
         for s in subs:
             sub_id = s.get("id")
             name = s.get("name") or s.get("url")
-            url = s.get("url")
             fmt = s.get("format_type", "mp3_320")
             last_checked = s.get("last_checked_str", "Nunca")
             count = s.get("downloaded_count", 0)

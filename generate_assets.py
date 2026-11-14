@@ -6,7 +6,7 @@ con estética Obsidian & Titanium, detalles facetados en violeta neón y plata t
 
 import os
 import math
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter
 
 def create_omnivault_icon(size: int = 512) -> Image.Image:
     """Crea el icono oficial de OmniVault con diseño geométrico y alta definición."""
@@ -47,8 +47,6 @@ def create_omnivault_icon(size: int = 512) -> Image.Image:
     draw.line(points + [points[0]], fill=(139, 92, 246, 220), width=max(2, int(size * 0.025)))
 
     # 3. Facetas Interiores (Iluminación 3D)
-    top_p = points[0]
-    bot_p = points[3]
     # Bisel superior izquierdo
     draw.polygon([points[5], points[0], (cx, cy)], fill=(32, 36, 44, 255))
     # Bisel superior derecho
