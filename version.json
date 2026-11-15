@@ -1,19 +1,19 @@
 {
-  "version": "2.5.26",
-  "version_code": 276,
+  "version": "2.5.27",
+  "version_code": 277,
   "release_date": "2026-11-15",
-  "title": "OmniVault v2.5.26 — Windows PC & Android",
-  "changelog": "✨ Fase 1 UX: Videos de WhatsApp ocultos por defecto, gestos horizontales en MiniPlayer, detección de enlace en portapapeles y selección múltiple + botón Ir arriba en Música",
+  "title": "OmniVault v2.5.27 — Windows PC & Android",
+  "changelog": "✨ Fase 2 UX: Gestos y candado en VideoPlayer, detector de videos duplicados y respaldo .json de playlists en Ajustes",
   "android": {
-    "version": "2.5.26",
-    "version_code": 276,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.26/OmniVault-v2.5.26-Android.apk",
+    "version": "2.5.27",
+    "version_code": 277,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.27/OmniVault-v2.5.27-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.26",
-    "version_code": 276,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.26/OmniVault-v2.5.26-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.26/OmniVault-v2.5.26-Windows-x64-Portable.zip"
+    "version": "2.5.27",
+    "version_code": 277,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.27/OmniVault-v2.5.27-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.27/OmniVault-v2.5.27-Windows-x64-Portable.zip"
   }
 }

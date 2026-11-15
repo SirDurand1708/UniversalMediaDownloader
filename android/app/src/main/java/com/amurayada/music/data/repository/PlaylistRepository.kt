@@ -147,4 +147,70 @@ class PlaylistRepository(private val context: Context) {
         }
         savePlaylists()
     }
+
+    suspend fun moveSongInPlaylist(playlistId: Long, fromIndex: Int, toIndex: Int) {
+        _playlists.value = _playlists.value.map { playlist ->
+            if (playlist.id == playlistId &&
+                fromIndex in playlist.songIds.indices &&
+                toIndex in playlist.songIds.indices &&
+                fromIndex != toIndex
+            ) {
+                val mutable = playlist.songIds.toMutableList()
+                val item = mutable.removeAt(fromIndex)
+                mutable.add(toIndex, item)
+                playlist.copy(songIds = mutable)
+            } else {
+                playlist
+            }
+        }
+        savePlaylists()
+    }
+
+    fun exportPlaylistsJson(): String {
+        val jsonArray = JSONArray()
+        _playlists.value.forEach { playlist ->
+            val obj = JSONObject()
+            obj.put("id", playlist.id)
+            obj.put("name", playlist.name)
+            obj.put("dateCreated", playlist.dateCreated)
+            val ids = JSONArray()
+            playlist.songIds.forEach { ids.put(it) }
+            obj.put("songIds", ids)
+            jsonArray.put(obj)
+        }
+        return jsonArray.toString(2)
+    }
+
+    suspend fun importPlaylistsJson(jsonText: String): Int {
+        return withContext(Dispatchers.IO) {
+            val jsonArray = JSONArray(jsonText)
+            val current = _playlists.value.toMutableList()
+            val existingIds = current.map { it.id }.toMutableSet()
+            var imported = 0
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                val id = obj.optLong("id", System.currentTimeMillis() + i)
+                val name = obj.optString("name", "").trim()
+                if (name.isEmpty()) continue
+                val dateCreated = obj.optLong("dateCreated", System.currentTimeMillis())
+                val songIdsArray = obj.optJSONArray("songIds")
+                val songIds = mutableListOf<Long>()
+                if (songIdsArray != null) {
+                    for (j in 0 until songIdsArray.length()) {
+                        songIds.add(songIdsArray.getLong(j))
+                    }
+                }
+                if (id !in existingIds) {
+                    current.add(Playlist(id = id, name = name, songIds = songIds, dateCreated = dateCreated))
+                    existingIds.add(id)
+                    imported++
+                }
+            }
+            if (imported > 0) {
+                _playlists.value = current
+                savePlaylists()
+            }
+            imported
+        }
+    }
 }

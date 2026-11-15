@@ -53,4 +53,23 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
             repository.renamePlaylist(playlistId, newName)
         }
     }
+
+    fun moveSongInPlaylist(playlistId: Long, fromIndex: Int, toIndex: Int) {
+        viewModelScope.launch {
+            repository.moveSongInPlaylist(playlistId, fromIndex, toIndex)
+        }
+    }
+
+    fun exportPlaylistsJson(): String = repository.exportPlaylistsJson()
+
+    fun importPlaylistsJson(jsonText: String, onResult: (Int) -> Unit) {
+        viewModelScope.launch {
+            val count = try {
+                repository.importPlaylistsJson(jsonText)
+            } catch (_: Exception) {
+                -1
+            }
+            onResult(count)
+        }
+    }
 }

@@ -1,5 +1,8 @@
 package com.amurayada.music.ui.screens.videos
 
+import android.app.Activity
+import android.content.Context
+import android.media.AudioManager
 import android.net.Uri
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -9,6 +12,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,10 +25,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -50,6 +58,28 @@ fun VideoPlayerScreen(
     var resizeMode by remember { mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
     var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
     var showSpeedMenu by remember { mutableStateOf(false) }
+    var isLocked by remember { mutableStateOf(false) }
+    var showUnlockOverlay by remember { mutableStateOf(false) }
+    var gestureHudText by remember { mutableStateOf<String?>(null) }
+
+    val activity = context as? Activity
+    val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager }
+    val density = LocalDensity.current
+    val edgeDeadZonePx = with(density) { 32.dp.toPx() }
+
+    LaunchedEffect(gestureHudText) {
+        if (gestureHudText != null) {
+            delay(850)
+            gestureHudText = null
+        }
+    }
+
+    LaunchedEffect(showUnlockOverlay, isLocked) {
+        if (showUnlockOverlay && isLocked) {
+            delay(2500)
+            showUnlockOverlay = false
+        }
+    }
 
     val exoPlayer = remember {
         val audioAttributes = androidx.media3.common.AudioAttributes.Builder()
@@ -112,11 +142,66 @@ fun VideoPlayerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() }
-            ) {
-                controlsVisible = !controlsVisible
+            .pointerInput(isLocked) {
+                detectTapGestures(
+                    onTap = {
+                        if (isLocked) {
+                            showUnlockOverlay = !showUnlockOverlay
+                        } else {
+                            controlsVisible = !controlsVisible
+                        }
+                    },
+                    onDoubleTap = { offset ->
+                        if (!isLocked) {
+                            val isRight = offset.x > size.width / 2f
+                            val delta = if (isRight) 10000L else -10000L
+                            val maxDur = exoPlayer.duration.coerceAtLeast(0L)
+                            val target = (exoPlayer.currentPosition + delta).coerceIn(0L, if (maxDur > 0L) maxDur else Long.MAX_VALUE)
+                            exoPlayer.seekTo(target)
+                            currentPosition = target
+                            gestureHudText = if (isRight) "+10 s" else "-10 s"
+                        }
+                    }
+                )
+            }
+            .pointerInput(isLocked) {
+                if (isLocked) return@pointerInput
+                var activeSide: Int = 0 // -1 = left (brightness), 1 = right (volume), 0 = ignored
+                var dragAccumulator = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { startOffset ->
+                        dragAccumulator = 0f
+                        activeSide = when {
+                            startOffset.x < edgeDeadZonePx || startOffset.x > size.width - edgeDeadZonePx -> 0
+                            startOffset.x < size.width / 2f -> -1
+                            else -> 1
+                        }
+                    },
+                    onVerticalDrag = { _, dragAmount ->
+                        if (activeSide == 0) return@detectVerticalDragGestures
+                        dragAccumulator -= dragAmount
+                        val stepPx = size.height / 24f
+                        if (kotlin.math.abs(dragAccumulator) >= stepPx) {
+                            val steps = (dragAccumulator / stepPx).toInt()
+                            dragAccumulator -= steps * stepPx
+                            if (activeSide == -1 && activity != null) {
+                                val lp = activity.window.attributes
+                                val cur = if (lp.screenBrightness < 0f) 0.5f else lp.screenBrightness
+                                val next = (cur + steps * 0.05f).coerceIn(0.05f, 1.0f)
+                                lp.screenBrightness = next
+                                activity.window.attributes = lp
+                                gestureHudText = "Brillo ${(next * 100).toInt()}%"
+                            } else if (activeSide == 1 && audioManager != null) {
+                                val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+                                val curVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                                val nextVol = (curVol + steps).coerceIn(0, maxVol)
+                                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, nextVol, 0)
+                                val pct = (nextVol * 100) / maxVol
+                                gestureHudText = "Volumen $pct%"
+                            }
+                        }
+                    }
+                )
             }
     ) {
         // ExoPlayer View
@@ -140,7 +225,7 @@ fun VideoPlayerScreen(
 
         // Overlay Controls
         AnimatedVisibility(
-            visible = controlsVisible,
+            visible = controlsVisible && !isLocked,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.fillMaxSize()
@@ -244,6 +329,19 @@ fun VideoPlayerScreen(
                             tint = Color.White
                         )
                     }
+                    IconButton(
+                        onClick = {
+                            isLocked = true
+                            controlsVisible = false
+                            showUnlockOverlay = true
+                        }
+                    ) {
+                        Icon(
+                            Icons.Rounded.Lock,
+                            contentDescription = "Bloquear pantalla",
+                            tint = Color.White
+                        )
+                    }
                 }
 
                 // Center Play/Pause & Seek Buttons
@@ -342,6 +440,54 @@ fun VideoPlayerScreen(
                         )
                     )
                 }
+            }
+        }
+
+        // HUD temporal para gestos (-10s / +10s / Brillo / Volumen)
+        AnimatedVisibility(
+            visible = gestureHudText != null,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.Center)
+        ) {
+            Surface(
+                color = Color.Black.copy(alpha = 0.72f),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Text(
+                    text = gestureHudText ?: "",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
+                )
+            }
+        }
+
+        // Botón flotante para desbloquear pantalla cuando está en modo Candado
+        AnimatedVisibility(
+            visible = isLocked && showUnlockOverlay,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .statusBarsPadding()
+                .padding(16.dp)
+        ) {
+            FilledTonalButton(
+                onClick = {
+                    isLocked = false
+                    showUnlockOverlay = false
+                    controlsVisible = true
+                },
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = Color.Black.copy(alpha = 0.75f),
+                    contentColor = Color.White
+                )
+            ) {
+                Icon(Icons.Rounded.LockOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Desbloquear")
             }
         }
     }

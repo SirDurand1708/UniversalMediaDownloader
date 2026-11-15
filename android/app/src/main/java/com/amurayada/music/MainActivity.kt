@@ -1137,6 +1137,7 @@ fun MusicPlayerApp(
                 composable(Screen.Settings.route) {
                     SettingsScreen(
                         settingsViewModel = settingsViewModel,
+                        playlistViewModel = playlistViewModel,
                         onBackClick = { navController.popBackStack() },
                         onRescanLibrary = { libraryViewModel.loadLibrary() },
                         onLoginClick = { navController.navigate(Screen.YouTubeLogin.route) },

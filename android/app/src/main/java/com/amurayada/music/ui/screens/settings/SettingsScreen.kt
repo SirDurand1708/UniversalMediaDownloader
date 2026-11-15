@@ -38,10 +38,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import com.amurayada.music.ui.viewmodel.PlaylistViewModel
 import com.amurayada.music.ui.viewmodel.SettingsViewModel
+import com.omnivault.media.data.LocalMediaScanner
+import com.omnivault.media.model.DownloadItem
 import com.omnivault.media.utils.BulkMediaStandardizer
 import com.omnivault.media.utils.StandardizeCandidate
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 // Predefined colors for the picker
 private val PredefinedColors = listOf(
@@ -69,6 +75,7 @@ fun SettingsScreen(
     onPersonalizationClick: () -> Unit = {},
     onEqualizerClick: () -> Unit = {},
     onChangeDownloadLocation: () -> Unit = {},
+    playlistViewModel: PlaylistViewModel? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -88,6 +95,68 @@ fun SettingsScreen(
     var isScanningStandardize by remember { mutableStateOf(false) }
     var standardizeCandidates by remember { mutableStateOf<List<StandardizeCandidate>?>(null) }
     var pendingWriteChunks by remember { mutableStateOf<List<List<StandardizeCandidate>>>(emptyList()) }
+    var isScanningDuplicates by remember { mutableStateOf(false) }
+    var duplicateVideosToDelete by remember { mutableStateOf<List<DownloadItem>?>(null) }
+
+    val exportPlaylistsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null && playlistViewModel != null) {
+            scope.launch {
+                val ok = withContext(Dispatchers.IO) {
+                    try {
+                        val json = playlistViewModel.exportPlaylistsJson()
+                        context.contentResolver.openOutputStream(uri)?.use { out ->
+                            out.write(json.toByteArray(Charsets.UTF_8))
+                        }
+                        true
+                    } catch (_: Exception) {
+                        false
+                    }
+                }
+                Toast.makeText(
+                    context,
+                    if (ok) "Respaldo de playlists exportado" else "No se pudo exportar el respaldo",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    val importPlaylistsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null && playlistViewModel != null) {
+            scope.launch {
+                val jsonText = withContext(Dispatchers.IO) {
+                    try {
+                        context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+                if (jsonText != null) {
+                    playlistViewModel.importPlaylistsJson(jsonText) { count ->
+                        val msg = when {
+                            count < 0 -> "Archivo de respaldo inválido"
+                            count == 0 -> "No había playlists nuevas para importar"
+                            else -> "$count playlists restauradas"
+                        }
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    val deleteDuplicatesLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            onRescanLibrary()
+            Toast.makeText(context, "Videos duplicados eliminados", Toast.LENGTH_SHORT).show()
+        }
+    }
     var totalRenamedSoFar by remember { mutableIntStateOf(0) }
 
     var launchNextPermissionChunk: ((List<List<StandardizeCandidate>>) -> Unit)? = null
@@ -358,6 +427,50 @@ fun SettingsScreen(
                             }
                         }
                     )
+                    SettingsItem(
+                        title = if (isScanningDuplicates) "Buscando duplicados..." else "Buscar videos duplicados",
+                        subtitle = "Detecta copias idénticas para liberar espacio",
+                        icon = Icons.Rounded.ContentCopy,
+                        onClick = {
+                            if (!isScanningDuplicates) {
+                                isScanningDuplicates = true
+                                scope.launch {
+                                    val extras = withContext(Dispatchers.IO) {
+                                        val allVideos = LocalMediaScanner.scanDeviceVideo(context)
+                                        allVideos
+                                            .filter { it.fileSizeBytes > 0L }
+                                            .groupBy {
+                                                val norm = it.title.lowercase().replace(Regex("[^a-z0-9]"), "").take(24)
+                                                Pair(it.fileSizeBytes, norm)
+                                            }
+                                            .values
+                                            .filter { it.size > 1 }
+                                            .flatMap { group -> group.drop(1) }
+                                    }
+                                    isScanningDuplicates = false
+                                    if (extras.isEmpty()) {
+                                        Toast.makeText(context, "No se encontraron videos duplicados", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        duplicateVideosToDelete = extras
+                                    }
+                                }
+                            }
+                        }
+                    )
+                    if (playlistViewModel != null) {
+                        SettingsItem(
+                            title = "Exportar playlists (.json)",
+                            subtitle = "Guarda un respaldo local de tus listas",
+                            icon = Icons.Rounded.UploadFile,
+                            onClick = { exportPlaylistsLauncher.launch("auraplayer_playlists_backup.json") }
+                        )
+                        SettingsItem(
+                            title = "Importar playlists (.json)",
+                            subtitle = "Restaura listas desde un archivo de respaldo",
+                            icon = Icons.Rounded.DownloadForOffline,
+                            onClick = { importPlaylistsLauncher.launch(arrayOf("application/json", "*/*")) }
+                        )
+                    }
                 }
             }
             // Escudo Anti-Doze (Optimización de batería)
@@ -775,6 +888,83 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { standardizeCandidates = null }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    duplicateVideosToDelete?.let { duplicates ->
+        val totalMb = duplicates.sumOf { it.fileSizeBytes } / (1024.0 * 1024.0)
+        AlertDialog(
+            onDismissRequest = { duplicateVideosToDelete = null },
+            icon = { Icon(Icons.Rounded.ContentCopy, contentDescription = null) },
+            title = { Text("Videos duplicados (${duplicates.size})") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = String.format("Se conservará 1 copia de cada video y puedes eliminar ${duplicates.size} copias repetidas para liberar %.1f MB:", totalMb),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    duplicates.take(4).forEach { item ->
+                        Text(
+                            text = "• ${item.title} (${item.fileSizeFormatted})",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2
+                        )
+                    }
+                    if (duplicates.size > 4) {
+                        Text(
+                            text = "… y ${duplicates.size - 4} más.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    onClick = {
+                        val batch = duplicates
+                        duplicateVideosToDelete = null
+                        scope.launch {
+                            val pendingUris = mutableListOf<Uri>()
+                            var deletedDirect = 0
+                            withContext(Dispatchers.IO) {
+                                batch.forEach { item ->
+                                    val mediaId = item.id.removePrefix("media_video_").toLongOrNull()
+                                    if (mediaId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                        pendingUris.add(
+                                            android.content.ContentUris.withAppendedId(
+                                                android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                                                mediaId
+                                            )
+                                        )
+                                    } else {
+                                        val path = item.localFilePath
+                                        if (!path.isNullOrBlank() && File(path).delete()) {
+                                            deletedDirect++
+                                        }
+                                    }
+                                }
+                            }
+                            if (pendingUris.isNotEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                val pi = android.provider.MediaStore.createDeleteRequest(context.contentResolver, pendingUris)
+                                deleteDuplicatesLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+                            } else {
+                                onRescanLibrary()
+                                Toast.makeText(context, "$deletedDirect duplicados eliminados", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                ) {
+                    Text("Eliminar copias")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { duplicateVideosToDelete = null }) {
                     Text("Cancelar")
                 }
             }
