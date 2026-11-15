@@ -767,7 +767,7 @@ fun MusicPlayerApp(
                 startDestination = Screen.Downloads.route,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = paddingValues.calculateTopPadding()),
+                    .padding(paddingValues),
                 enterTransition = {
                     val fromTab = initialState.destination.route in bottomTabRoutes
                     val toTab = targetState.destination.route in bottomTabRoutes

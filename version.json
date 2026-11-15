@@ -1,19 +1,19 @@
 {
-  "version": "2.5.23",
-  "version_code": 273,
+  "version": "2.5.24",
+  "version_code": 274,
   "release_date": "2026-11-15",
-  "title": "OmniVault v2.5.23 — Windows PC & Android",
-  "changelog": "✨ Nueva herramienta masiva 'Estandarizar nombres' en Ajustes > Biblioteca y en Videos para limpiar etiquetas y ordenar audios/videos existentes (incluyendo archivos previos a instalar la APK)\n🛡️ Vista previa con ejemplos reales antes de renombrar, exclusión automática de WhatsApp/cámara y permiso único en lote en Android 11+",
+  "title": "OmniVault v2.5.24 — Windows PC & Android",
+  "changelog": "📐 Corrección global del padding inferior en NavHost (paddingValues completo) para que ninguna pestaña ni pantalla quede cortada detrás de la barra inferior o el MiniPlayer",
   "android": {
-    "version": "2.5.23",
-    "version_code": 273,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.23/OmniVault-v2.5.23-Android.apk",
+    "version": "2.5.24",
+    "version_code": 274,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.24/OmniVault-v2.5.24-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.23",
-    "version_code": 273,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.23/OmniVault-v2.5.23-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.23/OmniVault-v2.5.23-Windows-x64-Portable.zip"
+    "version": "2.5.24",
+    "version_code": 274,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.24/OmniVault-v2.5.24-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.24/OmniVault-v2.5.24-Windows-x64-Portable.zip"
   }
 }

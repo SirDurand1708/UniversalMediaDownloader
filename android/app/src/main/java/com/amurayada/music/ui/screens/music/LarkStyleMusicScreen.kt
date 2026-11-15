@@ -728,7 +728,7 @@ private fun SongsListContent(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 120.dp)
+        contentPadding = PaddingValues(bottom = 24.dp)
     ) {
         // Cabecera rápida: Total de pistas y botón Aleatorio
         item {
