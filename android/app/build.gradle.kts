@@ -22,8 +22,8 @@ android {
         applicationId = "com.omnivault.media"
         minSdk = 24
         targetSdk = 36
-        versionCode = 280
-        versionName = "2.5.30"
+        versionCode = 281
+        versionName = "2.5.31"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         

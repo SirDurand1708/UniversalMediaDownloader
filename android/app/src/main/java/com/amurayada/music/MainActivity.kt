@@ -288,6 +288,7 @@ data class BottomNavItem(
     val isSelected: Boolean = false
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MusicPlayerApp(
     libraryViewModel: LibraryViewModel,
@@ -713,7 +714,7 @@ fun MusicPlayerApp(
                                                         )
                                                     },
                                                     trailingContent = {
-                                                        IconButton(onClick = { playbackViewModel.removeFromQueue(index) }) {
+                                                        IconButton(onClick = { playbackViewModel.removeFromQueue(qSong) }) {
                                                             Icon(Icons.Rounded.Close, contentDescription = "Quitar de la cola")
                                                         }
                                                     },

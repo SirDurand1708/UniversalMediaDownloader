@@ -1,19 +1,19 @@
 {
-  "version": "2.5.30",
-  "version_code": 280,
+  "version": "2.5.31",
+  "version_code": 281,
   "release_date": "2026-11-15",
-  "title": "OmniVault v2.5.30 — Windows PC & Android",
-  "changelog": "✨ Fase 4 UX: Widget de pantalla de inicio renovado con botón Siguiente, protección Android 12+ en segundo plano y estética oscura Aura Player",
+  "title": "OmniVault v2.5.31 — Windows PC & Android",
+  "changelog": "🔧 Fix compilación Kotlin en MainActivity (ModalBottomSheet OptIn y removeFromQueue(Song)) + todas las mejoras de Fases 1-4",
   "android": {
-    "version": "2.5.30",
-    "version_code": 280,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.30/OmniVault-v2.5.30-Android.apk",
+    "version": "2.5.31",
+    "version_code": 281,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.31/OmniVault-v2.5.31-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.30",
-    "version_code": 280,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.30/OmniVault-v2.5.30-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.30/OmniVault-v2.5.30-Windows-x64-Portable.zip"
+    "version": "2.5.31",
+    "version_code": 281,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.31/OmniVault-v2.5.31-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.31/OmniVault-v2.5.31-Windows-x64-Portable.zip"
   }
 }
