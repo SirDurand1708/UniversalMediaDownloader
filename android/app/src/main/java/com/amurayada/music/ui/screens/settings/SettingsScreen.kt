@@ -112,11 +112,6 @@ fun SettingsScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Ajustes", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver")
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                     scrolledContainerColor = Color.Transparent
@@ -498,18 +493,21 @@ fun SettingsScreen(
                         title = "Nombre",
                         subtitle = "Aura Player • Edición Oficial",
                         icon = Icons.Rounded.PlayCircle,
+                        showChevron = false,
                         onClick = { }
                     )
                     SettingsItem(
                         title = "Versión",
                         subtitle = "v${settingsViewModel.CURRENT_VERSION} (Compilación Universal)",
                         icon = Icons.Rounded.Numbers,
+                        showChevron = false,
                         onClick = { }
                     )
                     SettingsItem(
                         title = "Desarrollador",
                         subtitle = "OmniVault Team / SirDurand",
                         icon = Icons.Rounded.Code,
+                        showChevron = true,
                         onClick = {
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/SirDurand1708/UniversalMediaDownloader"))
                             context.startActivity(intent)
@@ -519,6 +517,7 @@ fun SettingsScreen(
                         title = "Licencia",
                         subtitle = "Código Abierto (GPL-3.0)",
                         icon = Icons.Rounded.VerifiedUser,
+                        showChevron = false,
                         onClick = { }
                     )
                 }
@@ -688,12 +687,13 @@ private fun SettingsItem(
     title: String,
     subtitle: String,
     icon: ImageVector,
+    showChevron: Boolean = true,
     onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(enabled = showChevron, onClick = onClick)
             .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -708,7 +708,7 @@ private fun SettingsItem(
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
             Text(
@@ -719,11 +719,13 @@ private fun SettingsItem(
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
         }
-        Icon(
-            imageVector = Icons.Rounded.ChevronRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        if (showChevron) {
+            Icon(
+                imageVector = Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -758,7 +760,7 @@ private fun SettingsToggleItem(
                 style = MaterialTheme.typography.bodyLarge.copy(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)
                 ),
-                maxLines = 1,
+                maxLines = 2,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
             Text(

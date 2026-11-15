@@ -754,6 +754,14 @@ fun MusicPlayerApp(
                 }
             }
         ) { paddingValues ->
+            val bottomTabRoutes = remember {
+                setOf(
+                    Screen.Downloads.route,
+                    Screen.Home.route,
+                    Screen.Videos.route,
+                    Screen.Settings.route
+                )
+            }
             NavHost(
                 navController = navController,
                 startDestination = Screen.Downloads.route,
@@ -761,28 +769,52 @@ fun MusicPlayerApp(
                     .fillMaxSize()
                     .padding(top = paddingValues.calculateTopPadding()),
                 enterTransition = {
-                    slideInHorizontally(
-                        initialOffsetX = { it },
-                        animationSpec = tween(200)
-                    ) + fadeIn(animationSpec = tween(200))
+                    val fromTab = initialState.destination.route in bottomTabRoutes
+                    val toTab = targetState.destination.route in bottomTabRoutes
+                    if (fromTab && toTab) {
+                        fadeIn(animationSpec = tween(150))
+                    } else {
+                        slideInHorizontally(
+                            initialOffsetX = { it },
+                            animationSpec = tween(200)
+                        ) + fadeIn(animationSpec = tween(200))
+                    }
                 },
                 exitTransition = {
-                    slideOutHorizontally(
-                        targetOffsetX = { -it / 4 },
-                        animationSpec = tween(200)
-                    ) + fadeOut(animationSpec = tween(200))
+                    val fromTab = initialState.destination.route in bottomTabRoutes
+                    val toTab = targetState.destination.route in bottomTabRoutes
+                    if (fromTab && toTab) {
+                        fadeOut(animationSpec = tween(150))
+                    } else {
+                        slideOutHorizontally(
+                            targetOffsetX = { -it / 4 },
+                            animationSpec = tween(200)
+                        ) + fadeOut(animationSpec = tween(200))
+                    }
                 },
                 popEnterTransition = {
-                    slideInHorizontally(
-                        initialOffsetX = { -it / 4 },
-                        animationSpec = tween(200)
-                    ) + fadeIn(animationSpec = tween(200))
+                    val fromTab = initialState.destination.route in bottomTabRoutes
+                    val toTab = targetState.destination.route in bottomTabRoutes
+                    if (fromTab && toTab) {
+                        fadeIn(animationSpec = tween(150))
+                    } else {
+                        slideInHorizontally(
+                            initialOffsetX = { -it / 4 },
+                            animationSpec = tween(200)
+                        ) + fadeIn(animationSpec = tween(200))
+                    }
                 },
                 popExitTransition = {
-                    slideOutHorizontally(
-                        targetOffsetX = { it },
-                        animationSpec = tween(200)
-                    ) + fadeOut(animationSpec = tween(200))
+                    val fromTab = initialState.destination.route in bottomTabRoutes
+                    val toTab = targetState.destination.route in bottomTabRoutes
+                    if (fromTab && toTab) {
+                        fadeOut(animationSpec = tween(150))
+                    } else {
+                        slideOutHorizontally(
+                            targetOffsetX = { it },
+                            animationSpec = tween(200)
+                        ) + fadeOut(animationSpec = tween(200))
+                    }
                 }
             ) {
                 composable(Screen.Home.route) {

@@ -26,22 +26,59 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
     val sortOption = MutableStateFlow<SortOption>(
         SortOption.fromKey(prefs.getString("video_sort_order", SortOption.DATE_DESC.name) ?: SortOption.DATE_DESC.name)
     )
+    val hideShortClips = MutableStateFlow(prefs.getBoolean("hide_short_videos", false))
+    val onlyDownloaded = MutableStateFlow(false)
 
     fun setSortOption(sort: SortOption) {
         sortOption.value = sort
         prefs.edit().putString("video_sort_order", sort.name).apply()
     }
 
+    fun setHideShortClips(enabled: Boolean) {
+        hideShortClips.value = enabled
+        prefs.edit().putBoolean("hide_short_videos", enabled).apply()
+    }
+
+    fun setOnlyDownloaded(enabled: Boolean) {
+        onlyDownloaded.value = enabled
+    }
+
+    private fun parseDurationSeconds(dur: String): Long {
+        if (dur.isBlank()) return 0L
+        val parts = dur.trim().split(":").mapNotNull { it.toLongOrNull() }
+        return when (parts.size) {
+            2 -> parts[0] * 60 + parts[1]
+            3 -> parts[0] * 3600 + parts[1] * 60 + parts[2]
+            1 -> parts[0]
+            else -> 0L
+        }
+    }
+
     val videos: StateFlow<List<DownloadItem>> = combine(
         _rawVideos,
         searchQuery,
-        sortOption
-    ) { list, query, sort ->
-        val filtered = if (query.isBlank()) {
+        sortOption,
+        hideShortClips,
+        onlyDownloaded
+    ) { list, query, sort, hideShort, onlyDl ->
+        var filtered = if (query.isBlank()) {
             list
         } else {
             val q = query.lowercase().trim()
             list.filter { it.title.lowercase().contains(q) }
+        }
+
+        if (onlyDl) {
+            filtered = filtered.filter {
+                it.id.startsWith("db_video_") ||
+                    (it.localFilePath?.contains("OmniVault", ignoreCase = true) == true)
+            }
+        }
+
+        if (hideShort) {
+            filtered = filtered.filter {
+                it.durationFormatted.isBlank() || parseDurationSeconds(it.durationFormatted) >= 5L
+            }
         }
 
         when (sort) {
@@ -102,7 +139,22 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
                             )
                         }
                 }
-                val merged = (dbVideos + scanned).distinctBy { it.localFilePath ?: it.id }
+                val seenPaths = HashSet<String>()
+                val seenTitleSizes = HashSet<String>()
+                val merged = ArrayList<DownloadItem>()
+                for (item in (dbVideos + scanned)) {
+                    val pathKey = (item.localFilePath ?: item.id).lowercase()
+                    val normTitle = item.title.lowercase().replace(Regex("[^a-z0-9]"), "")
+                    val sizeBucket = item.fileSizeBytes / 4096L
+                    val contentKey = if (normTitle.isNotBlank() && item.fileSizeBytes > 0L) "${normTitle}_$sizeBucket" else ""
+
+                    if (pathKey in seenPaths) continue
+                    if (contentKey.isNotEmpty() && contentKey in seenTitleSizes) continue
+
+                    seenPaths.add(pathKey)
+                    if (contentKey.isNotEmpty()) seenTitleSizes.add(contentKey)
+                    merged.add(item)
+                }
                 _rawVideos.value = merged
             } catch (e: Exception) {
                 e.printStackTrace()

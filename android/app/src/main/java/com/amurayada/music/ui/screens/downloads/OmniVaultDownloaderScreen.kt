@@ -160,7 +160,7 @@ fun OmniVaultDownloaderScreen(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "Aura Player • Universal Engine (yt-dlp + FFmpeg)",
+                            text = "Motor Universal • Alta Velocidad",
                             style = MaterialTheme.typography.labelSmall,
                             color = neonGreen,
                             maxLines = 1,
@@ -315,7 +315,7 @@ fun OmniVaultDownloaderScreen(
                     OutlinedTextField(
                         value = urlInput,
                         onValueChange = { downloadViewModel.urlInput.value = it },
-                        placeholder = { Text("Pega enlace de YouTube, TikTok, Instagram, X...", fontSize = 13.sp) },
+                        placeholder = { Text("Pega enlace de YouTube, TikTok, IG, X...", fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         leadingIcon = { Icon(Icons.Rounded.Link, contentDescription = null, tint = Color.Gray) },
                         trailingIcon = {
                             if (urlInput.isNotEmpty()) {
@@ -535,16 +535,34 @@ fun OmniVaultDownloaderScreen(
         // 5. Sección de Descargas Completadas (downloadedSongs)
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = "DESCARGAS COMPLETADAS (${filteredCompletedSongs.size})",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = neonGreen,
-                    letterSpacing = 1.sp,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "DESCARGAS COMPLETADAS (${filteredCompletedSongs.size})",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = neonGreen,
+                        letterSpacing = 1.sp,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (completedSongs.isNotEmpty()) {
+                        TextButton(
+                            onClick = {
+                                downloadViewModel.clearCompletedHistory()
+                                Toast.makeText(context, "Historial limpiado (los archivos siguen en tu dispositivo)", Toast.LENGTH_SHORT).show()
+                            },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Text("Limpiar", fontSize = 11.sp, color = Color.Gray)
+                        }
+                    }
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),

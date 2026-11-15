@@ -314,6 +314,21 @@ class DownloadViewModel(
             }
         }
     }
+
+    /**
+     * Limpia únicamente el historial de descargas completadas en la base de datos local
+     * sin eliminar los archivos multimedia guardados en el dispositivo.
+     */
+    fun clearCompletedHistory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val all = downloadDao.getAllDownloads().first()
+                all.forEach { downloadDao.deleteDownloadById(it.songId) }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
     
     fun isDownloaded(songId: Long): Flow<Boolean> = flow {
         emit(withContext(Dispatchers.IO) { downloadDao.isDownloaded(songId) })

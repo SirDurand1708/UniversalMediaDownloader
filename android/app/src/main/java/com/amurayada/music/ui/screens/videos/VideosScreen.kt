@@ -43,6 +43,8 @@ fun VideosScreen(
     val isLoading by videosViewModel.isLoading.collectAsState()
     val searchQuery by videosViewModel.searchQuery.collectAsState()
     val currentSort by videosViewModel.sortOption.collectAsState()
+    val hideShortClips by videosViewModel.hideShortClips.collectAsState()
+    val onlyDownloaded by videosViewModel.onlyDownloaded.collectAsState()
 
     var showSortDialog by remember { mutableStateOf(false) }
 
@@ -144,7 +146,33 @@ fun VideosScreen(
             )
         )
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
+
+        // Filtros rápidos: Todos / Descargados / Ocultar clips cortos (< 5s)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = !onlyDownloaded,
+                onClick = { videosViewModel.setOnlyDownloaded(false) },
+                label = { Text("Todos", fontSize = 12.sp, maxLines = 1, softWrap = false) }
+            )
+            FilterChip(
+                selected = onlyDownloaded,
+                onClick = { videosViewModel.setOnlyDownloaded(true) },
+                label = { Text("Descargados", fontSize = 12.sp, maxLines = 1, softWrap = false) }
+            )
+            FilterChip(
+                selected = hideShortClips,
+                onClick = { videosViewModel.setHideShortClips(!hideShortClips) },
+                label = { Text("Ocultar < 5s", fontSize = 12.sp, maxLines = 1, softWrap = false) }
+            )
+        }
+
+        Spacer(Modifier.height(6.dp))
 
         // Content
         if (isLoading && videos.isEmpty()) {
@@ -365,6 +393,8 @@ fun VideoGridCard(
                     Text(
                         text = video.title,
                         style = MaterialTheme.typography.bodySmall,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis

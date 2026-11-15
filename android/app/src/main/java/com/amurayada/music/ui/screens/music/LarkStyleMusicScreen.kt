@@ -895,8 +895,16 @@ private fun LarkSongRow(
                     Spacer(Modifier.width(6.dp))
                 }
 
+                val cleanArtist = song.artist.replace(" - Topic", "", ignoreCase = true).trim()
+                val cleanAlbum = song.album.replace(" - Topic", "", ignoreCase = true).trim()
+                val subtitleText = if (cleanAlbum.isBlank() || cleanAlbum.equals(cleanArtist, ignoreCase = true)) {
+                    cleanArtist
+                } else {
+                    "$cleanArtist • $cleanAlbum"
+                }
+
                 Text(
-                    text = "${song.artist} • ${song.album}",
+                    text = subtitleText,
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.55f),
                     maxLines = 1,
