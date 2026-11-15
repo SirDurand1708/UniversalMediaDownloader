@@ -1,5 +1,6 @@
 package com.amurayada.music.ui.screens.settings
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -12,6 +13,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -37,6 +39,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import com.amurayada.music.ui.viewmodel.SettingsViewModel
+import com.omnivault.media.utils.BulkMediaStandardizer
+import com.omnivault.media.utils.StandardizeCandidate
+import kotlinx.coroutines.launch
 
 // Predefined colors for the picker
 private val PredefinedColors = listOf(
@@ -78,6 +83,60 @@ fun SettingsScreen(
     var showRescanDialog by remember { mutableStateOf(false) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     var dismissedUpdateDialogVersion by remember { mutableStateOf<String?>(null) }
+
+    val scope = rememberCoroutineScope()
+    var isScanningStandardize by remember { mutableStateOf(false) }
+    var standardizeCandidates by remember { mutableStateOf<List<StandardizeCandidate>?>(null) }
+    var pendingWriteChunks by remember { mutableStateOf<List<List<StandardizeCandidate>>>(emptyList()) }
+    var totalRenamedSoFar by remember { mutableIntStateOf(0) }
+
+    var launchNextPermissionChunk: ((List<List<StandardizeCandidate>>) -> Unit)? = null
+    val writePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        val currentChunk = pendingWriteChunks.firstOrNull()
+        val remaining = if (pendingWriteChunks.size > 1) pendingWriteChunks.drop(1) else emptyList()
+        if (result.resultCode == Activity.RESULT_OK && currentChunk != null) {
+            scope.launch {
+                val res = BulkMediaStandardizer.applyBatch(context, currentChunk, collectPermissionChunks = false)
+                totalRenamedSoFar += res.renamedCount
+                if (remaining.isNotEmpty()) {
+                    launchNextPermissionChunk?.invoke(remaining)
+                } else {
+                    pendingWriteChunks = emptyList()
+                    onRescanLibrary()
+                    Toast.makeText(
+                        context,
+                        "$totalRenamedSoFar archivos estandarizados correctamente",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        } else {
+            pendingWriteChunks = emptyList()
+            if (totalRenamedSoFar > 0) {
+                onRescanLibrary()
+                Toast.makeText(context, "$totalRenamedSoFar archivos estandarizados", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "Permiso cancelado para archivos externos", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    launchNextPermissionChunk = { chunks ->
+        val first = chunks.firstOrNull()
+        val sender = if (first != null) BulkMediaStandardizer.createWriteRequestIntentSender(context, first) else null
+        if (sender != null) {
+            pendingWriteChunks = chunks
+            writePermissionLauncher.launch(IntentSenderRequest.Builder(sender).build())
+        } else {
+            pendingWriteChunks = emptyList()
+            if (totalRenamedSoFar > 0) {
+                onRescanLibrary()
+                Toast.makeText(context, "$totalRenamedSoFar archivos estandarizados", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     var isIgnoringBatteryOptimizations by remember {
@@ -273,6 +332,29 @@ fun SettingsScreen(
                         subtitle = "Buscar nuevas canciones",
                         icon = Icons.Rounded.Refresh,
                         onClick = { showRescanDialog = true }
+                    )
+                    SettingsItem(
+                        title = if (isScanningStandardize) "Analizando archivos..." else "Estandarizar nombres",
+                        subtitle = "Limpia etiquetas y ordena audios y videos existentes",
+                        icon = Icons.Rounded.AutoFixHigh,
+                        onClick = {
+                            if (!isScanningStandardize) {
+                                isScanningStandardize = true
+                                scope.launch {
+                                    val found = BulkMediaStandardizer.scanCandidates(context)
+                                    isScanningStandardize = false
+                                    if (found.isEmpty()) {
+                                        Toast.makeText(
+                                            context,
+                                            "¡Tus audios y videos ya están estandarizados!",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    } else {
+                                        standardizeCandidates = found
+                                    }
+                                }
+                            }
+                        }
                     )
                 }
             }
@@ -626,6 +708,71 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showRescanDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    standardizeCandidates?.let { candidates ->
+        val audioCount = candidates.count { !it.isVideo }
+        val videoCount = candidates.count { it.isVideo }
+        val examples = candidates.take(3)
+        AlertDialog(
+            onDismissRequest = { standardizeCandidates = null },
+            icon = { Icon(Icons.Rounded.AutoFixHigh, contentDescription = null) },
+            title = { Text("Estandarizar nombres", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Se encontraron $audioCount audios y $videoCount videos para limpiar y ordenar (se omiten notas de WhatsApp y cámara).",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    if (examples.isNotEmpty()) {
+                        Text(
+                            text = "Ejemplos:",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        examples.forEach { ex ->
+                            Text(
+                                text = "• ${ex.currentBaseName} → ${ex.targetBaseName}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val batch = candidates
+                        standardizeCandidates = null
+                        totalRenamedSoFar = 0
+                        scope.launch {
+                            val result = BulkMediaStandardizer.applyBatch(context, batch)
+                            totalRenamedSoFar += result.renamedCount
+                            if (result.pendingPermissionChunks.isNotEmpty()) {
+                                launchNextPermissionChunk?.invoke(result.pendingPermissionChunks)
+                            } else {
+                                onRescanLibrary()
+                                Toast.makeText(
+                                    context,
+                                    "$totalRenamedSoFar archivos estandarizados correctamente",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    }
+                ) {
+                    Text("Estandarizar (${candidates.size})")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { standardizeCandidates = null }) {
                     Text("Cancelar")
                 }
             }

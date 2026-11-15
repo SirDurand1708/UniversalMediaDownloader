@@ -1,19 +1,19 @@
 {
-  "version": "2.5.22",
-  "version_code": 272,
+  "version": "2.5.23",
+  "version_code": 273,
   "release_date": "2026-11-15",
-  "title": "OmniVault v2.5.22 — Windows PC & Android",
-  "changelog": "🛡️ Corrección segura al eliminar canciones y videos: si rechazas el permiso del sistema, no se borran de playlists ni base de datos\n⚡ Guardado atómico en lote (addSongsToPlaylist) al añadir múltiples canciones a una playlist",
+  "title": "OmniVault v2.5.23 — Windows PC & Android",
+  "changelog": "✨ Nueva herramienta masiva 'Estandarizar nombres' en Ajustes > Biblioteca y en Videos para limpiar etiquetas y ordenar audios/videos existentes (incluyendo archivos previos a instalar la APK)\n🛡️ Vista previa con ejemplos reales antes de renombrar, exclusión automática de WhatsApp/cámara y permiso único en lote en Android 11+",
   "android": {
-    "version": "2.5.22",
-    "version_code": 272,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.22/OmniVault-v2.5.22-Android.apk",
+    "version": "2.5.23",
+    "version_code": 273,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.23/OmniVault-v2.5.23-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.22",
-    "version_code": 272,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.22/OmniVault-v2.5.22-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.22/OmniVault-v2.5.22-Windows-x64-Portable.zip"
+    "version": "2.5.23",
+    "version_code": 273,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.23/OmniVault-v2.5.23-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.23/OmniVault-v2.5.23-Windows-x64-Portable.zip"
   }
 }

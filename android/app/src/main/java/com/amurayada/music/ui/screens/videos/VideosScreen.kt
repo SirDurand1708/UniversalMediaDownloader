@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -33,6 +34,9 @@ import coil.compose.AsyncImage
 import com.amurayada.music.ui.viewmodel.VideosViewModel
 import com.omnivault.media.model.DownloadItem
 import com.omnivault.media.model.SortOption
+import com.omnivault.media.utils.BulkMediaStandardizer
+import com.omnivault.media.utils.StandardizeCandidate
+import kotlinx.coroutines.launch
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -52,6 +56,54 @@ fun VideosScreen(
     var showSortDialog by remember { mutableStateOf(false) }
 
     var pendingDeleteVideo by remember { mutableStateOf<DownloadItem?>(null) }
+
+    val scope = rememberCoroutineScope()
+    var isScanningStandardize by remember { mutableStateOf(false) }
+    var videoStandardizeCandidates by remember { mutableStateOf<List<StandardizeCandidate>?>(null) }
+    var pendingWriteChunks by remember { mutableStateOf<List<List<StandardizeCandidate>>>(emptyList()) }
+    var totalVideosRenamed by remember { mutableIntStateOf(0) }
+    var launchNextVideoChunk: ((List<List<StandardizeCandidate>>) -> Unit)? = null
+
+    val writePermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        val currentChunk = pendingWriteChunks.firstOrNull()
+        val remaining = if (pendingWriteChunks.size > 1) pendingWriteChunks.drop(1) else emptyList()
+        if (result.resultCode == Activity.RESULT_OK && currentChunk != null) {
+            scope.launch {
+                val res = BulkMediaStandardizer.applyBatch(context, currentChunk, collectPermissionChunks = false)
+                totalVideosRenamed += res.renamedCount
+                if (remaining.isNotEmpty()) {
+                    launchNextVideoChunk?.invoke(remaining)
+                } else {
+                    pendingWriteChunks = emptyList()
+                    videosViewModel.loadVideos()
+                    Toast.makeText(context, "$totalVideosRenamed videos estandarizados", Toast.LENGTH_LONG).show()
+                }
+            }
+        } else {
+            pendingWriteChunks = emptyList()
+            if (totalVideosRenamed > 0) {
+                videosViewModel.loadVideos()
+                Toast.makeText(context, "$totalVideosRenamed videos estandarizados", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    launchNextVideoChunk = { chunks ->
+        val first = chunks.firstOrNull()
+        val sender = if (first != null) BulkMediaStandardizer.createWriteRequestIntentSender(context, first) else null
+        if (sender != null) {
+            pendingWriteChunks = chunks
+            writePermissionLauncher.launch(IntentSenderRequest.Builder(sender).build())
+        } else {
+            pendingWriteChunks = emptyList()
+            if (totalVideosRenamed > 0) {
+                videosViewModel.loadVideos()
+                Toast.makeText(context, "$totalVideosRenamed videos estandarizados", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     val deleteLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartIntentSenderForResult()
@@ -123,6 +175,32 @@ fun VideosScreen(
             }
 
             Row {
+                IconButton(
+                    onClick = {
+                        if (!isScanningStandardize) {
+                            isScanningStandardize = true
+                            scope.launch {
+                                val found = BulkMediaStandardizer.scanCandidates(
+                                    context = context,
+                                    includeAudio = false,
+                                    includeVideo = true
+                                )
+                                isScanningStandardize = false
+                                if (found.isEmpty()) {
+                                    Toast.makeText(context, "¡Tus videos ya están estandarizados!", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    videoStandardizeCandidates = found
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.AutoFixHigh,
+                        contentDescription = "Estandarizar nombres de videos",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                }
                 IconButton(onClick = { showSortDialog = true }) {
                     Icon(
                         imageVector = Icons.Rounded.Sort,
@@ -321,6 +399,57 @@ fun VideosScreen(
             confirmButton = {
                 TextButton(onClick = { showSortDialog = false }) {
                     Text("Cerrar")
+                }
+            }
+        )
+    }
+
+    videoStandardizeCandidates?.let { candidates ->
+        val examples = candidates.take(3)
+        AlertDialog(
+            onDismissRequest = { videoStandardizeCandidates = null },
+            icon = { Icon(Icons.Rounded.AutoFixHigh, contentDescription = null) },
+            title = { Text("Estandarizar videos", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Se encontraron ${candidates.size} videos para limpiar etiquetas (se omiten WhatsApp y cámara).",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    examples.forEach { ex ->
+                        Text(
+                            text = "• ${ex.currentBaseName} → ${ex.targetBaseName}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val batch = candidates
+                        videoStandardizeCandidates = null
+                        totalVideosRenamed = 0
+                        scope.launch {
+                            val result = BulkMediaStandardizer.applyBatch(context, batch)
+                            totalVideosRenamed += result.renamedCount
+                            if (result.pendingPermissionChunks.isNotEmpty()) {
+                                launchNextVideoChunk?.invoke(result.pendingPermissionChunks)
+                            } else {
+                                videosViewModel.loadVideos()
+                                Toast.makeText(context, "$totalVideosRenamed videos estandarizados", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                ) {
+                    Text("Estandarizar (${candidates.size})")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { videoStandardizeCandidates = null }) {
+                    Text("Cancelar")
                 }
             }
         )
