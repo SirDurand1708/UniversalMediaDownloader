@@ -652,6 +652,7 @@ fun MusicPlayerApp(
                                 duration = currentSong?.duration ?: 0L,
                                 onPlayPauseClick = playbackViewModel::togglePlayPause,
                                 onNextClick = playbackViewModel::skipToNext,
+                                onPreviousClick = playbackViewModel::skipToPrevious,
                                 onExpandClick = { isPlayerExpanded = true },
                                 onCloseClick = {
                                     playbackViewModel.pause()

@@ -115,6 +115,27 @@ fun OmniVaultDownloaderScreen(
     val cardBg = Color(0xFF141923).copy(alpha = 0.85f)
     val borderCol = Color(0xFF263248)
 
+    var detectedClipboardUrl by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(urlInput) {
+        if (urlInput.isBlank()) {
+            try {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                val clipText = clipboard?.primaryClip?.getItemAt(0)?.text?.toString()?.trim() ?: ""
+                if (clipText.startsWith("http://", ignoreCase = true) ||
+                    clipText.startsWith("https://", ignoreCase = true)
+                ) {
+                    detectedClipboardUrl = clipText
+                } else {
+                    detectedClipboardUrl = null
+                }
+            } catch (_: Exception) {
+                detectedClipboardUrl = null
+            }
+        } else {
+            detectedClipboardUrl = null
+        }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -337,6 +358,55 @@ fun OmniVaultDownloaderScreen(
                             unfocusedBorderColor = borderCol
                         )
                     )
+
+                    detectedClipboardUrl?.let { clipUrl ->
+                        Spacer(Modifier.height(8.dp))
+                        Surface(
+                            onClick = {
+                                downloadViewModel.urlInput.value = clipUrl
+                                downloadViewModel.analyzeUrl(clipUrl)
+                                detectedClipboardUrl = null
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            color = neonGreen.copy(alpha = 0.12f),
+                            border = BorderStroke(1.dp, neonGreen.copy(alpha = 0.45f))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Rounded.ContentPaste,
+                                    contentDescription = null,
+                                    tint = neonGreen,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = "Enlace en portapapeles • Analizar",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = neonGreen,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                IconButton(
+                                    onClick = { detectedClipboardUrl = null },
+                                    modifier = Modifier.size(22.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.Clear,
+                                        contentDescription = "Descartar",
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
 
                     Spacer(Modifier.height(10.dp))
 

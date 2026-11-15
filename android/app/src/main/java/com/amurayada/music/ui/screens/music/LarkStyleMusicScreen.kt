@@ -6,13 +6,17 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -103,6 +107,7 @@ fun LarkStyleMusicScreen(
         }
     }
     val playlists by playlistViewModel.playlists.collectAsState()
+    var songsForPlaylist by remember { mutableStateOf<List<Song>>(emptyList()) }
 
     BackHandler(enabled = selectedPlaylist != null) {
         selectedPlaylist = null
@@ -326,6 +331,17 @@ fun LarkStyleMusicScreen(
                     onAddToPlaylist = { song ->
                         songForPlaylist = song
                     },
+                    onAddMultipleToQueue = { songsBatch ->
+                        songsBatch.forEach { playbackViewModel.addToQueue(it) }
+                        Toast.makeText(context, "${songsBatch.size} canciones añadidas a la cola", Toast.LENGTH_SHORT).show()
+                    },
+                    onAddMultipleToPlaylist = { songsBatch ->
+                        songsForPlaylist = songsBatch
+                    },
+                    onHideMultiple = { songsBatch ->
+                        songsBatch.forEach { libraryViewModel.hideSong(it.id) }
+                        Toast.makeText(context, "${songsBatch.size} canciones ocultadas", Toast.LENGTH_SHORT).show()
+                    },
                     onStandardize = { song ->
                         val f = File(song.path)
                         if (f.exists()) {
@@ -536,6 +552,24 @@ fun LarkStyleMusicScreen(
         )
     }
 
+    // Diálogo para añadir múltiples canciones a playlist
+    if (songsForPlaylist.isNotEmpty()) {
+        AddToPlaylistSheet(
+            playlists = playlists,
+            onDismiss = { songsForPlaylist = emptyList() },
+            onPlaylistSelected = { playlist ->
+                val count = songsForPlaylist.size
+                songsForPlaylist.forEach { playlistViewModel.addSongToPlaylist(playlist.id, it.id) }
+                songsForPlaylist = emptyList()
+                Toast.makeText(context, "$count canciones añadidas a ${playlist.name}", Toast.LENGTH_SHORT).show()
+            },
+            onCreateNewPlaylist = {
+                songsForPlaylist = emptyList()
+                showCreatePlaylistDialog = true
+            }
+        )
+    }
+
     // Diálogo para crear nueva playlist
     if (showCreatePlaylistDialog) {
         AlertDialog(
@@ -698,6 +732,9 @@ private fun SongsListContent(
     onPlayNext: (Song) -> Unit,
     onAddToQueue: (Song) -> Unit = {},
     onAddToPlaylist: (Song) -> Unit,
+    onAddMultipleToQueue: (List<Song>) -> Unit = {},
+    onAddMultipleToPlaylist: (List<Song>) -> Unit = {},
+    onHideMultiple: (List<Song>) -> Unit = {},
     onStandardize: (Song) -> Unit,
     onShare: (Song) -> Unit,
     onHide: (Song) -> Unit,
@@ -726,69 +763,188 @@ private fun SongsListContent(
         return
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp)
-    ) {
-        // Cabecera rápida: Total de pistas y botón Aleatorio
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "${songs.size} canciones",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White.copy(alpha = 0.7f)
-                )
+    val selectedIds = remember { mutableStateListOf<Long>() }
+    val inSelectionMode = selectedIds.isNotEmpty()
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val showScrollToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 12 } }
 
-                Surface(
-                    onClick = onShuffle,
-                    color = Color(0xFF141923),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF263248))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+    BackHandler(enabled = inSelectionMode) {
+        selectedIds.clear()
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 24.dp)
+        ) {
+            if (inSelectionMode) {
+                item {
+                    Surface(
+                        color = Color(0xFF141923),
+                        shape = RoundedCornerShape(14.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.5f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Shuffle,
-                            contentDescription = null,
-                            tint = Color(0xFF00E5FF),
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(
+                                onClick = { selectedIds.clear() },
+                                modifier = Modifier.size(34.dp)
+                            ) {
+                                Icon(Icons.Rounded.Close, contentDescription = "Cancelar selección", tint = Color.White, modifier = Modifier.size(18.dp))
+                            }
+                            Text(
+                                text = "${selectedIds.size}",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF00E5FF)
+                            )
+                            Spacer(Modifier.weight(1f))
+                            IconButton(
+                                onClick = {
+                                    val batch = songs.filter { selectedIds.contains(it.id) }
+                                    onAddMultipleToPlaylist(batch)
+                                    selectedIds.clear()
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Rounded.PlaylistAdd, contentDescription = "Añadir a playlist", tint = Color.White, modifier = Modifier.size(20.dp))
+                            }
+                            IconButton(
+                                onClick = {
+                                    val batch = songs.filter { selectedIds.contains(it.id) }
+                                    onAddMultipleToQueue(batch)
+                                    selectedIds.clear()
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Rounded.QueueMusic, contentDescription = "Añadir a la cola", tint = Color.White, modifier = Modifier.size(20.dp))
+                            }
+                            IconButton(
+                                onClick = {
+                                    val batch = songs.filter { selectedIds.contains(it.id) }
+                                    onHideMultiple(batch)
+                                    selectedIds.clear()
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Rounded.VisibilityOff, contentDescription = "Ocultar", tint = Color.White, modifier = Modifier.size(20.dp))
+                            }
+                            IconButton(
+                                onClick = {
+                                    if (selectedIds.size == songs.size) {
+                                        selectedIds.clear()
+                                    } else {
+                                        selectedIds.clear()
+                                        selectedIds.addAll(songs.map { it.id })
+                                    }
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Rounded.SelectAll, contentDescription = "Seleccionar todo", tint = Color(0xFF00E5FF), modifier = Modifier.size(20.dp))
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Cabecera rápida: Total de pistas y botón Aleatorio
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
                         Text(
-                            text = "Aleatorio",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            text = "${songs.size} canciones",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White.copy(alpha = 0.7f)
                         )
+
+                        Surface(
+                            onClick = onShuffle,
+                            color = Color(0xFF141923),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF263248))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Shuffle,
+                                    contentDescription = null,
+                                    tint = Color(0xFF00E5FF),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "Aleatorio",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
                     }
                 }
             }
+
+            items(songs, key = { it.id }) { song ->
+                val isCurrent = currentSong?.id == song.id
+                val isSelected = selectedIds.contains(song.id)
+                LarkSongRow(
+                    song = song,
+                    isCurrent = isCurrent,
+                    isPlaying = isCurrent && isPlaying,
+                    inSelectionMode = inSelectionMode,
+                    isSelected = isSelected,
+                    onClick = {
+                        if (inSelectionMode) {
+                            if (isSelected) selectedIds.remove(song.id) else selectedIds.add(song.id)
+                        } else {
+                            onSongClick(song)
+                        }
+                    },
+                    onLongClick = {
+                        if (isSelected) selectedIds.remove(song.id) else selectedIds.add(song.id)
+                    },
+                    onPlayNext = { onPlayNext(song) },
+                    onAddToQueue = { onAddToQueue(song) },
+                    onAddToPlaylist = { onAddToPlaylist(song) },
+                    onStandardize = { onStandardize(song) },
+                    onShare = { onShare(song) },
+                    onHide = { onHide(song) },
+                    onDelete = { onDelete(song) }
+                )
+            }
         }
 
-        items(songs, key = { it.id }) { song ->
-            val isCurrent = currentSong?.id == song.id
-            LarkSongRow(
-                song = song,
-                isCurrent = isCurrent,
-                isPlaying = isCurrent && isPlaying,
-                onClick = { onSongClick(song) },
-                onPlayNext = { onPlayNext(song) },
-                onAddToQueue = { onAddToQueue(song) },
-                onAddToPlaylist = { onAddToPlaylist(song) },
-                onStandardize = { onStandardize(song) },
-                onShare = { onShare(song) },
-                onHide = { onHide(song) },
-                onDelete = { onDelete(song) }
-            )
+        AnimatedVisibility(
+            visible = showScrollToTop,
+            enter = fadeIn() + scaleIn(),
+            exit = fadeOut() + scaleOut(),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+        ) {
+            SmallFloatingActionButton(
+                onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                containerColor = Color(0xFF141923),
+                contentColor = Color(0xFF00E5FF)
+            ) {
+                Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "Ir arriba")
+            }
         }
     }
 }
@@ -796,12 +952,16 @@ private fun SongsListContent(
 /**
  * Fila individual con el diseño visual exacto de Lark Player.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LarkSongRow(
     song: Song,
     isCurrent: Boolean,
     isPlaying: Boolean,
+    inSelectionMode: Boolean = false,
+    isSelected: Boolean = false,
     onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
     onPlayNext: () -> Unit,
     onAddToQueue: () -> Unit = {},
     onAddToPlaylist: () -> Unit,
@@ -829,11 +989,25 @@ private fun LarkSongRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .background(if (isCurrent) Color(0xFF00E5FF).copy(alpha = 0.12f) else Color.Transparent)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .background(
+                when {
+                    isSelected -> Color(0xFF00E5FF).copy(alpha = 0.20f)
+                    isCurrent -> Color(0xFF00E5FF).copy(alpha = 0.12f)
+                    else -> Color.Transparent
+                }
+            )
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (inSelectionMode) {
+            Checkbox(
+                checked = isSelected,
+                onCheckedChange = { onClick() },
+                colors = CheckboxDefaults.colors(checkedColor = Color(0xFF00E5FF))
+            )
+            Spacer(Modifier.width(4.dp))
+        }
         // Carátula cuadrada redondeada de 48dp
         Box(
             modifier = Modifier

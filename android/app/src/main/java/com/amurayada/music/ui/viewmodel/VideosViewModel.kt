@@ -32,6 +32,7 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
         SortOption.fromKey(prefs.getString("video_sort_order", SortOption.DATE_DESC.name) ?: SortOption.DATE_DESC.name)
     )
     val hideShortClips = MutableStateFlow(prefs.getBoolean("hide_short_videos", false))
+    val hideWhatsAppClips = MutableStateFlow(prefs.getBoolean("hide_whatsapp_videos", true))
     val onlyDownloaded = MutableStateFlow(false)
 
     fun setSortOption(sort: SortOption) {
@@ -44,8 +45,19 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
         prefs.edit().putBoolean("hide_short_videos", enabled).apply()
     }
 
+    fun setHideWhatsAppClips(enabled: Boolean) {
+        hideWhatsAppClips.value = enabled
+        prefs.edit().putBoolean("hide_whatsapp_videos", enabled).apply()
+    }
+
     fun setOnlyDownloaded(enabled: Boolean) {
         onlyDownloaded.value = enabled
+    }
+
+    private fun isWhatsAppVideo(item: DownloadItem): Boolean {
+        val path = item.localFilePath ?: ""
+        return path.contains("WhatsApp", ignoreCase = true) ||
+            (item.title.startsWith("VID-", ignoreCase = true) && item.title.contains("-WA", ignoreCase = true))
     }
 
     private fun parseDurationSeconds(dur: String): Long {
@@ -64,8 +76,16 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
         searchQuery,
         sortOption,
         hideShortClips,
+        hideWhatsAppClips,
         onlyDownloaded
-    ) { list, query, sort, hideShort, onlyDl ->
+    ) { args ->
+        @Suppress("UNCHECKED_CAST")
+        val list = args[0] as List<DownloadItem>
+        val query = args[1] as String
+        val sort = args[2] as SortOption
+        val hideShort = args[3] as Boolean
+        val hideWa = args[4] as Boolean
+        val onlyDl = args[5] as Boolean
         var filtered = if (query.isBlank()) {
             list
         } else {
@@ -84,6 +104,10 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
             filtered = filtered.filter {
                 it.durationFormatted.isBlank() || parseDurationSeconds(it.durationFormatted) >= 5L
             }
+        }
+
+        if (hideWa) {
+            filtered = filtered.filterNot { isWhatsAppVideo(it) }
         }
 
         when (sort) {

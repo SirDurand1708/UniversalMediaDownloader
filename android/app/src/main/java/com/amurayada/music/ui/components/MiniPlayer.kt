@@ -1,9 +1,11 @@
 package com.amurayada.music.ui.components
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
@@ -32,6 +34,7 @@ fun MiniPlayer(
     duration: Long,
     onPlayPauseClick: () -> Unit,
     onNextClick: () -> Unit,
+    onPreviousClick: () -> Unit = {},
     onExpandClick: () -> Unit,
     onCloseClick: () -> Unit = {},
     customBgUri: String? = null,
@@ -90,6 +93,20 @@ fun MiniPlayer(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .pointerInput(Unit) {
+                            var totalDrag = 0f
+                            detectHorizontalDragGestures(
+                                onDragStart = { totalDrag = 0f },
+                                onHorizontalDrag = { _, dragAmount -> totalDrag += dragAmount },
+                                onDragEnd = {
+                                    if (totalDrag < -72f) {
+                                        onNextClick()
+                                    } else if (totalDrag > 72f) {
+                                        onPreviousClick()
+                                    }
+                                }
+                            )
+                        }
                         .clickable(onClick = onExpandClick)
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically

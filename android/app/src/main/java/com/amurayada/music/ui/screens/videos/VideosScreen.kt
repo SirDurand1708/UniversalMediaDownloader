@@ -9,7 +9,9 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -51,6 +53,7 @@ fun VideosScreen(
     val searchQuery by videosViewModel.searchQuery.collectAsState()
     val currentSort by videosViewModel.sortOption.collectAsState()
     val hideShortClips by videosViewModel.hideShortClips.collectAsState()
+    val hideWhatsAppClips by videosViewModel.hideWhatsAppClips.collectAsState()
     val onlyDownloaded by videosViewModel.onlyDownloaded.collectAsState()
 
     var showSortDialog by remember { mutableStateOf(false) }
@@ -246,10 +249,11 @@ fun VideosScreen(
 
         Spacer(Modifier.height(6.dp))
 
-        // Filtros rápidos: Todos / Descargados / Ocultar clips cortos (< 5s)
+        // Filtros rápidos: Todos / Descargados / Ocultar WhatsApp / Ocultar clips cortos (< 5s)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -262,6 +266,11 @@ fun VideosScreen(
                 selected = onlyDownloaded,
                 onClick = { videosViewModel.setOnlyDownloaded(true) },
                 label = { Text("Descargados", fontSize = 12.sp, maxLines = 1, softWrap = false) }
+            )
+            FilterChip(
+                selected = hideWhatsAppClips,
+                onClick = { videosViewModel.setHideWhatsAppClips(!hideWhatsAppClips) },
+                label = { Text("Sin WhatsApp", fontSize = 12.sp, maxLines = 1, softWrap = false) }
             )
             FilterChip(
                 selected = hideShortClips,
