@@ -1,21 +1,25 @@
 package com.amurayada.music.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.amurayada.music.data.model.Song
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -24,16 +28,19 @@ fun SongSelectionSheet(
     allSongs: List<Song>,
     currentPlaylistSongIds: List<Long>,
     onDismiss: () -> Unit,
-    onSongSelected: (Song) -> Unit
+    onSongSelected: (Song) -> Unit,
+    onSongsSelected: ((List<Song>) -> Unit)? = null
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    val selectedSongIds = remember { mutableStateListOf<Long>() }
+
     val filteredSongs = remember(searchQuery, allSongs) {
         if (searchQuery.isBlank()) {
             allSongs
         } else {
-            allSongs.filter { 
-                it.title.contains(searchQuery, ignoreCase = true) || 
-                it.artist.contains(searchQuery, ignoreCase = true) 
+            allSongs.filter {
+                it.title.contains(searchQuery, ignoreCase = true) ||
+                    it.artist.contains(searchQuery, ignoreCase = true)
             }
         }
     }
@@ -47,14 +54,27 @@ fun SongSelectionSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.9f)
+                .navigationBarsPadding()
         ) {
-            Text(
-                text = "Agregar canciones",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-            )
-            
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Agregar canciones",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                if (selectedSongIds.isNotEmpty()) {
+                    TextButton(onClick = { selectedSongIds.clear() }) {
+                        Text("Limpiar (${selectedSongIds.size})")
+                    }
+                }
+            }
+
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
@@ -66,41 +86,120 @@ fun SongSelectionSheet(
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp)
             )
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
+
+            Spacer(modifier = Modifier.height(4.dp))
+
             LazyColumn(
-                contentPadding = PaddingValues(bottom = 32.dp),
+                contentPadding = PaddingValues(bottom = 16.dp),
                 modifier = Modifier.weight(1f)
             ) {
-                items(filteredSongs) { song ->
+                items(filteredSongs, key = { it.id }) { song ->
                     val isAlreadyInPlaylist = currentPlaylistSongIds.contains(song.id)
-                    
+                    val isSelected = selectedSongIds.contains(song.id)
+
                     ListItem(
-                        headlineContent = { Text(song.title) },
-                        supportingContent = { Text(song.artist) },
+                        leadingContent = {
+                            Box(
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.MusicNote,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                if (song.albumArtUri != null) {
+                                    AsyncImage(
+                                        model = song.albumArtUri,
+                                        contentDescription = "Portada",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                            }
+                        },
+                        headlineContent = {
+                            Text(
+                                text = song.title,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        supportingContent = {
+                            Text(
+                                text = song.artist,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
                         trailingContent = {
                             if (isAlreadyInPlaylist) {
                                 Icon(
-                                    Icons.Default.Check, 
+                                    Icons.Default.Check,
                                     contentDescription = "Agregada",
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                             } else {
-                                IconButton(onClick = { onSongSelected(song) }) {
-                                    Icon(Icons.Default.Add, contentDescription = "Agregar")
-                                }
+                                Checkbox(
+                                    checked = isSelected,
+                                    onCheckedChange = { checked ->
+                                        if (checked) {
+                                            if (!selectedSongIds.contains(song.id)) selectedSongIds.add(song.id)
+                                        } else {
+                                            selectedSongIds.remove(song.id)
+                                        }
+                                    }
+                                )
                             }
                         },
                         modifier = Modifier
                             .clickable(enabled = !isAlreadyInPlaylist) {
                                 if (!isAlreadyInPlaylist) {
-                                    onSongSelected(song)
+                                    if (isSelected) {
+                                        selectedSongIds.remove(song.id)
+                                    } else {
+                                        selectedSongIds.add(song.id)
+                                    }
                                 }
                             }
                             .padding(horizontal = 8.dp)
                     )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp))
+                }
+            }
+
+            if (selectedSongIds.isNotEmpty()) {
+                Surface(
+                    tonalElevation = 4.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Button(
+                        onClick = {
+                            val selectedSet = selectedSongIds.toSet()
+                            val chosen = allSongs.filter { it.id in selectedSet }
+                            if (onSongsSelected != null) {
+                                onSongsSelected(chosen)
+                            } else {
+                                chosen.forEach { onSongSelected(it) }
+                            }
+                            selectedSongIds.clear()
+                            onDismiss()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 12.dp)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            text = "Agregar ${selectedSongIds.size} ${if (selectedSongIds.size == 1) "canción" else "canciones"}",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }

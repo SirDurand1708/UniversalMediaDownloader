@@ -1,7 +1,12 @@
 package com.amurayada.music.ui.viewmodel
 
 import android.app.Application
+import android.content.ContentUris
 import android.media.MediaScannerConnection
+import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
+import androidx.activity.result.IntentSenderRequest
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.omnivault.media.data.LocalMediaScanner
@@ -180,6 +185,97 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
                 loadVideos()
                 withContext(Dispatchers.Main) { onComplete(true) }
             } else {
+                withContext(Dispatchers.Main) { onComplete(false) }
+            }
+        }
+    }
+
+    fun deleteVideo(
+        item: DownloadItem,
+        onRequirePermission: (IntentSenderRequest) -> Unit,
+        onComplete: (Boolean) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val ctx = getApplication<Application>()
+            val path = item.localFilePath
+            try {
+                if (item.id.startsWith("db_video_")) {
+                    val songId = item.id.removePrefix("db_video_").toLongOrNull()
+                    if (songId != null) {
+                        com.amurayada.music.data.database.DownloadDatabase
+                            .getDatabase(ctx)
+                            .downloadDao()
+                            .deleteDownloadById(songId)
+                    }
+                } else if (!path.isNullOrBlank()) {
+                    com.amurayada.music.data.database.DownloadDatabase
+                        .getDatabase(ctx)
+                        .downloadDao()
+                        .deleteDownloadByPath(path)
+                }
+
+                if (path.isNullOrBlank()) {
+                    loadVideos()
+                    withContext(Dispatchers.Main) { onComplete(true) }
+                    return@launch
+                }
+
+                if (path.startsWith("content://")) {
+                    val contentUri = Uri.parse(path)
+                    try {
+                        val rows = ctx.contentResolver.delete(contentUri, null, null)
+                        if (rows > 0) {
+                            loadVideos()
+                            withContext(Dispatchers.Main) { onComplete(true) }
+                            return@launch
+                        }
+                    } catch (_: SecurityException) {}
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        val pi = MediaStore.createDeleteRequest(ctx.contentResolver, listOf(contentUri))
+                        withContext(Dispatchers.Main) {
+                            onRequirePermission(IntentSenderRequest.Builder(pi.intentSender).build())
+                        }
+                        return@launch
+                    }
+                    withContext(Dispatchers.Main) { onComplete(false) }
+                    return@launch
+                }
+
+                val file = File(path)
+                val deletedDirect = if (file.exists()) file.delete() else true
+                if (deletedDirect) {
+                    MediaScannerConnection.scanFile(ctx, arrayOf(path), null, null)
+                    loadVideos()
+                    withContext(Dispatchers.Main) { onComplete(true) }
+                    return@launch
+                }
+
+                // Buscar URI en MediaStore.Video para solicitar eliminación en 1 solo diálogo del sistema
+                var mediaUri: Uri? = null
+                ctx.contentResolver.query(
+                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                    arrayOf(MediaStore.Video.Media._ID),
+                    "${MediaStore.Video.Media.DATA} = ?",
+                    arrayOf(path),
+                    null
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID))
+                        mediaUri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
+                    }
+                }
+
+                if (mediaUri != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    val pi = MediaStore.createDeleteRequest(ctx.contentResolver, listOf(mediaUri!!))
+                    withContext(Dispatchers.Main) {
+                        onRequirePermission(IntentSenderRequest.Builder(pi.intentSender).build())
+                    }
+                } else {
+                    withContext(Dispatchers.Main) { onComplete(false) }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
                 withContext(Dispatchers.Main) { onComplete(false) }
             }
         }

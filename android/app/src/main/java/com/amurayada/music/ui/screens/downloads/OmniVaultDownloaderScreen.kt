@@ -477,6 +477,15 @@ fun OmniVaultDownloaderScreen(
                     )
                     Spacer(Modifier.height(8.dp))
 
+                    Text(
+                        text = "Opciones de Audio",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.72f),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 11.sp
+                    )
+                    Spacer(Modifier.height(4.dp))
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -495,7 +504,16 @@ fun OmniVaultDownloaderScreen(
                         )
                     }
 
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(10.dp))
+
+                    Text(
+                        text = "Opciones de Video",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.72f),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 11.sp
+                    )
+                    Spacer(Modifier.height(4.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),

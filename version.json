@@ -1,19 +1,19 @@
 {
-  "version": "2.5.20",
-  "version_code": 270,
+  "version": "2.5.21",
+  "version_code": 271,
   "release_date": "2026-11-15",
-  "title": "OmniVault v2.5.20 — Windows PC & Android",
-  "changelog": "⚡ Análisis ultrarrápido de enlaces en Android (< 1-2s) con fast-path nativo en Kotlin para YouTube, TikTok, Instagram, Facebook y X\n⏱️ Timeout estricto de 4s con opción de Abortar, Reintentar o descargar directo sin congelar la UI\n🚀 Cero doble análisis al descargar (caché LRU compartida) e inicialización perezosa de Python/yt-dlp al abrir la app",
+  "title": "OmniVault v2.5.21 — Windows PC & Android",
+  "changelog": "🎨 Etiquetas 'Opciones de Audio' y 'Opciones de Video' en Descargas y chips más compactos en Música\n🎵 Selección múltiple con portadas y padding inferior seguro en 'Agregar canciones' a Playlists\n🗑️ Eliminación en 1 solo paso en Música y nueva opción Eliminar en Videos sin doble ventana de permiso",
   "android": {
-    "version": "2.5.20",
-    "version_code": 270,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.20/OmniVault-v2.5.20-Android.apk",
+    "version": "2.5.21",
+    "version_code": 271,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.21/OmniVault-v2.5.21-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.20",
-    "version_code": 270,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.20/OmniVault-v2.5.20-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.20/OmniVault-v2.5.20-Windows-x64-Portable.zip"
+    "version": "2.5.21",
+    "version_code": 271,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.21/OmniVault-v2.5.21-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.21/OmniVault-v2.5.21-Windows-x64-Portable.zip"
   }
 }

@@ -271,7 +271,7 @@ fun LarkStyleMusicScreen(
                 .fillMaxWidth()
                 .padding(vertical = 4.dp),
             contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             items(LarkCategory.entries) { category ->
                 val selected = selectedCategory == category
@@ -291,7 +291,7 @@ fun LarkStyleMusicScreen(
                         color = if (selected) Color.Black else Color.White.copy(alpha = 0.85f),
                         maxLines = 1,
                         softWrap = false,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
                     )
                 }
             }
@@ -363,7 +363,27 @@ fun LarkStyleMusicScreen(
                         Toast.makeText(context, "Canción ocultada de la biblioteca", Toast.LENGTH_SHORT).show()
                     },
                     onDelete = { song ->
-                        songToDelete = song
+                        val isPrivateFile = song.path.contains(context.packageName)
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && !isPrivateFile) {
+                            val title = song.title
+                            if (playbackViewModel.currentSong?.id == song.id) {
+                                if (playbackViewModel.queue.size > 1) {
+                                    playbackViewModel.skipToNext()
+                                } else {
+                                    playbackViewModel.pause()
+                                }
+                            }
+                            playlistViewModel.playlists.value.forEach { playlist ->
+                                if (playlist.songIds.contains(song.id)) {
+                                    playlistViewModel.removeSongFromPlaylist(playlist.id, song.id)
+                                }
+                            }
+                            libraryViewModel.deleteSong(song, context) {
+                                Toast.makeText(context, "Canción eliminada: $title", Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            songToDelete = song
+                        }
                     }
                 )
             }

@@ -1,8 +1,11 @@
 package com.amurayada.music.ui.screens.videos
 
+import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -47,6 +50,15 @@ fun VideosScreen(
     val onlyDownloaded by videosViewModel.onlyDownloaded.collectAsState()
 
     var showSortDialog by remember { mutableStateOf(false) }
+
+    val deleteLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            videosViewModel.loadVideos()
+            Toast.makeText(context, "Video eliminado", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     LaunchedEffect(Unit) {
         videosViewModel.loadVideos()
@@ -242,6 +254,19 @@ fun VideosScreen(
                                     Toast.makeText(context, "Error al compartir: ${e.message}", Toast.LENGTH_SHORT).show()
                                 }
                             }
+                        },
+                        onDelete = {
+                            videosViewModel.deleteVideo(
+                                item = video,
+                                onRequirePermission = { req -> deleteLauncher.launch(req) },
+                                onComplete = { success ->
+                                    if (success) {
+                                        Toast.makeText(context, "Video eliminado", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "No se pudo eliminar el video", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            )
                         }
                     )
                 }
@@ -316,7 +341,8 @@ fun VideoGridCard(
     video: DownloadItem,
     onClick: () -> Unit,
     onStandardize: () -> Unit,
-    onShare: () -> Unit
+    onShare: () -> Unit,
+    onDelete: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -450,6 +476,14 @@ fun VideoGridCard(
                             onClick = {
                                 menuExpanded = false
                                 onShare()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Eliminar", color = Color(0xFFFF5252)) },
+                            leadingIcon = { Icon(Icons.Rounded.Delete, contentDescription = null, tint = Color(0xFFFF5252)) },
+                            onClick = {
+                                menuExpanded = false
+                                onDelete()
                             }
                         )
                     }
