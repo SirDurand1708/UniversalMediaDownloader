@@ -1,19 +1,19 @@
 {
-  "version": "2.5.28",
-  "version_code": 278,
+  "version": "2.5.29",
+  "version_code": 279,
   "release_date": "2026-11-15",
-  "title": "OmniVault v2.5.28 — Windows PC & Android",
-  "changelog": "✨ Fase 3A UX: Índice A-Z arrastrable, eliminación en lote y Deshacer al ocultar en Música, historial de búsquedas, botón de Cola en MiniPlayer y reordenamiento/duración en Playlists",
+  "title": "OmniVault v2.5.29 — Windows PC & Android",
+  "changelog": "✨ Fase 3B UX: Selección múltiple, filtro Cámara y vista Lista/Cuadrícula en Videos; Reintentar y ETA en Descargas; canciones duplicadas, respaldo completo y Deshacer estandarizado en Ajustes",
   "android": {
-    "version": "2.5.28",
-    "version_code": 278,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.28/OmniVault-v2.5.28-Android.apk",
+    "version": "2.5.29",
+    "version_code": 279,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.29/OmniVault-v2.5.29-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.28",
-    "version_code": 278,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.28/OmniVault-v2.5.28-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.28/OmniVault-v2.5.28-Windows-x64-Portable.zip"
+    "version": "2.5.29",
+    "version_code": 279,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.29/OmniVault-v2.5.29-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.29/OmniVault-v2.5.29-Windows-x64-Portable.zip"
   }
 }

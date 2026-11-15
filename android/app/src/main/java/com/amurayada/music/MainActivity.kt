@@ -1207,6 +1207,7 @@ fun MusicPlayerApp(
                     SettingsScreen(
                         settingsViewModel = settingsViewModel,
                         playlistViewModel = playlistViewModel,
+                        libraryViewModel = libraryViewModel,
                         onBackClick = { navController.popBackStack() },
                         onRescanLibrary = { libraryViewModel.loadLibrary() },
                         onLoginClick = { navController.navigate(Screen.YouTubeLogin.route) },

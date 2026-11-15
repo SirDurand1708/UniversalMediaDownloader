@@ -38,6 +38,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import com.amurayada.music.data.model.Song
+import com.amurayada.music.ui.viewmodel.LibraryViewModel
 import com.amurayada.music.ui.viewmodel.PlaylistViewModel
 import com.amurayada.music.ui.viewmodel.SettingsViewModel
 import com.omnivault.media.data.LocalMediaScanner
@@ -76,6 +78,7 @@ fun SettingsScreen(
     onEqualizerClick: () -> Unit = {},
     onChangeDownloadLocation: () -> Unit = {},
     playlistViewModel: PlaylistViewModel? = null,
+    libraryViewModel: LibraryViewModel? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -97,6 +100,9 @@ fun SettingsScreen(
     var pendingWriteChunks by remember { mutableStateOf<List<List<StandardizeCandidate>>>(emptyList()) }
     var isScanningDuplicates by remember { mutableStateOf(false) }
     var duplicateVideosToDelete by remember { mutableStateOf<List<DownloadItem>?>(null) }
+    var isScanningAudioDuplicates by remember { mutableStateOf(false) }
+    var duplicateSongsToDelete by remember { mutableStateOf<List<Pair<Song, Long>>?>(null) }
+    var lastStandardizedUndoBatch by remember { mutableStateOf<List<StandardizeCandidate>>(emptyList()) }
 
     val exportPlaylistsLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
@@ -105,7 +111,14 @@ fun SettingsScreen(
             scope.launch {
                 val ok = withContext(Dispatchers.IO) {
                     try {
-                        val json = playlistViewModel.exportPlaylistsJson()
+                        val playlistsArr = org.json.JSONArray(playlistViewModel.exportPlaylistsJson())
+                        val hiddenArr = org.json.JSONArray()
+                        libraryViewModel?.hiddenSongIds?.forEach { hiddenArr.put(it) }
+                        val rootObj = org.json.JSONObject().apply {
+                            put("playlists", playlistsArr)
+                            put("hiddenSongIds", hiddenArr)
+                        }
+                        val json = rootObj.toString(2)
                         context.contentResolver.openOutputStream(uri)?.use { out ->
                             out.write(json.toByteArray(Charsets.UTF_8))
                         }
@@ -116,7 +129,7 @@ fun SettingsScreen(
                 }
                 Toast.makeText(
                     context,
-                    if (ok) "Respaldo de playlists exportado" else "No se pudo exportar el respaldo",
+                    if (ok) "Respaldo de playlists y ocultos exportado" else "No se pudo exportar el respaldo",
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -136,11 +149,31 @@ fun SettingsScreen(
                     }
                 }
                 if (jsonText != null) {
-                    playlistViewModel.importPlaylistsJson(jsonText) { count ->
+                    val trimmed = jsonText.trimStart()
+                    var playlistsJsonToImport = jsonText
+                    var restoredHidden = 0
+                    if (trimmed.startsWith("{")) {
+                        try {
+                            val rootObj = org.json.JSONObject(trimmed)
+                            val plArr = rootObj.optJSONArray("playlists")
+                            if (plArr != null) playlistsJsonToImport = plArr.toString()
+                            val hiddenArr = rootObj.optJSONArray("hiddenSongIds")
+                            if (hiddenArr != null && libraryViewModel != null) {
+                                for (i in 0 until hiddenArr.length()) {
+                                    val sid = hiddenArr.optLong(i, -1L)
+                                    if (sid > 0L && !libraryViewModel.hiddenSongIds.contains(sid)) {
+                                        libraryViewModel.hideSong(sid)
+                                        restoredHidden++
+                                    }
+                                }
+                            }
+                        } catch (_: Exception) {}
+                    }
+                    playlistViewModel.importPlaylistsJson(playlistsJsonToImport) { count ->
                         val msg = when {
                             count < 0 -> "Archivo de respaldo inválido"
-                            count == 0 -> "No había playlists nuevas para importar"
-                            else -> "$count playlists restauradas"
+                            count == 0 && restoredHidden == 0 -> "No había datos nuevos para importar"
+                            else -> "$count playlists y $restoredHidden ocultos restaurados"
                         }
                         Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                     }
@@ -427,6 +460,65 @@ fun SettingsScreen(
                             }
                         }
                     )
+                    if (lastStandardizedUndoBatch.isNotEmpty()) {
+                        SettingsItem(
+                            title = "Deshacer último estandarizado",
+                            subtitle = "Revertir ${lastStandardizedUndoBatch.size} archivos renombrados",
+                            icon = Icons.Rounded.Undo,
+                            onClick = {
+                                val undoBatch = lastStandardizedUndoBatch
+                                lastStandardizedUndoBatch = emptyList()
+                                scope.launch {
+                                    val result = BulkMediaStandardizer.applyBatch(context, undoBatch)
+                                    if (result.pendingPermissionChunks.isNotEmpty()) {
+                                        launchNextPermissionChunk?.invoke(result.pendingPermissionChunks)
+                                    } else {
+                                        onRescanLibrary()
+                                        Toast.makeText(
+                                            context,
+                                            "${result.renamedCount} nombres restaurados",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                }
+                            }
+                        )
+                    }
+                    if (libraryViewModel != null) {
+                        SettingsItem(
+                            title = if (isScanningAudioDuplicates) "Buscando audios duplicados..." else "Buscar canciones duplicadas",
+                            subtitle = "Detecta audios idénticos en tu biblioteca",
+                            icon = Icons.Rounded.LibraryMusic,
+                            onClick = {
+                                if (!isScanningAudioDuplicates) {
+                                    isScanningAudioDuplicates = true
+                                    scope.launch {
+                                        val extras = withContext(Dispatchers.IO) {
+                                            libraryViewModel.songs
+                                                .mapNotNull { song ->
+                                                    val f = File(song.path)
+                                                    val len = if (f.exists()) f.length() else 0L
+                                                    if (len > 0L) Pair(song, len) else null
+                                                }
+                                                .groupBy { (song, len) ->
+                                                    val norm = song.title.lowercase().replace(Regex("[^a-z0-9]"), "").take(24)
+                                                    Pair(len, norm)
+                                                }
+                                                .values
+                                                .filter { it.size > 1 }
+                                                .flatMap { it.drop(1) }
+                                        }
+                                        isScanningAudioDuplicates = false
+                                        if (extras.isEmpty()) {
+                                            Toast.makeText(context, "No se encontraron canciones duplicadas", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            duplicateSongsToDelete = extras
+                                        }
+                                    }
+                                }
+                            }
+                        )
+                    }
                     SettingsItem(
                         title = if (isScanningDuplicates) "Buscando duplicados..." else "Buscar videos duplicados",
                         subtitle = "Detecta copias idénticas para liberar espacio",
@@ -870,6 +962,18 @@ fun SettingsScreen(
                         scope.launch {
                             val result = BulkMediaStandardizer.applyBatch(context, batch)
                             totalRenamedSoFar += result.renamedCount
+                            if (result.renamedCount > 0) {
+                                lastStandardizedUndoBatch = batch.map { item ->
+                                    val parent = File(item.currentPath).parentFile
+                                    val newPath = if (parent != null) File(parent, "${item.targetBaseName}.${item.extension}").absolutePath else item.currentPath
+                                    item.copy(
+                                        currentPath = newPath,
+                                        currentBaseName = item.targetBaseName,
+                                        targetBaseName = item.currentBaseName,
+                                        newTitle = item.currentBaseName
+                                    )
+                                }
+                            }
                             if (result.pendingPermissionChunks.isNotEmpty()) {
                                 launchNextPermissionChunk?.invoke(result.pendingPermissionChunks)
                             } else {
@@ -965,6 +1069,79 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { duplicateVideosToDelete = null }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    duplicateSongsToDelete?.let { duplicates ->
+        val totalMb = duplicates.sumOf { it.second } / (1024.0 * 1024.0)
+        AlertDialog(
+            onDismissRequest = { duplicateSongsToDelete = null },
+            icon = { Icon(Icons.Rounded.LibraryMusic, contentDescription = null) },
+            title = { Text("Canciones duplicadas (${duplicates.size})") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = String.format("Se conservará 1 copia de cada canción y puedes eliminar ${duplicates.size} copias repetidas para liberar %.1f MB:", totalMb),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    duplicates.take(4).forEach { (song, len) ->
+                        Text(
+                            text = String.format("• %s (%.1f MB)", song.title, len / (1024.0 * 1024.0)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2
+                        )
+                    }
+                    if (duplicates.size > 4) {
+                        Text(
+                            text = "… y ${duplicates.size - 4} más.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    onClick = {
+                        val batch = duplicates
+                        duplicateSongsToDelete = null
+                        scope.launch {
+                            val pendingUris = mutableListOf<Uri>()
+                            var deletedDirect = 0
+                            withContext(Dispatchers.IO) {
+                                batch.forEach { (song, _) ->
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !song.path.contains(context.packageName)) {
+                                        pendingUris.add(
+                                            android.content.ContentUris.withAppendedId(
+                                                android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                                                song.id
+                                            )
+                                        )
+                                    } else if (File(song.path).delete()) {
+                                        deletedDirect++
+                                    }
+                                }
+                            }
+                            if (pendingUris.isNotEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                val pi = android.provider.MediaStore.createDeleteRequest(context.contentResolver, pendingUris)
+                                deleteDuplicatesLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+                            } else {
+                                onRescanLibrary()
+                                Toast.makeText(context, "$deletedDirect canciones duplicadas eliminadas", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                ) {
+                    Text("Eliminar copias")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { duplicateSongsToDelete = null }) {
                     Text("Cancelar")
                 }
             }

@@ -1,14 +1,19 @@
 package com.amurayada.music.ui.screens.videos
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -55,6 +60,27 @@ fun VideosScreen(
     val hideShortClips by videosViewModel.hideShortClips.collectAsState()
     val hideWhatsAppClips by videosViewModel.hideWhatsAppClips.collectAsState()
     val onlyDownloaded by videosViewModel.onlyDownloaded.collectAsState()
+    val onlyCamera by videosViewModel.onlyCamera.collectAsState()
+
+    val prefs = remember { context.getSharedPreferences("omnivault_prefs", Context.MODE_PRIVATE) }
+    var isGridView by remember { mutableStateOf(prefs.getBoolean("video_grid_view", true)) }
+    val selectedVideoIds = remember { mutableStateListOf<String>() }
+    var pendingBatchDeleteVideos by remember { mutableStateOf<List<DownloadItem>>(emptyList()) }
+
+    val deleteBatchLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && pendingBatchDeleteVideos.isNotEmpty()) {
+            val count = pendingBatchDeleteVideos.size
+            videosViewModel.confirmVideosBatchDeleted(pendingBatchDeleteVideos)
+            Toast.makeText(context, "$count videos eliminados", Toast.LENGTH_SHORT).show()
+        }
+        pendingBatchDeleteVideos = emptyList()
+    }
+
+    BackHandler(enabled = selectedVideoIds.isNotEmpty()) {
+        selectedVideoIds.clear()
+    }
 
     var showSortDialog by remember { mutableStateOf(false) }
 
@@ -204,6 +230,17 @@ fun VideosScreen(
                         tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
+                IconButton(onClick = {
+                    val next = !isGridView
+                    isGridView = next
+                    prefs.edit().putBoolean("video_grid_view", next).apply()
+                }) {
+                    Icon(
+                        imageVector = if (isGridView) Icons.Rounded.ViewList else Icons.Rounded.GridView,
+                        contentDescription = if (isGridView) "Vista en lista" else "Vista en cuadrícula",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                }
                 IconButton(onClick = { showSortDialog = true }) {
                     Icon(
                         imageVector = Icons.Rounded.Sort,
@@ -249,7 +286,7 @@ fun VideosScreen(
 
         Spacer(Modifier.height(6.dp))
 
-        // Filtros rápidos: Todos / Descargados / Ocultar WhatsApp / Ocultar clips cortos (< 5s)
+        // Filtros rápidos: Todos / Descargados / Cámara / Sin WhatsApp / Ocultar < 5s
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -258,14 +295,22 @@ fun VideosScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             FilterChip(
-                selected = !onlyDownloaded,
-                onClick = { videosViewModel.setOnlyDownloaded(false) },
+                selected = !onlyDownloaded && !onlyCamera,
+                onClick = {
+                    videosViewModel.setOnlyDownloaded(false)
+                    videosViewModel.setOnlyCamera(false)
+                },
                 label = { Text("Todos", fontSize = 12.sp, maxLines = 1, softWrap = false) }
             )
             FilterChip(
                 selected = onlyDownloaded,
                 onClick = { videosViewModel.setOnlyDownloaded(true) },
                 label = { Text("Descargados", fontSize = 12.sp, maxLines = 1, softWrap = false) }
+            )
+            FilterChip(
+                selected = onlyCamera,
+                onClick = { videosViewModel.setOnlyCamera(!onlyCamera) },
+                label = { Text("Cámara", fontSize = 12.sp, maxLines = 1, softWrap = false) }
             )
             FilterChip(
                 selected = hideWhatsAppClips,
@@ -277,6 +322,63 @@ fun VideosScreen(
                 onClick = { videosViewModel.setHideShortClips(!hideShortClips) },
                 label = { Text("Ocultar < 5s", fontSize = 12.sp, maxLines = 1, softWrap = false) }
             )
+        }
+
+        if (selectedVideoIds.isNotEmpty()) {
+            Spacer(Modifier.height(6.dp))
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { selectedVideoIds.clear() }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Rounded.Close, contentDescription = "Cancelar selección", modifier = Modifier.size(18.dp))
+                    }
+                    Text(
+                        text = "${selectedVideoIds.size} seleccionados",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = {
+                            val batch = videos.filter { selectedVideoIds.contains(it.id) }
+                            selectedVideoIds.clear()
+                            pendingBatchDeleteVideos = batch
+                            videosViewModel.deleteVideosBatch(
+                                items = batch,
+                                onRequirePermission = { req -> deleteBatchLauncher.launch(req) },
+                                onComplete = { count ->
+                                    pendingBatchDeleteVideos = emptyList()
+                                    Toast.makeText(context, "$count videos eliminados", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        },
+                        modifier = Modifier.size(34.dp)
+                    ) {
+                        Icon(Icons.Rounded.Delete, contentDescription = "Eliminar seleccionados", tint = MaterialTheme.colorScheme.error)
+                    }
+                    IconButton(
+                        onClick = {
+                            if (selectedVideoIds.size == videos.size) {
+                                selectedVideoIds.clear()
+                            } else {
+                                selectedVideoIds.clear()
+                                selectedVideoIds.addAll(videos.map { it.id })
+                            }
+                        },
+                        modifier = Modifier.size(34.dp)
+                    ) {
+                        Icon(Icons.Rounded.SelectAll, contentDescription = "Seleccionar todo")
+                    }
+                }
+            }
         }
 
         Spacer(Modifier.height(6.dp))
@@ -310,16 +412,29 @@ fun VideosScreen(
             }
         } else {
             LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
+                columns = GridCells.Fixed(if (isGridView) 2 else 1),
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 20.dp, top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(videos, key = { it.id }) { video ->
+                    val inSelectionMode = selectedVideoIds.isNotEmpty()
+                    val isSelected = selectedVideoIds.contains(video.id)
                     VideoGridCard(
                         video = video,
-                        onClick = { onVideoClick(video) },
+                        inSelectionMode = inSelectionMode,
+                        isSelected = isSelected,
+                        onClick = {
+                            if (inSelectionMode) {
+                                if (isSelected) selectedVideoIds.remove(video.id) else selectedVideoIds.add(video.id)
+                            } else {
+                                onVideoClick(video)
+                            }
+                        },
+                        onLongClick = {
+                            if (isSelected) selectedVideoIds.remove(video.id) else selectedVideoIds.add(video.id)
+                        },
                         onStandardize = {
                             videosViewModel.standardizeVideo(video) { success ->
                                 Toast.makeText(
@@ -485,10 +600,14 @@ private fun SortOptionRow(label: String, selected: Boolean, onSelect: () -> Unit
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun VideoGridCard(
     video: DownloadItem,
+    inSelectionMode: Boolean = false,
+    isSelected: Boolean = false,
     onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
     onStandardize: () -> Unit,
     onShare: () -> Unit,
     onDelete: () -> Unit
@@ -499,10 +618,15 @@ fun VideoGridCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         shape = RoundedCornerShape(14.dp),
+        border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+            containerColor = if (isSelected) {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+            }
         )
     ) {
         Column {

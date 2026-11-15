@@ -34,6 +34,7 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
     val hideShortClips = MutableStateFlow(prefs.getBoolean("hide_short_videos", false))
     val hideWhatsAppClips = MutableStateFlow(prefs.getBoolean("hide_whatsapp_videos", true))
     val onlyDownloaded = MutableStateFlow(false)
+    val onlyCamera = MutableStateFlow(false)
 
     fun setSortOption(sort: SortOption) {
         sortOption.value = sort
@@ -52,6 +53,12 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setOnlyDownloaded(enabled: Boolean) {
         onlyDownloaded.value = enabled
+        if (enabled) onlyCamera.value = false
+    }
+
+    fun setOnlyCamera(enabled: Boolean) {
+        onlyCamera.value = enabled
+        if (enabled) onlyDownloaded.value = false
     }
 
     private fun isWhatsAppVideo(item: DownloadItem): Boolean {
@@ -77,7 +84,8 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
         sortOption,
         hideShortClips,
         hideWhatsAppClips,
-        onlyDownloaded
+        onlyDownloaded,
+        onlyCamera
     ) { args ->
         @Suppress("UNCHECKED_CAST")
         val list = args[0] as List<DownloadItem>
@@ -86,6 +94,7 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
         val hideShort = args[3] as Boolean
         val hideWa = args[4] as Boolean
         val onlyDl = args[5] as Boolean
+        val onlyCam = args[6] as Boolean
         var filtered = if (query.isBlank()) {
             list
         } else {
@@ -97,6 +106,13 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
             filtered = filtered.filter {
                 it.id.startsWith("db_video_") ||
                     (it.localFilePath?.contains("OmniVault", ignoreCase = true) == true)
+            }
+        }
+
+        if (onlyCam) {
+            filtered = filtered.filter {
+                val p = it.localFilePath ?: ""
+                p.contains("DCIM", ignoreCase = true) || p.contains("Camera", ignoreCase = true)
             }
         }
 
@@ -239,6 +255,77 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
                 removeVideoFromDb(item)
             } catch (_: Exception) {}
             loadVideos()
+        }
+    }
+
+    fun confirmVideosBatchDeleted(items: List<DownloadItem>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            items.forEach { item ->
+                try { removeVideoFromDb(item) } catch (_: Exception) {}
+            }
+            loadVideos()
+        }
+    }
+
+    fun deleteVideosBatch(
+        items: List<DownloadItem>,
+        onRequirePermission: (IntentSenderRequest) -> Unit,
+        onComplete: (Int) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val ctx = getApplication<Application>()
+            val pendingUris = mutableListOf<Uri>()
+            var deletedCount = 0
+            items.forEach { item ->
+                val path = item.localFilePath
+                if (path.isNullOrBlank()) {
+                    removeVideoFromDb(item)
+                    deletedCount++
+                } else if (path.startsWith("content://")) {
+                    val uri = Uri.parse(path)
+                    try {
+                        if (ctx.contentResolver.delete(uri, null, null) > 0) {
+                            removeVideoFromDb(item)
+                            deletedCount++
+                        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            pendingUris.add(uri)
+                        }
+                    } catch (_: SecurityException) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            pendingUris.add(uri)
+                        }
+                    }
+                } else {
+                    val f = File(path)
+                    if (!f.exists() || f.delete()) {
+                        removeVideoFromDb(item)
+                        MediaScannerConnection.scanFile(ctx, arrayOf(path), null, null)
+                        deletedCount++
+                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        ctx.contentResolver.query(
+                            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                            arrayOf(MediaStore.Video.Media._ID),
+                            "${MediaStore.Video.Media.DATA} = ?",
+                            arrayOf(path),
+                            null
+                        )?.use { c ->
+                            if (c.moveToFirst()) {
+                                val id = c.getLong(c.getColumnIndexOrThrow(MediaStore.Video.Media._ID))
+                                pendingUris.add(ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id))
+                            }
+                        }
+                    }
+                }
+            }
+            if (pendingUris.isNotEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val pi = MediaStore.createDeleteRequest(ctx.contentResolver, pendingUris)
+                withContext(Dispatchers.Main) {
+                    onRequirePermission(IntentSenderRequest.Builder(pi.intentSender).build())
+                }
+            } else {
+                loadVideos()
+                withContext(Dispatchers.Main) { onComplete(deletedCount) }
+            }
         }
     }
 

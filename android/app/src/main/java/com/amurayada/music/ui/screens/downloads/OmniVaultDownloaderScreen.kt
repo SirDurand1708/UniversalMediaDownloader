@@ -83,6 +83,9 @@ fun OmniVaultDownloaderScreen(
                 state.status == DownloadStatus.PROCESSING
         }
     }
+    val failedDownloadList = remember(universalDownloadStates) {
+        universalDownloadStates.values.filter { it.status == DownloadStatus.ERROR }
+    }
 
     var completedFilter by remember { mutableStateOf(0) } // 0 = Todos, 1 = Audios, 2 = Videos
     var completedSearchQuery by remember { mutableStateOf("") }
@@ -666,6 +669,65 @@ fun OmniVaultDownloaderScreen(
             }
         }
 
+        if (failedDownloadList.isNotEmpty()) {
+            item {
+                Text(
+                    text = "DESCARGAS CON ERROR (${failedDownloadList.size})",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFFF5252),
+                    letterSpacing = 1.sp
+                )
+            }
+
+            items(failedDownloadList, key = { "err_${it.processId}" }) { state ->
+                Surface(
+                    color = Color(0xFF1A1418),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, Color(0xFFFF5252).copy(alpha = 0.45f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = state.title,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = state.errorReason ?: "Error de red o enlace",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFFF8A80),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        TextButton(
+                            onClick = {
+                                downloadViewModel.cancelOmniDownload(state.processId)
+                                downloadViewModel.startUniversalDownload(state.url, state.format)
+                            }
+                        ) {
+                            Text("Reintentar", color = neonGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                        IconButton(
+                            onClick = { downloadViewModel.cancelOmniDownload(state.processId) },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(Icons.Rounded.Close, contentDescription = "Descartar", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+        }
+
         // 5. Sección de Descargas Completadas (downloadedSongs)
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -923,8 +985,9 @@ fun UniversalActiveDownloadCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                val etaSuffix = if (state.etaInSeconds > 0L) " • ~${state.etaInSeconds}s" else ""
                 Text(
-                    text = "$percent% • ${state.speedText}",
+                    text = "$percent% • ${state.speedText}$etaSuffix",
                     style = MaterialTheme.typography.labelSmall,
                     color = neonGreen
                 )
