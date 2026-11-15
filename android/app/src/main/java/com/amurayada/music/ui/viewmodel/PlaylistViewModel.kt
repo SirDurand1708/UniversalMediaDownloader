@@ -36,6 +36,12 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun addSongsToPlaylist(playlistId: Long, songIds: List<Long>) {
+        viewModelScope.launch {
+            repository.addSongsToPlaylist(playlistId, songIds)
+        }
+    }
+
     fun removeSongFromPlaylist(playlistId: Long, songId: Long) {
         viewModelScope.launch {
             repository.removeSongFromPlaylist(playlistId, songId)

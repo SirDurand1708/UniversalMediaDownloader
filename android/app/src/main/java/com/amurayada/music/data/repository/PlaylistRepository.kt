@@ -108,6 +108,24 @@ class PlaylistRepository(private val context: Context) {
         savePlaylists()
     }
 
+    suspend fun addSongsToPlaylist(playlistId: Long, songIds: List<Long>) {
+        if (songIds.isEmpty()) return
+        _playlists.value = _playlists.value.map { playlist ->
+            if (playlist.id == playlistId) {
+                val existing = playlist.songIds.toSet()
+                val toAdd = songIds.filter { it !in existing }
+                if (toAdd.isNotEmpty()) {
+                    playlist.copy(songIds = playlist.songIds + toAdd)
+                } else {
+                    playlist
+                }
+            } else {
+                playlist
+            }
+        }
+        savePlaylists()
+    }
+
     suspend fun removeSongFromPlaylist(playlistId: Long, songId: Long) {
         _playlists.value = _playlists.value.map { playlist ->
             if (playlist.id == playlistId) {

@@ -190,6 +190,34 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private suspend fun removeVideoFromDb(item: DownloadItem) {
+        val ctx = getApplication<Application>()
+        val path = item.localFilePath
+        if (item.id.startsWith("db_video_")) {
+            val songId = item.id.removePrefix("db_video_").toLongOrNull()
+            if (songId != null) {
+                com.amurayada.music.data.database.DownloadDatabase
+                    .getDatabase(ctx)
+                    .downloadDao()
+                    .deleteDownloadById(songId)
+            }
+        } else if (!path.isNullOrBlank()) {
+            com.amurayada.music.data.database.DownloadDatabase
+                .getDatabase(ctx)
+                .downloadDao()
+                .deleteDownloadByPath(path)
+        }
+    }
+
+    fun confirmVideoDeleted(item: DownloadItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                removeVideoFromDb(item)
+            } catch (_: Exception) {}
+            loadVideos()
+        }
+    }
+
     fun deleteVideo(
         item: DownloadItem,
         onRequirePermission: (IntentSenderRequest) -> Unit,
@@ -199,22 +227,8 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
             val ctx = getApplication<Application>()
             val path = item.localFilePath
             try {
-                if (item.id.startsWith("db_video_")) {
-                    val songId = item.id.removePrefix("db_video_").toLongOrNull()
-                    if (songId != null) {
-                        com.amurayada.music.data.database.DownloadDatabase
-                            .getDatabase(ctx)
-                            .downloadDao()
-                            .deleteDownloadById(songId)
-                    }
-                } else if (!path.isNullOrBlank()) {
-                    com.amurayada.music.data.database.DownloadDatabase
-                        .getDatabase(ctx)
-                        .downloadDao()
-                        .deleteDownloadByPath(path)
-                }
-
                 if (path.isNullOrBlank()) {
+                    removeVideoFromDb(item)
                     loadVideos()
                     withContext(Dispatchers.Main) { onComplete(true) }
                     return@launch
@@ -225,6 +239,7 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
                     try {
                         val rows = ctx.contentResolver.delete(contentUri, null, null)
                         if (rows > 0) {
+                            removeVideoFromDb(item)
                             loadVideos()
                             withContext(Dispatchers.Main) { onComplete(true) }
                             return@launch
@@ -245,6 +260,7 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
                 val file = File(path)
                 val deletedDirect = if (file.exists()) file.delete() else true
                 if (deletedDirect) {
+                    removeVideoFromDb(item)
                     MediaScannerConnection.scanFile(ctx, arrayOf(path), null, null)
                     loadVideos()
                     withContext(Dispatchers.Main) { onComplete(true) }

@@ -260,6 +260,7 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                         } catch (_: Exception) {}
                     }
 
+                    var requestedSystemPermission = false
                     // 4. Solo re-escanear si el archivo ya fue borrado; si sigue protegido por Scoped Storage, solicitar permiso del sistema
                     if (!file.exists()) {
                         android.media.MediaScannerConnection.scanFile(context, arrayOf(song.path), null, null)
@@ -270,12 +271,14 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                                     context.contentResolver,
                                     listOf(mediaUri)
                                 )
+                                requestedSystemPermission = true
                                 _permissionEvent.postValue(
                                     androidx.activity.result.IntentSenderRequest.Builder(pendingIntent.intentSender).build()
                                 )
                             } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q &&
                                 securityException is android.app.RecoverableSecurityException
                             ) {
+                                requestedSystemPermission = true
                                 _permissionEvent.postValue(
                                     androidx.activity.result.IntentSenderRequest.Builder(
                                         securityException.userAction.actionIntent.intentSender
@@ -286,6 +289,15 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                             android.util.Log.w("LibraryViewModel", "No se pudo emitir solicitud de eliminación: ${reqEx.message}")
                         }
                     }
+
+                    // 5. Recargar biblioteca local y notificar término solo si se eliminó directamente
+                    if (!requestedSystemPermission) {
+                        loadLibrary()
+                        withContext(Dispatchers.Main) {
+                            onComplete()
+                        }
+                    }
+                    return@launch
                 }
 
                 // 5. Recargar biblioteca local y notificar término

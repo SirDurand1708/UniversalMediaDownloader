@@ -366,19 +366,19 @@ fun LarkStyleMusicScreen(
                         val isPrivateFile = song.path.contains(context.packageName)
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && !isPrivateFile) {
                             val title = song.title
-                            if (playbackViewModel.currentSong?.id == song.id) {
-                                if (playbackViewModel.queue.size > 1) {
-                                    playbackViewModel.skipToNext()
-                                } else {
-                                    playbackViewModel.pause()
-                                }
-                            }
-                            playlistViewModel.playlists.value.forEach { playlist ->
-                                if (playlist.songIds.contains(song.id)) {
-                                    playlistViewModel.removeSongFromPlaylist(playlist.id, song.id)
-                                }
-                            }
                             libraryViewModel.deleteSong(song, context) {
+                                if (playbackViewModel.currentSong?.id == song.id) {
+                                    if (playbackViewModel.queue.size > 1) {
+                                        playbackViewModel.skipToNext()
+                                    } else {
+                                        playbackViewModel.pause()
+                                    }
+                                }
+                                playlistViewModel.playlists.value.forEach { playlist ->
+                                    if (playlist.songIds.contains(song.id)) {
+                                        playlistViewModel.removeSongFromPlaylist(playlist.id, song.id)
+                                    }
+                                }
                                 Toast.makeText(context, "Canción eliminada: $title", Toast.LENGTH_SHORT).show()
                             }
                         } else {
@@ -428,6 +428,7 @@ fun LarkStyleMusicScreen(
                         onSongClick = { song -> playbackViewModel.playSong(song, playlistSongs) },
                         onRemoveSong = { songId -> playlistViewModel.removeSongFromPlaylist(currentPl.id, songId) },
                         onAddSong = { song -> playlistViewModel.addSongToPlaylist(currentPl.id, song.id) },
+                        onAddSongs = { songs -> playlistViewModel.addSongsToPlaylist(currentPl.id, songs.map { it.id }) },
                         onPlayAll = {
                             if (playlistSongs.isNotEmpty()) playbackViewModel.playSong(playlistSongs.first(), playlistSongs)
                         },

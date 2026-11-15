@@ -51,11 +51,19 @@ fun VideosScreen(
 
     var showSortDialog by remember { mutableStateOf(false) }
 
+    var pendingDeleteVideo by remember { mutableStateOf<DownloadItem?>(null) }
+
     val deleteLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
+        val target = pendingDeleteVideo
+        pendingDeleteVideo = null
         if (result.resultCode == Activity.RESULT_OK) {
-            videosViewModel.loadVideos()
+            if (target != null) {
+                videosViewModel.confirmVideoDeleted(target)
+            } else {
+                videosViewModel.loadVideos()
+            }
             Toast.makeText(context, "Video eliminado", Toast.LENGTH_SHORT).show()
         }
     }
@@ -258,7 +266,10 @@ fun VideosScreen(
                         onDelete = {
                             videosViewModel.deleteVideo(
                                 item = video,
-                                onRequirePermission = { req -> deleteLauncher.launch(req) },
+                                onRequirePermission = { req ->
+                                    pendingDeleteVideo = video
+                                    deleteLauncher.launch(req)
+                                },
                                 onComplete = { success ->
                                     if (success) {
                                         Toast.makeText(context, "Video eliminado", Toast.LENGTH_SHORT).show()

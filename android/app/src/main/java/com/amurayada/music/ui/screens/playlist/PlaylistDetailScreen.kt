@@ -30,6 +30,7 @@ fun PlaylistDetailScreen(
     onSongClick: (Song) -> Unit,
     onRemoveSong: (Long) -> Unit,
     onAddSong: (Song) -> Unit = {},
+    onAddSongs: ((List<Song>) -> Unit)? = null,
     onPlayAll: () -> Unit,
     onShuffle: () -> Unit
 ) {
@@ -171,7 +172,8 @@ fun PlaylistDetailScreen(
                 onDismiss = { showAddSongDialog = false },
                 onSongSelected = { song ->
                     onAddSong(song)
-                }
+                },
+                onSongsSelected = onAddSongs
             )
         }
     }
