@@ -500,6 +500,9 @@ class MusicPlaybackService : MediaSessionService() {
             "ACTION_PLAY_PAUSE" -> {
                 if (player.isPlaying) player.pause() else player.play()
             }
+            "ACTION_SKIP_NEXT" -> {
+                if (player.hasNextMediaItem()) player.seekToNextMediaItem()
+            }
             "ACTION_TOGGLE_FAVORITE" -> toggleFavorite()
             "ACTION_LOADING" -> {
                 isLoading = true

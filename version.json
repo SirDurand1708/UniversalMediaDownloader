@@ -1,19 +1,19 @@
 {
-  "version": "2.5.29",
-  "version_code": 279,
+  "version": "2.5.30",
+  "version_code": 280,
   "release_date": "2026-11-15",
-  "title": "OmniVault v2.5.29 — Windows PC & Android",
-  "changelog": "✨ Fase 3B UX: Selección múltiple, filtro Cámara y vista Lista/Cuadrícula en Videos; Reintentar y ETA en Descargas; canciones duplicadas, respaldo completo y Deshacer estandarizado en Ajustes",
+  "title": "OmniVault v2.5.30 — Windows PC & Android",
+  "changelog": "✨ Fase 4 UX: Widget de pantalla de inicio renovado con botón Siguiente, protección Android 12+ en segundo plano y estética oscura Aura Player",
   "android": {
-    "version": "2.5.29",
-    "version_code": 279,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.29/OmniVault-v2.5.29-Android.apk",
+    "version": "2.5.30",
+    "version_code": 280,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.30/OmniVault-v2.5.30-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.29",
-    "version_code": 279,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.29/OmniVault-v2.5.29-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.29/OmniVault-v2.5.29-Windows-x64-Portable.zip"
+    "version": "2.5.30",
+    "version_code": 280,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.30/OmniVault-v2.5.30-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.30/OmniVault-v2.5.30-Windows-x64-Portable.zip"
   }
 }

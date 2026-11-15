@@ -100,7 +100,7 @@ class MusicWidget : GlanceAppWidget() {
             modifier = GlanceModifier
                 .fillMaxWidth()
                 .then(if (isSmall) GlanceModifier.height(76.dp) else GlanceModifier.fillMaxHeight())
-                .background(Color(0xFF1d2a1e))
+                .background(Color(0xFF0E141E))
                 .cornerRadius(containerCornerRadius)
                 .padding(spacerSize)
                 .clickable(actionRunCallback<OpenAppActionCallback>()),
@@ -110,7 +110,7 @@ class MusicWidget : GlanceAppWidget() {
             Box(
                 modifier = GlanceModifier
                     .size(coverSize)
-                    .background(ColorProvider(Color(0xFFff7a5c)))
+                    .background(ColorProvider(Color(0xFF1A2434)))
                     .cornerRadius(cornerRadius),
                 contentAlignment = Alignment.Center
             ) {
@@ -143,7 +143,7 @@ class MusicWidget : GlanceAppWidget() {
                 Text(
                     text = title,
                     style = TextStyle(
-                        color = ColorProvider(Color(0xFFf1f5ec)),
+                        color = ColorProvider(Color(0xFFF3F7FC)),
                         fontSize = titleSize,
                         fontWeight = FontWeight.Bold
                     ),
@@ -153,7 +153,7 @@ class MusicWidget : GlanceAppWidget() {
                 Text(
                     text = artist,
                     style = TextStyle(
-                        color = ColorProvider(Color(0xFF90a090)),
+                        color = ColorProvider(Color(0xFF8FA1B8)),
                         fontSize = artistSize
                     ),
                     maxLines = 1
@@ -167,7 +167,7 @@ class MusicWidget : GlanceAppWidget() {
                 modifier = GlanceModifier
                     .width(likeButtonWidth)
                     .height(likeButtonHeight)
-                    .background(Color(0xFFdff3f4))
+                    .background(Color(0xFF1A2434))
                     .cornerRadius(if (isSmall) 12.dp else 18.dp)
                     .clickable(actionRunCallback<ToggleFavoriteActionCallback>()),
                 contentAlignment = Alignment.Center
@@ -176,7 +176,9 @@ class MusicWidget : GlanceAppWidget() {
                     provider = ImageProvider(if (isFavorite) R.drawable.ic_favorite else R.drawable.ic_favorite_border),
                     contentDescription = "Favorite",
                     modifier = GlanceModifier.size(iconSize),
-                    colorFilter = androidx.glance.ColorFilter.tint(if (isFavorite) GlanceTheme.colors.primary else ColorProvider(Color(0xFF1d2a1e)))
+                    colorFilter = androidx.glance.ColorFilter.tint(
+                        ColorProvider(if (isFavorite) Color(0xFF00E5FF) else Color(0xFFD5E1EE))
+                    )
                 )
             }
 
@@ -186,7 +188,7 @@ class MusicWidget : GlanceAppWidget() {
             Box(
                 modifier = GlanceModifier
                     .size(playButtonSize)
-                    .background(Color(0xFF7cff6b))
+                    .background(Color(0xFF00E5FF))
                     .cornerRadius(if (isSmall) 16.dp else 22.dp)
                     .clickable(actionRunCallback<PlayPauseActionCallback>()),
                 contentAlignment = Alignment.Center
@@ -195,7 +197,27 @@ class MusicWidget : GlanceAppWidget() {
                     provider = ImageProvider(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
                     contentDescription = if (isPlaying) "Pause" else "Play",
                     modifier = GlanceModifier.size(playIconSize),
-                    colorFilter = androidx.glance.ColorFilter.tint(ColorProvider(Color(0xFF042b10)))
+                    colorFilter = androidx.glance.ColorFilter.tint(ColorProvider(Color(0xFF04151F)))
+                )
+            }
+
+            Spacer(modifier = GlanceModifier.width(if (isSmall) 6.dp else 10.dp))
+
+            // Next Button
+            Box(
+                modifier = GlanceModifier
+                    .width(likeButtonWidth)
+                    .height(likeButtonHeight)
+                    .background(Color(0xFF1A2434))
+                    .cornerRadius(if (isSmall) 12.dp else 18.dp)
+                    .clickable(actionRunCallback<SkipNextActionCallback>()),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    provider = ImageProvider(R.drawable.ic_skip_next),
+                    contentDescription = "Next",
+                    modifier = GlanceModifier.size(iconSize),
+                    colorFilter = androidx.glance.ColorFilter.tint(ColorProvider(Color(0xFFF3F7FC)))
                 )
             }
         }
