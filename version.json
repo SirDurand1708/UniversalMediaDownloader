@@ -1,19 +1,19 @@
 {
-  "version": "2.5.24",
-  "version_code": 274,
+  "version": "2.5.25",
+  "version_code": 275,
   "release_date": "2026-11-15",
-  "title": "OmniVault v2.5.24 — Windows PC & Android",
-  "changelog": "📐 Corrección global del padding inferior en NavHost (paddingValues completo) para que ninguna pestaña ni pantalla quede cortada detrás de la barra inferior o el MiniPlayer",
+  "title": "OmniVault v2.5.25 — Windows PC & Android",
+  "changelog": "✨ Ajustes sin bloque negro inferior (insets corregidos) y selector de canciones para Playlists ordenado por más recientes con alternador A-Z",
   "android": {
-    "version": "2.5.24",
-    "version_code": 274,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.24/OmniVault-v2.5.24-Android.apk",
+    "version": "2.5.25",
+    "version_code": 275,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.25/OmniVault-v2.5.25-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.24",
-    "version_code": 274,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.24/OmniVault-v2.5.24-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.24/OmniVault-v2.5.24-Windows-x64-Portable.zip"
+    "version": "2.5.25",
+    "version_code": 275,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.25/OmniVault-v2.5.25-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.25/OmniVault-v2.5.25-Windows-x64-Portable.zip"
   }
 }

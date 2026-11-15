@@ -32,13 +32,19 @@ fun SongSelectionSheet(
     onSongsSelected: ((List<Song>) -> Unit)? = null
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    var sortByRecent by remember { mutableStateOf(true) }
     val selectedSongIds = remember { mutableStateListOf<Long>() }
 
-    val filteredSongs = remember(searchQuery, allSongs) {
-        if (searchQuery.isBlank()) {
-            allSongs
+    val filteredSongs = remember(searchQuery, allSongs, sortByRecent) {
+        val sorted = if (sortByRecent) {
+            allSongs.sortedByDescending { it.dateAdded }
         } else {
-            allSongs.filter {
+            allSongs.sortedBy { it.title.lowercase() }
+        }
+        if (searchQuery.isBlank()) {
+            sorted
+        } else {
+            sorted.filter {
                 it.title.contains(searchQuery, ignoreCase = true) ||
                     it.artist.contains(searchQuery, ignoreCase = true)
             }
@@ -86,6 +92,31 @@ fun SongSelectionSheet(
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp)
             )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilterChip(
+                    selected = sortByRecent,
+                    onClick = { sortByRecent = true },
+                    label = { Text("Más recientes") },
+                    leadingIcon = if (sortByRecent) {
+                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                    } else null
+                )
+                FilterChip(
+                    selected = !sortByRecent,
+                    onClick = { sortByRecent = false },
+                    label = { Text("A - Z") },
+                    leadingIcon = if (!sortByRecent) {
+                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                    } else null
+                )
+            }
 
             Spacer(modifier = Modifier.height(4.dp))
 
