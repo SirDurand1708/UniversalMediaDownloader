@@ -17,15 +17,19 @@ import com.omnivault.media.downloader.MediaExtractor
 import com.omnivault.media.downloader.MediaPreview
 import com.omnivault.media.downloader.UniversalDownloadEngine
 import com.omnivault.media.downloader.UniversalDownloadState
+import com.omnivault.media.downloader.UniversalMediaMetadata
 import com.omnivault.media.model.DownloadItem
 import com.omnivault.media.model.DownloadStatus
 import com.omnivault.media.model.MediaFormat
 import com.omnivault.media.model.PlatformType
 import com.omnivault.media.service.MediaDownloadService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 
 class DownloadViewModel(
@@ -66,6 +70,9 @@ class DownloadViewModel(
     val selectedFormat = MutableStateFlow(MediaFormat.M4A)
     val mediaPreview = MutableStateFlow<MediaPreview?>(null)
     val isAnalyzing = MutableStateFlow(false)
+    val analyzeTimeoutMessage = MutableStateFlow<String?>(null)
+    private var analyzeJob: Job? = null
+    private var activeAnalyzeProcessId: String? = null
 
     private val _omniActiveDownloads = MutableStateFlow<List<DownloadItem>>(emptyList())
     val omniActiveDownloads: StateFlow<List<DownloadItem>> = _omniActiveDownloads.asStateFlow()
@@ -189,33 +196,117 @@ class DownloadViewModel(
     // UNIVERSAL DOWNLOAD METHODS (OmniVault)
     // =========================================================================
 
+    fun abortAnalysis() {
+        analyzeJob?.cancel()
+        analyzeJob = null
+        activeAnalyzeProcessId?.let { universalEngine.cancelAnalysisProcess(it) }
+        activeAnalyzeProcessId = null
+        isAnalyzing.value = false
+        analyzeTimeoutMessage.value = null
+    }
+
     fun analyzeUrl(url: String) {
         val trimmed = url.trim()
         if (trimmed.isBlank()) return
 
-        viewModelScope.launch {
+        analyzeJob?.cancel()
+        activeAnalyzeProcessId?.let { universalEngine.cancelAnalysisProcess(it) }
+        activeAnalyzeProcessId = null
+        analyzeTimeoutMessage.value = null
+
+        // Respuesta instantánea desde caché en memoria si ya fue analizado recientemente
+        universalEngine.getCachedMetadata(trimmed)?.let { cached ->
+            mediaPreview.value = MediaPreview(
+                title = cached.title,
+                author = cached.artist,
+                thumbnailUrl = cached.thumbnailUrl,
+                platform = PlatformType.fromUrl(trimmed),
+                originalUrl = cached.sourceUrl
+            )
+            isAnalyzing.value = false
+            return
+        }
+
+        val processId = "analyze_${System.currentTimeMillis()}"
+        activeAnalyzeProcessId = processId
+
+        analyzeJob = viewModelScope.launch {
             isAnalyzing.value = true
             try {
-                val meta = try {
-                    universalEngine.extractMetadata(trimmed, selectedFormat.value)
-                } catch (_: Exception) {
-                    null
+                val platform = PlatformType.fromUrl(trimmed)
+                val fastPlatforms = setOf(
+                    PlatformType.YOUTUBE,
+                    PlatformType.TIKTOK,
+                    PlatformType.INSTAGRAM,
+                    PlatformType.FACEBOOK,
+                    PlatformType.TWITTER
+                )
+
+                val preview = withTimeoutOrNull(4_000L) {
+                    if (platform in fastPlatforms) {
+                        val fastPreview = try {
+                            MediaExtractor.analyze(trimmed)
+                        } catch (ce: CancellationException) {
+                            throw ce
+                        } catch (_: Exception) {
+                            null
+                        }
+
+                        val isMeaningfulFastPreview = fastPreview != null &&
+                            fastPreview.title.isNotBlank() &&
+                            (!fastPreview.title.startsWith("Enlace de ") || fastPreview.thumbnailUrl.isNotBlank())
+
+                        if (isMeaningfulFastPreview) {
+                            fastPreview
+                        } else {
+                            val meta = universalEngine.extractMetadata(trimmed, selectedFormat.value, processId)
+                            MediaPreview(
+                                title = meta.title,
+                                author = meta.artist,
+                                thumbnailUrl = meta.thumbnailUrl,
+                                platform = platform,
+                                originalUrl = meta.sourceUrl
+                            )
+                        }
+                    } else {
+                        val meta = universalEngine.extractMetadata(trimmed, selectedFormat.value, processId)
+                        MediaPreview(
+                            title = meta.title,
+                            author = meta.artist,
+                            thumbnailUrl = meta.thumbnailUrl,
+                            platform = platform,
+                            originalUrl = meta.sourceUrl
+                        )
+                    }
                 }
-                if (meta != null) {
-                    val platform = PlatformType.fromUrl(trimmed)
-                    mediaPreview.value = MediaPreview(
-                        title = meta.title,
-                        author = meta.artist,
-                        thumbnailUrl = meta.thumbnailUrl,
-                        platform = platform,
-                        originalUrl = meta.sourceUrl
+
+                if (preview != null) {
+                    universalEngine.cacheMetadata(
+                        trimmed,
+                        UniversalMediaMetadata(
+                            title = preview.title,
+                            artist = preview.author.ifBlank { "OmniVault" },
+                            album = preview.author.ifBlank { "OmniVault" },
+                            durationMs = 0L,
+                            thumbnailUrl = preview.thumbnailUrl,
+                            sourceUrl = preview.originalUrl.ifBlank { trimmed }
+                        )
                     )
+                    mediaPreview.value = preview
+                    analyzeTimeoutMessage.value = null
                 } else {
-                    mediaPreview.value = MediaExtractor.analyze(trimmed)
+                    universalEngine.cancelAnalysisProcess(processId)
+                    analyzeTimeoutMessage.value = "El análisis tardó más de 4s. Puedes reintentar, abortar o descargar directo."
                 }
+            } catch (_: CancellationException) {
+                universalEngine.cancelAnalysisProcess(processId)
             } catch (e: Exception) {
                 e.printStackTrace()
+                analyzeTimeoutMessage.value = "No se pudo obtener la vista previa a tiempo. Puedes descargar directo."
             } finally {
+                if (activeAnalyzeProcessId == processId) {
+                    activeAnalyzeProcessId = null
+                }
                 isAnalyzing.value = false
             }
         }

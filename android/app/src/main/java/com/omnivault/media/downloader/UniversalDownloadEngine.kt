@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.LruCache
 import androidx.documentfile.provider.DocumentFile
 import com.amurayada.music.data.auth.YouTubeAuthManager
 import com.amurayada.music.data.database.DownloadDatabase
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -80,6 +82,33 @@ class UniversalDownloadEngine private constructor(context: Context) {
     private val _downloadsState = MutableStateFlow<Map<String, UniversalDownloadState>>(emptyMap())
     val downloadsState: StateFlow<Map<String, UniversalDownloadState>> = _downloadsState.asStateFlow()
     private val activeProcesses = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val metadataCache = LruCache<String, UniversalMediaMetadata>(40)
+
+    private fun normalizeCacheKey(url: String): String =
+        (UrlUtils.extractUrlFromText(url) ?: url).trim()
+
+    fun cacheMetadata(url: String, metadata: UniversalMediaMetadata) {
+        val key = normalizeCacheKey(url)
+        if (key.isNotBlank()) {
+            synchronized(metadataCache) {
+                metadataCache.put(key, metadata)
+            }
+        }
+    }
+
+    fun getCachedMetadata(url: String): UniversalMediaMetadata? {
+        val key = normalizeCacheKey(url)
+        if (key.isBlank()) return null
+        return synchronized(metadataCache) {
+            metadataCache.get(key)
+        }
+    }
+
+    fun cancelAnalysisProcess(processId: String) {
+        try {
+            YoutubeDL.getInstance().destroyProcessById(processId)
+        } catch (_: Exception) {}
+    }
 
     companion object {
         private const val PUBLIC_FOLDER_NAME = "OmniVault"
@@ -128,18 +157,22 @@ class UniversalDownloadEngine private constructor(context: Context) {
      */
     suspend fun extractMetadata(
         url: String,
-        preferredFormat: MediaFormat = MediaFormat.M4A
+        preferredFormat: MediaFormat = MediaFormat.M4A,
+        processId: String = "info_${System.currentTimeMillis()}"
     ): UniversalMediaMetadata = withContext(Dispatchers.IO) {
-        ensureInitialized()
         val cleanUrl = UrlUtils.extractUrlFromText(url)?.trim() ?: url.trim()
+        getCachedMetadata(cleanUrl)?.let { return@withContext it }
+
+        ensureInitialized()
         val tempCookieDir = File(appContext.cacheDir, "ytdl_info_${System.currentTimeMillis()}")
 
         try {
             val infoRequest = YoutubeDLRequest(cleanUrl).apply {
                 addOption("--no-playlist")
                 addOption("--flat-playlist")
-                addOption("--socket-timeout", 7)
-                addOption("--retries", 1)
+                addOption("--skip-download")
+                addOption("--socket-timeout", 4)
+                addOption("--retries", 0)
                 addOption("--extractor-args", "youtube:skip=dash,hls")
                 writeAuthCookiesIfAvailable(tempCookieDir)?.let { cookieFile ->
                     addOption("--cookies", cookieFile.absolutePath)
@@ -153,7 +186,7 @@ class UniversalDownloadEngine private constructor(context: Context) {
             val durationMs: Long = (videoInfo.duration.toLong().coerceAtLeast(0L)) * 1000L
             val thumbnail: String = videoInfo.thumbnail?.takeIf { it.isNotBlank() } ?: ""
 
-            return@withContext UniversalMediaMetadata(
+            val result = UniversalMediaMetadata(
                 title = standardizedTitle,
                 artist = uploader,
                 album = uploader,
@@ -161,13 +194,22 @@ class UniversalDownloadEngine private constructor(context: Context) {
                 thumbnailUrl = thumbnail,
                 sourceUrl = cleanUrl
             )
+            cacheMetadata(cleanUrl, result)
+            return@withContext result
+        } catch (ce: CancellationException) {
+            cancelAnalysisProcess(processId)
+            throw ce
         } catch (e: Exception) {
+            if (!coroutineContext.isActive) {
+                cancelAnalysisProcess(processId)
+                throw CancellationException("Metadata extraction cancelled")
+            }
             android.util.Log.w(
                 "UniversalDownloadEngine",
                 "YoutubeDL.getInfo fallback to MediaExtractor for $cleanUrl: ${e.message}"
             )
             val fallback = MediaExtractor.extract(cleanUrl, preferredFormat)
-            return@withContext UniversalMediaMetadata(
+            val result = UniversalMediaMetadata(
                 title = FilenameStandardizer.standardizeTitle(fallback.title),
                 artist = fallback.author.ifBlank { "OmniVault" },
                 album = fallback.author.ifBlank { "OmniVault" },
@@ -175,7 +217,12 @@ class UniversalDownloadEngine private constructor(context: Context) {
                 thumbnailUrl = fallback.thumbnailUrl,
                 sourceUrl = cleanUrl
             )
+            cacheMetadata(cleanUrl, result)
+            return@withContext result
         } finally {
+            if (!coroutineContext.isActive) {
+                cancelAnalysisProcess(processId)
+            }
             try {
                 if (tempCookieDir.exists()) tempCookieDir.deleteRecursively()
             } catch (_: Exception) {}
@@ -216,11 +263,17 @@ class UniversalDownloadEngine private constructor(context: Context) {
             tempCacheDir.mkdirs()
 
             // =========================================================================
-            // PASO A: Extracción de Info con YoutubeDL.getInstance().getInfo(url)
+            // PASO A: Reutilizar Metadatos Cacheados (Prohibido re-analizar con getInfo)
             // =========================================================================
-            publishState(currentState)
-
-            val metadata = extractMetadata(cleanUrl, format)
+            val cachedMeta = getCachedMetadata(cleanUrl)
+            var metadata = cachedMeta ?: UniversalMediaMetadata(
+                title = "OmniVault Media",
+                artist = "OmniVault",
+                album = "OmniVault",
+                durationMs = 0L,
+                thumbnailUrl = "",
+                sourceUrl = cleanUrl
+            )
             currentState = currentState.copy(
                 title = metadata.title,
                 artist = metadata.artist,
@@ -234,8 +287,16 @@ class UniversalDownloadEngine private constructor(context: Context) {
             // =========================================================================
             // PASO B: Descarga en Caché con YoutubeDLRequest + FFmpeg
             // =========================================================================
-            val safeBaseName = StorageHelper.sanitizeFilename(metadata.title).ifBlank { "media_$processId" }
-            val outTemplate = File(tempCacheDir, "$safeBaseName.%(ext)s").absolutePath
+            var safeBaseName = if (cachedMeta != null) {
+                StorageHelper.sanitizeFilename(metadata.title).ifBlank { "media_$processId" }
+            } else {
+                ""
+            }
+            val outTemplate = if (safeBaseName.isNotBlank()) {
+                File(tempCacheDir, "$safeBaseName.%(ext)s").absolutePath
+            } else {
+                File(tempCacheDir, "%(title).120B.%(ext)s").absolutePath
+            }
 
             val request = YoutubeDLRequest(cleanUrl).apply {
                 addOption("--no-playlist")
@@ -331,6 +392,14 @@ class UniversalDownloadEngine private constructor(context: Context) {
 
             val downloadedCacheFile = findDownloadedFile(tempCacheDir)
                 ?: throw IllegalStateException("yt-dlp no generó un archivo de salida válido en caché")
+
+            if (cachedMeta == null) {
+                val resolvedTitle = FilenameStandardizer.standardizeTitle(
+                    downloadedCacheFile.nameWithoutExtension.ifBlank { "OmniVault Media" }
+                )
+                metadata = metadata.copy(title = resolvedTitle)
+                safeBaseName = StorageHelper.sanitizeFilename(resolvedTitle).ifBlank { "media_$processId" }
+            }
 
             // =========================================================================
             // PASO C: Exportación Segura a Almacenamiento (MediaStore / DocumentFile) + Room DB

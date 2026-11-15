@@ -71,6 +71,7 @@ fun OmniVaultDownloaderScreen(
     val selectedFormat by downloadViewModel.selectedFormat.collectAsState()
     val mediaPreview by downloadViewModel.mediaPreview.collectAsState()
     val isAnalyzing by downloadViewModel.isAnalyzing.collectAsState()
+    val analyzeTimeoutMessage by downloadViewModel.analyzeTimeoutMessage.collectAsState()
     val universalDownloadStates by downloadViewModel.universalDownloadStates.collectAsState()
     val downloadedSongs by downloadViewModel.downloadedSongs.collectAsState()
 
@@ -320,6 +321,7 @@ fun OmniVaultDownloaderScreen(
                         trailingIcon = {
                             if (urlInput.isNotEmpty()) {
                                 IconButton(onClick = {
+                                    downloadViewModel.abortAnalysis()
                                     downloadViewModel.urlInput.value = ""
                                     downloadViewModel.mediaPreview.value = null
                                 }) {
@@ -339,8 +341,14 @@ fun OmniVaultDownloaderScreen(
                     Spacer(Modifier.height(10.dp))
 
                     Button(
-                        onClick = { downloadViewModel.analyzeUrl(urlInput) },
-                        enabled = urlInput.isNotBlank() && !isAnalyzing,
+                        onClick = {
+                            if (isAnalyzing) {
+                                downloadViewModel.abortAnalysis()
+                            } else {
+                                downloadViewModel.analyzeUrl(urlInput)
+                            }
+                        },
+                        enabled = urlInput.isNotBlank() || isAnalyzing,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(
@@ -355,7 +363,7 @@ fun OmniVaultDownloaderScreen(
                                 strokeWidth = 2.dp
                             )
                             Spacer(Modifier.width(8.dp))
-                            Text("Analizando enlace...")
+                            Text("Analizando… (Toca para abortar)", fontSize = 13.sp)
                         } else {
                             Icon(
                                 Icons.Rounded.Search,
@@ -365,6 +373,44 @@ fun OmniVaultDownloaderScreen(
                             )
                             Spacer(Modifier.width(8.dp))
                             Text("Analizar Enlace", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    AnimatedVisibility(visible = analyzeTimeoutMessage != null) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF2B2214)),
+                            border = BorderStroke(1.dp, Color(0xFFFFB300).copy(alpha = 0.5f))
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = analyzeTimeoutMessage ?: "",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFFFFE082)
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    TextButton(
+                                        onClick = { downloadViewModel.abortAnalysis() },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("Abortar", fontSize = 12.sp, color = Color.LightGray)
+                                    }
+                                    Spacer(Modifier.width(6.dp))
+                                    TextButton(
+                                        onClick = { downloadViewModel.analyzeUrl(urlInput) },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("Reintentar", fontSize = 12.sp, color = neonGreen, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
                         }
                     }
                 }

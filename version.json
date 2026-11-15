@@ -1,19 +1,19 @@
 {
-  "version": "2.5.19",
-  "version_code": 269,
+  "version": "2.5.20",
+  "version_code": 270,
   "release_date": "2026-11-15",
-  "title": "OmniVault v2.5.19 — Windows PC & Android",
-  "changelog": "🎬 Deduplicación inteligente de videos descargados en la pestaña Videos y nuevos filtros rápidos (Todos / Descargados / Ocultar < 5s)\n✨ Transiciones suaves sin solapamiento entre las pestañas principales de la barra inferior\n📝 Corrección de textos truncados en Ajustes y Descargas, limpieza visual de artistas '- Topic', y botón para limpiar historial de descargas completadas",
+  "title": "OmniVault v2.5.20 — Windows PC & Android",
+  "changelog": "⚡ Análisis ultrarrápido de enlaces en Android (< 1-2s) con fast-path nativo en Kotlin para YouTube, TikTok, Instagram, Facebook y X\n⏱️ Timeout estricto de 4s con opción de Abortar, Reintentar o descargar directo sin congelar la UI\n🚀 Cero doble análisis al descargar (caché LRU compartida) e inicialización perezosa de Python/yt-dlp al abrir la app",
   "android": {
-    "version": "2.5.19",
-    "version_code": 269,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.19/OmniVault-v2.5.19-Android.apk",
+    "version": "2.5.20",
+    "version_code": 270,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.20/OmniVault-v2.5.20-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.19",
-    "version_code": 269,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.19/OmniVault-v2.5.19-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.19/OmniVault-v2.5.19-Windows-x64-Portable.zip"
+    "version": "2.5.20",
+    "version_code": 270,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.20/OmniVault-v2.5.20-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.20/OmniVault-v2.5.20-Windows-x64-Portable.zip"
   }
 }
