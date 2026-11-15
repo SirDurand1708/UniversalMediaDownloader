@@ -11,7 +11,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -152,8 +155,30 @@ fun LarkStyleMusicScreen(
     val neonGreen = Color(0xFF00E676)
     val titaniumCard = Color(0xFF141923)
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    val rootScope = rememberCoroutineScope()
+    val prefs = remember { context.getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE) }
+    var searchHistory by remember {
+        mutableStateOf(
+            prefs.getString("music_search_history", "")
+                ?.split("|")
+                ?.filter { it.isNotBlank() }
+                ?: emptyList()
+        )
+    }
+    val saveSearchQuery: (String) -> Unit = { q ->
+        val clean = q.trim()
+        if (clean.length >= 2) {
+            val updated = (listOf(clean) + searchHistory.filterNot { it.equals(clean, ignoreCase = true) }).take(5)
+            searchHistory = updated
+            prefs.edit().putString("music_search_history", updated.joinToString("|")).apply()
+        }
+    }
+    var songsToDeleteBatch by remember { mutableStateOf<List<Song>>(emptyList()) }
+
+    Box(modifier = modifier.fillMaxSize()) {
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding()
     ) {
@@ -268,6 +293,25 @@ fun LarkStyleMusicScreen(
                     Text("Cancelar", color = Color.White)
                 }
             }
+            if (searchQuery.isBlank() && searchHistory.isNotEmpty()) {
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 4.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(searchHistory) { recent ->
+                        AssistChip(
+                            onClick = { searchQuery = recent },
+                            label = { Text(recent, fontSize = 12.sp, maxLines = 1) },
+                            leadingIcon = {
+                                Icon(Icons.Rounded.History, contentDescription = null, modifier = Modifier.size(14.dp))
+                            }
+                        )
+                    }
+                }
+            }
         }
 
         // 2. Chips de Categorías (Canciones, Playlists, Carpetas, Álbumes, Artistas)
@@ -312,6 +356,7 @@ fun LarkStyleMusicScreen(
                     currentSong = currentSong,
                     isPlaying = isPlaying,
                     onSongClick = { song ->
+                        if (isSearchActive && searchQuery.isNotBlank()) saveSearchQuery(searchQuery)
                         playbackViewModel.playSong(song, displayedSongs)
                     },
                     onShuffle = {
@@ -340,7 +385,19 @@ fun LarkStyleMusicScreen(
                     },
                     onHideMultiple = { songsBatch ->
                         songsBatch.forEach { libraryViewModel.hideSong(it.id) }
-                        Toast.makeText(context, "${songsBatch.size} canciones ocultadas", Toast.LENGTH_SHORT).show()
+                        rootScope.launch {
+                            val res = snackbarHostState.showSnackbar(
+                                message = "${songsBatch.size} canciones ocultadas",
+                                actionLabel = "Deshacer",
+                                duration = SnackbarDuration.Short
+                            )
+                            if (res == SnackbarResult.ActionPerformed) {
+                                songsBatch.forEach { libraryViewModel.unhideSong(it.id) }
+                            }
+                        }
+                    },
+                    onDeleteMultiple = { songsBatch ->
+                        songsToDeleteBatch = songsBatch
                     },
                     onStandardize = { song ->
                         val f = File(song.path)
@@ -376,7 +433,16 @@ fun LarkStyleMusicScreen(
                     },
                     onHide = { song ->
                         libraryViewModel.hideSong(song.id)
-                        Toast.makeText(context, "Canción ocultada de la biblioteca", Toast.LENGTH_SHORT).show()
+                        rootScope.launch {
+                            val res = snackbarHostState.showSnackbar(
+                                message = "Canción ocultada",
+                                actionLabel = "Deshacer",
+                                duration = SnackbarDuration.Short
+                            )
+                            if (res == SnackbarResult.ActionPerformed) {
+                                libraryViewModel.unhideSong(song.id)
+                            }
+                        }
                     },
                     onDelete = { song ->
                         val isPrivateFile = song.path.contains(context.packageName)
@@ -433,8 +499,8 @@ fun LarkStyleMusicScreen(
                 } else {
                     val currentPl = playlists.find { it.id == selectedPlaylist?.id } ?: selectedPlaylist!!
                     val playlistSongs = remember(currentPl, rawSongs) {
-                        val ids = currentPl.songIds.toSet()
-                        rawSongs.filter { ids.contains(it.id) }
+                        val songMap = rawSongs.associateBy { it.id }
+                        currentPl.songIds.mapNotNull { songMap[it] }
                     }
                     com.amurayada.music.ui.screens.playlist.PlaylistDetailScreen(
                         playlist = currentPl,
@@ -445,6 +511,7 @@ fun LarkStyleMusicScreen(
                         onRemoveSong = { songId -> playlistViewModel.removeSongFromPlaylist(currentPl.id, songId) },
                         onAddSong = { song -> playlistViewModel.addSongToPlaylist(currentPl.id, song.id) },
                         onAddSongs = { songs -> playlistViewModel.addSongsToPlaylist(currentPl.id, songs.map { it.id }) },
+                        onMoveSong = { from, to -> playlistViewModel.moveSongInPlaylist(currentPl.id, from, to) },
                         onPlayAll = {
                             if (playlistSongs.isNotEmpty()) playbackViewModel.playSong(playlistSongs.first(), playlistSongs)
                         },
@@ -461,6 +528,7 @@ fun LarkStyleMusicScreen(
             LarkCategory.CARPETAS -> {
                 FoldersContent(
                     folderGroups = folderGroups,
+                    searchQuery = searchQuery,
                     onFolderClick = { folderName, songs ->
                         if (songs.isNotEmpty()) {
                             playbackViewModel.playSong(songs.first(), songs)
@@ -494,6 +562,41 @@ fun LarkStyleMusicScreen(
                 )
             }
         }
+    }
+    SnackbarHost(
+        hostState = snackbarHostState,
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .padding(bottom = 16.dp)
+    )
+    }
+
+    if (songsToDeleteBatch.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = { songsToDeleteBatch = emptyList() },
+            title = { Text("¿Eliminar ${songsToDeleteBatch.size} canciones?", fontWeight = FontWeight.Bold) },
+            text = { Text("Se eliminarán permanentemente los archivos seleccionados de tu dispositivo.") },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3333)),
+                    onClick = {
+                        val batch = songsToDeleteBatch
+                        songsToDeleteBatch = emptyList()
+                        batch.forEach { song ->
+                            libraryViewModel.deleteSong(song, context) {}
+                        }
+                        Toast.makeText(context, "${batch.size} canciones eliminadas", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Text("Eliminar", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { songsToDeleteBatch = emptyList() }) {
+                    Text("Cancelar")
+                }
+            }
+        )
     }
 
     // Diálogo de ordenamiento
@@ -735,6 +838,7 @@ private fun SongsListContent(
     onAddMultipleToQueue: (List<Song>) -> Unit = {},
     onAddMultipleToPlaylist: (List<Song>) -> Unit = {},
     onHideMultiple: (List<Song>) -> Unit = {},
+    onDeleteMultiple: (List<Song>) -> Unit = {},
     onStandardize: (Song) -> Unit,
     onShare: (Song) -> Unit,
     onHide: (Song) -> Unit,
@@ -840,6 +944,16 @@ private fun SongsListContent(
                             }
                             IconButton(
                                 onClick = {
+                                    val batch = songs.filter { selectedIds.contains(it.id) }
+                                    onDeleteMultiple(batch)
+                                    selectedIds.clear()
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Rounded.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF5252), modifier = Modifier.size(20.dp))
+                            }
+                            IconButton(
+                                onClick = {
                                     if (selectedIds.size == songs.size) {
                                         selectedIds.clear()
                                     } else {
@@ -927,6 +1041,74 @@ private fun SongsListContent(
                     onHide = { onHide(song) },
                     onDelete = { onDelete(song) }
                 )
+            }
+        }
+
+        // Índice alfabético A-Z arrastrable cuando hay más de 30 canciones
+        if (songs.size > 30) {
+            val alphabet = remember { ('A'..'Z').map { it.toString() } }
+            var activeLetter by remember { mutableStateOf<String?>(null) }
+            var barHeightPx by remember { mutableIntStateOf(1) }
+
+            val jumpToLetter: (Float) -> Unit = { y ->
+                val idx = ((y / barHeightPx.toFloat()) * alphabet.size).toInt().coerceIn(0, alphabet.lastIndex)
+                val letter = alphabet[idx]
+                activeLetter = letter
+                val songIdx = songs.indexOfFirst { it.title.trimStart().startsWith(letter, ignoreCase = true) }
+                if (songIdx >= 0) {
+                    scope.launch { listState.scrollToItem(songIdx + 1) }
+                }
+            }
+
+            if (activeLetter != null) {
+                Surface(
+                    color = Color(0xFF00E5FF),
+                    shape = CircleShape,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(64.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = activeLetter ?: "",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.Black
+                        )
+                    }
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 2.dp, top = 48.dp, bottom = 56.dp)
+                    .onSizeChanged { barHeightPx = it.height.coerceAtLeast(1) }
+                    .pointerInput(songs) {
+                        detectVerticalDragGestures(
+                            onDragStart = { offset -> jumpToLetter(offset.y) },
+                            onVerticalDrag = { change, _ -> jumpToLetter(change.position.y) },
+                            onDragEnd = { activeLetter = null },
+                            onDragCancel = { activeLetter = null }
+                        )
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceEvenly
+            ) {
+                alphabet.forEach { letter ->
+                    Text(
+                        text = letter,
+                        fontSize = 9.sp,
+                        fontWeight = if (activeLetter == letter) FontWeight.ExtraBold else FontWeight.Medium,
+                        color = if (activeLetter == letter) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.5f),
+                        modifier = Modifier
+                            .clickable {
+                                val songIdx = songs.indexOfFirst { it.title.trimStart().startsWith(letter, ignoreCase = true) }
+                                if (songIdx >= 0) scope.launch { listState.scrollToItem(songIdx + 1) }
+                            }
+                            .padding(horizontal = 4.dp)
+                    )
+                }
             }
         }
 
@@ -1365,14 +1547,23 @@ private fun PlaylistsContent(
 @Composable
 private fun FoldersContent(
     folderGroups: Map<String, List<Song>>,
+    searchQuery: String = "",
     onFolderClick: (String, List<Song>) -> Unit
 ) {
+    val visibleFolders = remember(folderGroups, searchQuery) {
+        if (searchQuery.isBlank()) {
+            folderGroups.entries.toList()
+        } else {
+            val q = searchQuery.trim().lowercase()
+            folderGroups.entries.filter { it.key.lowercase().contains(q) }
+        }
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        items(folderGroups.entries.toList()) { (folderName, songs) ->
+        items(visibleFolders) { (folderName, songs) ->
             Surface(
                 onClick = { onFolderClick(folderName, songs) },
                 color = Color(0xFF141923).copy(alpha = 0.7f),

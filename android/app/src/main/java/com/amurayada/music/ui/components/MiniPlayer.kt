@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -35,6 +36,7 @@ fun MiniPlayer(
     onPlayPauseClick: () -> Unit,
     onNextClick: () -> Unit,
     onPreviousClick: () -> Unit = {},
+    onQueueClick: (() -> Unit)? = null,
     onExpandClick: () -> Unit,
     onCloseClick: () -> Unit = {},
     customBgUri: String? = null,
@@ -175,6 +177,20 @@ fun MiniPlayer(
                             contentDescription = "Siguiente",
                             tint = iconColor
                         )
+                    }
+
+                    if (onQueueClick != null) {
+                        IconButton(
+                            onClick = onQueueClick,
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.QueueMusic,
+                                contentDescription = "Cola de reproducción",
+                                tint = iconColor.copy(alpha = 0.85f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
 
                     IconButton(

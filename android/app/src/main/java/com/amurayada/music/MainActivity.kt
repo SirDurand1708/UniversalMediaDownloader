@@ -21,11 +21,13 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import coil.compose.AsyncImage
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.*
@@ -639,6 +641,7 @@ fun MusicPlayerApp(
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             bottomBar = {
                 if (showBottomNav) {
+                    var showMiniQueueSheet by remember { mutableStateOf(false) }
                     Column {
                         AnimatedVisibility(
                             visible = currentSong != null && !isMiniPlayerDismissed,
@@ -653,6 +656,7 @@ fun MusicPlayerApp(
                                 onPlayPauseClick = playbackViewModel::togglePlayPause,
                                 onNextClick = playbackViewModel::skipToNext,
                                 onPreviousClick = playbackViewModel::skipToPrevious,
+                                onQueueClick = { showMiniQueueSheet = true },
                                 onExpandClick = { isPlayerExpanded = true },
                                 onCloseClick = {
                                     playbackViewModel.pause()
@@ -661,6 +665,68 @@ fun MusicPlayerApp(
                                 customBgUri = customBgUri?.toString(),
                                 isAmoledMode = isAmoledMode
                             )
+                        }
+                        if (showMiniQueueSheet) {
+                            ModalBottomSheet(
+                                onDismissRequest = { showMiniQueueSheet = false }
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .navigationBarsPadding()
+                                        .padding(bottom = 16.dp)
+                                ) {
+                                    Text(
+                                        text = "Cola de reproducción (${playbackViewModel.queue.size})",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+                                    )
+                                    if (playbackViewModel.queue.isEmpty()) {
+                                        Text(
+                                            text = "La cola está vacía",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp)
+                                        )
+                                    } else {
+                                        androidx.compose.foundation.lazy.LazyColumn(
+                                            modifier = Modifier.heightIn(max = 420.dp)
+                                        ) {
+                                            items(playbackViewModel.queue.size) { index ->
+                                                val qSong = playbackViewModel.queue[index]
+                                                val isPlayingNow = currentSong?.id == qSong.id
+                                                ListItem(
+                                                    headlineContent = {
+                                                        Text(
+                                                            text = qSong.title,
+                                                            maxLines = 1,
+                                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                            color = if (isPlayingNow) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                                        )
+                                                    },
+                                                    supportingContent = {
+                                                        Text(
+                                                            text = qSong.artist,
+                                                            maxLines = 1,
+                                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                        )
+                                                    },
+                                                    trailingContent = {
+                                                        IconButton(onClick = { playbackViewModel.removeFromQueue(index) }) {
+                                                            Icon(Icons.Rounded.Close, contentDescription = "Quitar de la cola")
+                                                        }
+                                                    },
+                                                    modifier = Modifier.clickable {
+                                                        playbackViewModel.playSong(qSong, playbackViewModel.queue)
+                                                        showMiniQueueSheet = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                         
                         Box {
@@ -951,6 +1017,9 @@ fun MusicPlayerApp(
                         },
                         onAddSong = { song ->
                             playlistViewModel.addSongToPlaylist(playlistId, song.id)
+                        },
+                        onMoveSong = { from, to ->
+                            playlistViewModel.moveSongInPlaylist(playlistId, from, to)
                         },
                         onPlayAll = {
                             if (playlistSongs.isNotEmpty()) {
