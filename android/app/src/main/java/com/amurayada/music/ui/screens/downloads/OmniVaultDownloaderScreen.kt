@@ -550,7 +550,7 @@ fun OmniVaultDownloaderScreen(
                         softWrap = false,
                         overflow = TextOverflow.Ellipsis
                     )
-                    if (completedSongs.isNotEmpty()) {
+                    if (downloadedSongs.isNotEmpty()) {
                         TextButton(
                             onClick = {
                                 downloadViewModel.clearCompletedHistory()

@@ -1,19 +1,19 @@
 {
-  "version": "2.5.18",
-  "version_code": 268,
+  "version": "2.5.19",
+  "version_code": 269,
   "release_date": "2026-11-15",
-  "title": "OmniVault v2.5.18 — Windows PC & Android",
+  "title": "OmniVault v2.5.19 — Windows PC & Android",
   "changelog": "🎬 Deduplicación inteligente de videos descargados en la pestaña Videos y nuevos filtros rápidos (Todos / Descargados / Ocultar < 5s)\n✨ Transiciones suaves sin solapamiento entre las pestañas principales de la barra inferior\n📝 Corrección de textos truncados en Ajustes y Descargas, limpieza visual de artistas '- Topic', y botón para limpiar historial de descargas completadas",
   "android": {
-    "version": "2.5.18",
-    "version_code": 268,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.18/OmniVault-v2.5.18-Android.apk",
+    "version": "2.5.19",
+    "version_code": 269,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.19/OmniVault-v2.5.19-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.18",
-    "version_code": 268,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.18/OmniVault-v2.5.18-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.18/OmniVault-v2.5.18-Windows-x64-Portable.zip"
+    "version": "2.5.19",
+    "version_code": 269,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.19/OmniVault-v2.5.19-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.19/OmniVault-v2.5.19-Windows-x64-Portable.zip"
   }
 }
