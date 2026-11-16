@@ -18,6 +18,9 @@
 ## 3. Trampas Conocidas (Gotchas)
 - **Sin Android SDK local en Windows:** Esta máquina no tiene `ANDROID_HOME` instalado, así que Gradle/Kotlin se compila en **GitHub Actions**. Antes de hacer tag/push de cambios en `.kt`, revisar manualmente todos los nombres de variables, imports y tipos en el `git diff` (ej. en `v2.5.18` falló `:app:compileReleaseKotlin` por usar `completedSongs` en vez de `downloadedSongs` en `OmniVaultDownloaderScreen.kt`).
 - **Logs de GitHub Actions:** Si un workflow falla, los logs completos requieren sesión iniciada en GitHub; revisar primero el diff local o compartir el extracto del log.
+- **Chocolatey Shims en Windows CI:** `C:\ProgramData\chocolatey\bin\ffmpeg.exe` y `aria2c.exe` son *shims* (~20 KB) que devuelven `-1` (`4294967295`) en otra PC. `release.yml` copia los binarios reales (`> 500 KB`) desde `chocolatey\lib\` y `downloader.py` descarta shims `< 200 KB`.
+- **Versión Desktop Dinámica:** `build_exe.py` copia `version.json` a `dist/OmniVault/` y `updater.py` lee la versión local desde ahí (nunca dejar `CURRENT_VERSION` desfasado).
+- **CI Automático:** `.github/workflows/android.yml` compila Android y `.github/workflows/desktop-ci.yml` valida sintaxis + `run_tests.py` en `push` a `main` sin crear tags.
 
 ## 4. Checklist de Verificación y Release
 1. Ejecutar pruebas de escritorio: `py run_tests.py` (debe pasar `24` tests en verde).

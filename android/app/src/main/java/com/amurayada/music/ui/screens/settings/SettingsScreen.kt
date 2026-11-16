@@ -803,6 +803,25 @@ fun SettingsScreen(
                         }
                     )
                     SettingsItem(
+                        title = "Copiar diagnóstico técnico",
+                        subtitle = "Versión, dispositivo, Android SDK y espacio libre",
+                        icon = Icons.Rounded.BugReport,
+                        showChevron = false,
+                        onClick = {
+                            val stat = android.os.StatFs(context.filesDir.absolutePath)
+                            val freeMb = stat.availableBytes / (1024L * 1024L)
+                            val diag = buildString {
+                                appendLine("App: Aura Player / OmniVault v${settingsViewModel.CURRENT_VERSION}")
+                                appendLine("Dispositivo: ${Build.MANUFACTURER} ${Build.MODEL}")
+                                appendLine("Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
+                                appendLine("Espacio libre interno: $freeMb MB")
+                            }
+                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("AuraPlayerDiag", diag))
+                            Toast.makeText(context, "Diagnóstico copiado al portapapeles", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                    SettingsItem(
                         title = "Licencia",
                         subtitle = "Código Abierto (GPL-3.0)",
                         icon = Icons.Rounded.VerifiedUser,
