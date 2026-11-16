@@ -91,6 +91,10 @@ def stop_single_instance_server(server_sock: Optional[socket.socket]):
     """Detiene y cierra el socket del servidor de instancia única."""
     if server_sock:
         try:
+            server_sock.shutdown(socket.SHUT_RDWR)
+        except Exception:
+            pass
+        try:
             server_sock.close()
         except Exception:
             pass

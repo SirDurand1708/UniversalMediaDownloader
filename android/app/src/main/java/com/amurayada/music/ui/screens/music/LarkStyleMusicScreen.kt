@@ -1540,5 +1540,3 @@ private fun PlaylistsContent(
         }
     }
 }
-
-}
