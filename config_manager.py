@@ -32,9 +32,16 @@ def get_data_dir() -> str:
     app_dir = get_app_dir()
     try:
         os.makedirs(app_dir, exist_ok=True)
+        probe_path = os.path.join(app_dir, ".write_test.tmp")
+        with open(probe_path, "w", encoding="utf-8") as f:
+            f.write("ok")
+        os.remove(probe_path)
+        return app_dir
     except Exception:
-        pass
-    return app_dir
+        local_app_data = os.environ.get("LOCALAPPDATA") or os.path.expanduser(r"~\AppData\Local")
+        data_dir = os.path.join(local_app_data, "OmniVault")
+        os.makedirs(data_dir, exist_ok=True)
+        return data_dir
 
 CONFIG_FILE = os.path.join(get_data_dir(), "config.json")
 

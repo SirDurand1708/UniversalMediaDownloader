@@ -3,7 +3,7 @@
 ; Abre este archivo en Inno Setup Compiler y presiona 'Compile' (F9).
 
 #ifndef MyAppVersion
-#define MyAppVersion "2.5.9"
+#define MyAppVersion "2.5.32"
 #endif
 
 #ifndef OutputBaseFilename
@@ -32,6 +32,8 @@ Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
+CloseApplications=yes
+CloseApplicationsFilter=OmniVault.exe
 SetupIconFile=assets\icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 

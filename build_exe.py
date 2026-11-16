@@ -91,8 +91,8 @@ def build():
             shutil.rmtree(internal_bin, ignore_errors=True)
         print("    -> Carpeta bin (FFmpeg / Aria2c) copiada con éxito sin duplicados.")
 
-    # Copiar config.example.json y LICENSE
-    for f_name in ["config.example.json", "LICENSE"]:
+    # Copiar config.example.json, version.json y LICENSE
+    for f_name in ["config.example.json", "version.json", "LICENSE"]:
         src_f = os.path.join(base_dir, f_name)
         if os.path.isfile(src_f):
             shutil.copy2(src_f, os.path.join(output_app_dir, f_name))

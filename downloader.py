@@ -26,31 +26,42 @@ def get_app_dir() -> str:
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
 
-def _ensure_ffmpeg() -> Optional[str]:
-    """Garantiza que FFmpeg esté en el PATH del proceso, buscando en PATH, registro y carpeta local."""
-    found = shutil.which("ffmpeg")
-    if found:
-        return os.path.dirname(os.path.abspath(found))
+def _is_valid_binary(path: Optional[str], min_bytes: int = 200_000) -> bool:
+    """Verifica que el ejecutable exista y no sea un shim pequeño de Chocolatey/Scoop."""
+    if not path or not os.path.isfile(path):
+        return False
+    if sys.platform == "win32":
+        try:
+            return os.path.getsize(path) >= min_bytes
+        except Exception:
+            return False
+    return True
 
-    # Buscar en carpeta local del proyecto o subcarpeta 'bin'
+def _ensure_ffmpeg() -> Optional[str]:
+    """Garantiza que FFmpeg esté en el PATH del proceso, priorizando carpeta local 'bin' y evitando shims."""
     base_dir = get_app_dir()
     local_candidates = [
-        base_dir,
         os.path.join(base_dir, "bin"),
+        base_dir,
         os.path.join(base_dir, "ffmpeg"),
-        os.path.dirname(os.path.abspath(__file__)),
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin"),
+        os.path.dirname(os.path.abspath(__file__)),
     ]
     if hasattr(sys, '_MEIPASS'):
         local_candidates.extend([
-            sys._MEIPASS,
             os.path.join(sys._MEIPASS, "bin"),
+            sys._MEIPASS,
         ])
+    exe_name = "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"
     for cand in local_candidates:
-        cand_exe = os.path.join(cand, "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg")
-        if os.path.isfile(cand_exe):
+        cand_exe = os.path.join(cand, exe_name)
+        if _is_valid_binary(cand_exe):
             os.environ["PATH"] = cand + os.pathsep + os.environ.get("PATH", "")
             return cand
+
+    found = shutil.which("ffmpeg")
+    if _is_valid_binary(found):
+        return os.path.dirname(os.path.abspath(found))
 
     if sys.platform == "win32":
         try:
@@ -81,21 +92,18 @@ def _get_aria2c_path(force_refresh: bool = False) -> Optional[str]:
         return _ARIA2C_CACHED_PATH
 
     _ARIA2C_CHECKED = True
-    found = shutil.which("aria2c")
-    if found:
-        _ARIA2C_CACHED_PATH = found
-        return found
-
     base_dir = get_app_dir()
     candidates = [
         os.path.join(base_dir, "bin", "aria2c.exe"),
         os.path.join(base_dir, "aria2c.exe"),
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin", "aria2c.exe"),
-        os.path.expanduser(r"~\scoop\shims\aria2c.exe"),
-        r"C:\ProgramData\chocolatey\bin\aria2c.exe",
     ]
     if hasattr(sys, '_MEIPASS'):
         candidates.insert(0, os.path.join(sys._MEIPASS, "bin", "aria2c.exe"))
+
+    found = shutil.which("aria2c")
+    if found:
+        candidates.append(found)
 
     docs_software = os.path.expanduser(r"~\Documents\Software")
     if os.path.isdir(docs_software):
@@ -108,7 +116,7 @@ def _get_aria2c_path(force_refresh: bool = False) -> Optional[str]:
             pass
 
     for c in candidates:
-        if os.path.isfile(c):
+        if _is_valid_binary(c):
             aria_dir = os.path.dirname(os.path.abspath(c))
             if aria_dir not in os.environ.get("PATH", ""):
                 os.environ["PATH"] = aria_dir + os.pathsep + os.environ.get("PATH", "")

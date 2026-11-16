@@ -17,7 +17,25 @@ try:
 except ImportError:
     version = None
 
-CURRENT_VERSION = "2.5.9"
+def _load_local_version(fallback: str = "2.5.32") -> str:
+    """Lee la versión local desde version.json empaquetado junto al ejecutable o en la raíz del proyecto."""
+    candidates = []
+    if getattr(sys, 'frozen', False):
+        candidates.append(os.path.join(os.path.dirname(os.path.abspath(sys.executable)), "version.json"))
+    candidates.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "version.json"))
+    for path in candidates:
+        if os.path.isfile(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                win_ver = (data.get("windows") or {}).get("version") or data.get("version")
+                if isinstance(win_ver, str) and win_ver.strip():
+                    return win_ver.lstrip("v").strip()
+            except Exception:
+                pass
+    return fallback
+
+CURRENT_VERSION = _load_local_version()
 VERSION_INFO_URL = "https://raw.githubusercontent.com/SirDurand1708/UniversalMediaDownloader/main/version.json"
 
 def is_newer_version(remote_str: str, local_str: str) -> bool:
