@@ -1,19 +1,19 @@
 {
-  "version": "2.5.32",
-  "version_code": 282,
-  "release_date": "2026-11-15",
-  "title": "OmniVault v2.5.32 — Windows PC & Android",
-  "changelog": "🛠️ Fix Windows Setup & Portable: binarios reales de FFmpeg y Aria2c (sin shims de Chocolatey), versión dinámica desde version.json, cierre automático en Setup y fallback de escritura en Portable",
+  "version": "2.5.33",
+  "version_code": 283,
+  "release_date": "2026-11-18",
+  "title": "OmniVault v2.5.33 — Windows PC & Android",
+  "changelog": "✨ Nuevo diseño de Playlist (portada, renombrar con lápiz, Reproducir/Aleatorio, menú completo) con orden por Más recientes añadidos, A-Z, Z-A y arrastrar para organizar manualmente",
   "android": {
-    "version": "2.5.32",
-    "version_code": 282,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.32/OmniVault-v2.5.32-Android.apk",
+    "version": "2.5.33",
+    "version_code": 283,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.33/OmniVault-v2.5.33-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.32",
-    "version_code": 282,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.32/OmniVault-v2.5.32-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.32/OmniVault-v2.5.32-Windows-x64-Portable.zip"
+    "version": "2.5.33",
+    "version_code": 283,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.33/OmniVault-v2.5.33-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.33/OmniVault-v2.5.33-Windows-x64-Portable.zip"
   }
 }

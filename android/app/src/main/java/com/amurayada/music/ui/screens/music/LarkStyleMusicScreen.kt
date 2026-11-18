@@ -512,6 +512,13 @@ fun LarkStyleMusicScreen(
                         onAddSong = { song -> playlistViewModel.addSongToPlaylist(currentPl.id, song.id) },
                         onAddSongs = { songs -> playlistViewModel.addSongsToPlaylist(currentPl.id, songs.map { it.id }) },
                         onMoveSong = { from, to -> playlistViewModel.moveSongInPlaylist(currentPl.id, from, to) },
+                        onPlayOrderedList = { song, ordered -> playbackViewModel.playSong(song, ordered) },
+                        onRenamePlaylist = { newName -> playlistViewModel.renamePlaylist(currentPl.id, newName) },
+                        onDeletePlaylist = { playlistToDelete = currentPl },
+                        onAddPlaylistToQueue = { ordered ->
+                            ordered.forEach { playbackViewModel.addToQueue(it) }
+                            Toast.makeText(context, "${ordered.size} canciones añadidas a la cola", Toast.LENGTH_SHORT).show()
+                        },
                         onPlayAll = {
                             if (playlistSongs.isNotEmpty()) playbackViewModel.playSong(playlistSongs.first(), playlistSongs)
                         },

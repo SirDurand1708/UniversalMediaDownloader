@@ -1019,8 +1019,25 @@ fun MusicPlayerApp(
                         onAddSong = { song ->
                             playlistViewModel.addSongToPlaylist(playlistId, song.id)
                         },
+                        onAddSongs = { batch ->
+                            playlistViewModel.addSongsToPlaylist(playlistId, batch.map { it.id })
+                        },
                         onMoveSong = { from, to ->
                             playlistViewModel.moveSongInPlaylist(playlistId, from, to)
+                        },
+                        onPlayOrderedList = { song, ordered ->
+                            playbackViewModel.playSong(song, ordered)
+                        },
+                        onRenamePlaylist = { newName ->
+                            playlistViewModel.renamePlaylist(playlistId, newName)
+                        },
+                        onDeletePlaylist = {
+                            playlistViewModel.deletePlaylist(playlistId)
+                            navController.popBackStack()
+                        },
+                        onAddPlaylistToQueue = { ordered ->
+                            ordered.forEach { playbackViewModel.addToQueue(it) }
+                            android.widget.Toast.makeText(context, "${ordered.size} canciones añadidas a la cola", android.widget.Toast.LENGTH_SHORT).show()
                         },
                         onPlayAll = {
                             if (playlistSongs.isNotEmpty()) {
