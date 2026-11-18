@@ -92,6 +92,7 @@ class MainActivity : ComponentActivity() {
     private val searchViewModel: SearchViewModel by viewModels()
     val downloadViewModel: DownloadViewModel by viewModels()
     val videosViewModel: VideosViewModel by viewModels()
+    private var pendingSharedDownloadsNav by mutableStateOf(false)
     
     private var pendingAlbumUpdate: Triple<Long, String, String>? = null
     private var pendingAlbumArt: android.net.Uri? = null
@@ -224,6 +225,8 @@ class MainActivity : ComponentActivity() {
                         searchViewModel = searchViewModel,
                         downloadViewModel = downloadViewModel,
                         videosViewModel = videosViewModel,
+                        pendingNavigateToDownloads = pendingSharedDownloadsNav,
+                        onConsumedNavigateToDownloads = { pendingSharedDownloadsNav = false },
                         onRequestPermission = { albumId, title, artist, imageUri, intentSender ->
                             android.util.Log.d("MainActivity", "onRequestPermission: saving pending update for album $albumId")
                             pendingAlbumUpdate = Triple(albumId, title, artist)
@@ -265,6 +268,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         handleSharedIntent(intent)
     }
 
@@ -275,6 +279,7 @@ class MainActivity : ComponentActivity() {
             if (url.isNotBlank()) {
                 downloadViewModel.urlInput.value = url
                 downloadViewModel.analyzeUrl(url)
+                pendingSharedDownloadsNav = true
             }
         }
     }
@@ -299,6 +304,8 @@ fun MusicPlayerApp(
     searchViewModel: SearchViewModel,
     downloadViewModel: DownloadViewModel,
     videosViewModel: VideosViewModel,
+    pendingNavigateToDownloads: Boolean = false,
+    onConsumedNavigateToDownloads: () -> Unit = {},
     onRequestPermission: (Long, String, String, android.net.Uri?, android.content.IntentSender) -> Unit
 ) {
     val navController = rememberNavController()
@@ -548,7 +555,7 @@ fun MusicPlayerApp(
     val currentPosition = playbackViewModel.currentPosition
     val playbackMode = playbackViewModel.playbackMode
     
-    // Ocultar barra de navegación en pantalla de Reproducción (aunque ahora sea overlay, es útil para otras pantallas)
+    // Ocultar barra de navegación en pantallas de detalle y reproductor
     val showBottomNav = currentDestination?.route in listOf(
         Screen.Downloads.route,
         Screen.Home.route,
@@ -557,12 +564,7 @@ fun MusicPlayerApp(
         Screen.Settings.route,
         Screen.Favorites.route,
         Screen.Playlists.route,
-        Screen.Search.route,
-        Screen.AlbumDetail.route,
-        Screen.ArtistDetail.route,
-        Screen.PlaylistDetail.route,
-        Screen.AlbumDetailOnline.route,
-        Screen.ArtistDetailOnline.route
+        Screen.Search.route
     )
 
     // Estado del Overlay "Now Playing"
@@ -584,15 +586,26 @@ fun MusicPlayerApp(
         }
     }
     
-    // Manejar botón "Atrás" cuando el reproductor está expandido
-    androidx.activity.compose.BackHandler(enabled = isPlayerExpanded) {
-        isPlayerExpanded = false
-    }
-    
     // Expandir reproductor al hacer click en mini-player o recibir evento
     LaunchedEffect(Unit) {
         playbackViewModel.expandPlayerEvent.collect {
             isPlayerExpanded = true
+        }
+    }
+
+    // Redirigir a Descargas cuando llega un enlace compartido (ACTION_SEND) en frío o caliente
+    LaunchedEffect(pendingNavigateToDownloads) {
+        if (pendingNavigateToDownloads) {
+            isPlayerExpanded = false
+            handsFreeViewModel.setManualMode(false)
+            navController.navigate(Screen.Downloads.route) {
+                popUpTo(navController.graph.findStartDestination().id) {
+                    saveState = true
+                }
+                launchSingleTop = true
+                restoreState = true
+            }
+            onConsumedNavigateToDownloads()
         }
     }
     
@@ -641,11 +654,14 @@ fun MusicPlayerApp(
             containerColor = if (customBgUri != null && !isPlayerExpanded) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             bottomBar = {
-                if (showBottomNav) {
+                val showMiniPlayer = currentSong != null &&
+                    !isMiniPlayerDismissed &&
+                    currentDestination?.route != Screen.VideoPlayer.route
+                if (showMiniPlayer || showBottomNav) {
                     var showMiniQueueSheet by remember { mutableStateOf(false) }
                     Column {
                         AnimatedVisibility(
-                            visible = currentSong != null && !isMiniPlayerDismissed,
+                            visible = showMiniPlayer,
                             enter = slideInVertically { it } + fadeIn(),
                             exit = slideOutVertically { it } + fadeOut()
                         ) {
@@ -730,10 +746,11 @@ fun MusicPlayerApp(
                             }
                         }
                         
-                        Box {
+                        if (showBottomNav) {
+                            Box {
 
-                            
-                            NavigationBar(
+                                
+                                NavigationBar(
                                 containerColor = when {
                                     customBgUri != null -> androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.8f)
                                     isAmoledMode -> androidx.compose.ui.graphics.Color.Black
@@ -818,6 +835,7 @@ fun MusicPlayerApp(
                                 }
                             }
                         }
+                        }
                     }
                 }
             }
@@ -832,7 +850,7 @@ fun MusicPlayerApp(
             }
             NavHost(
                 navController = navController,
-                startDestination = Screen.Downloads.route,
+                startDestination = Screen.Home.route,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues),
@@ -890,7 +908,19 @@ fun MusicPlayerApp(
                         libraryViewModel = libraryViewModel,
                         playbackViewModel = playbackViewModel,
                         playlistViewModel = playlistViewModel,
-                        onEqualizerClick = { navController.navigate(Screen.Equalizer.route) }
+                        onEqualizerClick = { navController.navigate(Screen.Equalizer.route) },
+                        onPlaylistClick = { playlist ->
+                            navController.navigate(Screen.PlaylistDetail.createRoute(playlist.id, from = Screen.Home.route))
+                        },
+                        onAlbumClick = { album ->
+                            navController.navigate(Screen.AlbumDetail.createRoute(album.id, from = Screen.Home.route))
+                        },
+                        onArtistClick = { artist ->
+                            navController.navigate(Screen.ArtistDetail.createRoute(artist.id, from = Screen.Home.route))
+                        },
+                        onFolderClick = { folderPath ->
+                            navController.navigate(Screen.FolderDetail.createRoute(folderPath))
+                        }
                     )
                 }
                 
@@ -1050,6 +1080,48 @@ fun MusicPlayerApp(
                                 playbackViewModel.playSong(shuffled.first(), shuffled)
                             }
                         }
+                    )
+                }
+
+                composable(
+                    route = Screen.FolderDetail.route,
+                    arguments = listOf(
+                        androidx.navigation.navArgument("path") {
+                            type = androidx.navigation.NavType.StringType
+                            defaultValue = ""
+                        }
+                    )
+                ) { backStackEntry ->
+                    val encodedPath = backStackEntry.arguments?.getString("path") ?: ""
+                    val folderPath = android.net.Uri.decode(encodedPath)
+                    val folderSongs = remember(folderPath, songs, libraryViewModel.hiddenSongIds, libraryViewModel.deletedSongPaths) {
+                        songs.filter { song ->
+                            val lower = song.path.lowercase()
+                            val isVideo = song.album.equals("Video", ignoreCase = true) ||
+                                song.path.contains("/video/", ignoreCase = true) ||
+                                lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".webm")
+                            val matchesFolder = if (folderPath.startsWith("/")) {
+                                val lastSlash = song.path.lastIndexOf('/')
+                                lastSlash > 0 && song.path.substring(0, lastSlash) == folderPath
+                            } else {
+                                song.path.substringBeforeLast('/').substringAfterLast('/').ifBlank { "Música" } == folderPath ||
+                                    (!song.path.startsWith("/") && folderPath == "Música")
+                            }
+                            matchesFolder && !isVideo &&
+                                !libraryViewModel.hiddenSongIds.contains(song.id) &&
+                                (song.path.isBlank() || !libraryViewModel.deletedSongPaths.contains(song.path))
+                        }
+                    }
+
+                    com.amurayada.music.ui.screens.music.FolderDetailScreen(
+                        folderPath = folderPath,
+                        songs = folderSongs,
+                        currentSong = currentSong,
+                        isPlaying = playbackState is com.amurayada.music.data.model.PlaybackState.Playing,
+                        onBackClick = { navController.popBackStack() },
+                        onSongClick = { song -> playbackViewModel.playSong(song, folderSongs) },
+                        onPlayNext = { song -> playbackViewModel.playNext(song) },
+                        onAddToQueue = { song -> playbackViewModel.addToQueue(song) }
                     )
                 }
                 
@@ -1625,6 +1697,14 @@ fun MusicPlayerApp(
                 onPrevious = playbackViewModel::skipToPrevious,
                 onExit = { handsFreeViewModel.setManualMode(false) }
             )
+        }
+
+        // BackHandlers de overlays al final para respetar prioridad LIFO sobre pantallas/NavHost
+        androidx.activity.compose.BackHandler(enabled = isPlayerExpanded) {
+            isPlayerExpanded = false
+        }
+        androidx.activity.compose.BackHandler(enabled = isHandsFreeMode) {
+            handsFreeViewModel.setManualMode(false)
         }
     }
 }

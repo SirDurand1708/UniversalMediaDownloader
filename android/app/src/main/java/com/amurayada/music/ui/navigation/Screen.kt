@@ -37,5 +37,8 @@ sealed class Screen(val route: String) {
     data object VideoPlayer : Screen("video_player?path={path}&title={title}") {
         fun createRoute(path: String, title: String) = "video_player?path=${android.net.Uri.encode(path)}&title=${android.net.Uri.encode(title)}"
     }
+    data object FolderDetail : Screen("folder_detail?path={path}") {
+        fun createRoute(folderPath: String) = "folder_detail?path=${android.net.Uri.encode(folderPath)}"
+    }
 
 }

@@ -145,7 +145,7 @@ fun PlaylistDetailScreen(
             }
         }
 
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
             // Barra superior flotante estilo captura: < a la izquierda, cápsula (Ordenar | ⋮) a la derecha
             Row(
                 modifier = Modifier

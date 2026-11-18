@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,13 +75,17 @@ fun LarkStyleMusicScreen(
     playbackViewModel: PlaybackViewModel,
     playlistViewModel: PlaylistViewModel,
     onEqualizerClick: () -> Unit,
+    onPlaylistClick: (Playlist) -> Unit = {},
+    onAlbumClick: (com.amurayada.music.data.model.Album) -> Unit = {},
+    onArtistClick: (com.amurayada.music.data.model.Artist) -> Unit = {},
+    onFolderClick: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val currentSong = playbackViewModel.currentSong
     val isPlaying = playbackViewModel.isPlaying
 
-    var selectedCategory by remember { mutableStateOf(LarkCategory.CANCIONES) }
+    var selectedCategory by rememberSaveable { mutableStateOf(LarkCategory.CANCIONES) }
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
     val currentSort = libraryViewModel.songSortOrder
@@ -88,7 +93,6 @@ fun LarkStyleMusicScreen(
     var songForPlaylist by remember { mutableStateOf<Song?>(null) }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
-    var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
     var playlistToRename by remember { mutableStateOf<Playlist?>(null) }
     var renamePlaylistText by remember { mutableStateOf("") }
     var playlistToDelete by remember { mutableStateOf<Playlist?>(null) }
@@ -112,8 +116,12 @@ fun LarkStyleMusicScreen(
     val playlists by playlistViewModel.playlists.collectAsState()
     var songsForPlaylist by remember { mutableStateOf<List<Song>>(emptyList()) }
 
-    BackHandler(enabled = selectedPlaylist != null) {
-        selectedPlaylist = null
+    BackHandler(enabled = selectedCategory != LarkCategory.CANCIONES) {
+        selectedCategory = LarkCategory.CANCIONES
+    }
+    BackHandler(enabled = isSearchActive) {
+        isSearchActive = false
+        searchQuery = ""
     }
 
     // Filtrar y ordenar canciones locales
@@ -471,65 +479,28 @@ fun LarkStyleMusicScreen(
             }
 
             LarkCategory.PLAYLISTS -> {
-                if (selectedPlaylist == null) {
-                    PlaylistsContent(
-                        playlists = playlists,
-                        allSongs = rawSongs,
-                        onCreatePlaylist = { showCreatePlaylistDialog = true },
-                        onPlaylistClick = { playlist ->
-                            selectedPlaylist = playlist
-                        },
-                        onPlayPlaylist = { playlist ->
-                            val pSongs = rawSongs.filter { playlist.songIds.contains(it.id) }
-                            if (pSongs.isNotEmpty()) {
-                                playbackViewModel.playSong(pSongs.first(), pSongs)
-                                Toast.makeText(context, "Reproduciendo ${playlist.name}", Toast.LENGTH_SHORT).show()
-                            } else {
-                                Toast.makeText(context, "La playlist está vacía", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        onRenamePlaylist = { playlist ->
-                            playlistToRename = playlist
-                            renamePlaylistText = playlist.name
-                        },
-                        onDeletePlaylist = { playlist ->
-                            playlistToDelete = playlist
+                PlaylistsContent(
+                    playlists = playlists,
+                    allSongs = rawSongs,
+                    onCreatePlaylist = { showCreatePlaylistDialog = true },
+                    onPlaylistClick = onPlaylistClick,
+                    onPlayPlaylist = { playlist ->
+                        val pSongs = rawSongs.filter { playlist.songIds.contains(it.id) }
+                        if (pSongs.isNotEmpty()) {
+                            playbackViewModel.playSong(pSongs.first(), pSongs)
+                            Toast.makeText(context, "Reproduciendo ${playlist.name}", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "La playlist está vacía", Toast.LENGTH_SHORT).show()
                         }
-                    )
-                } else {
-                    val currentPl = playlists.find { it.id == selectedPlaylist?.id } ?: selectedPlaylist!!
-                    val playlistSongs = remember(currentPl, rawSongs) {
-                        val songMap = rawSongs.associateBy { it.id }
-                        currentPl.songIds.mapNotNull { songMap[it] }
+                    },
+                    onRenamePlaylist = { playlist ->
+                        playlistToRename = playlist
+                        renamePlaylistText = playlist.name
+                    },
+                    onDeletePlaylist = { playlist ->
+                        playlistToDelete = playlist
                     }
-                    com.amurayada.music.ui.screens.playlist.PlaylistDetailScreen(
-                        playlist = currentPl,
-                        songs = playlistSongs,
-                        allSongs = rawSongs,
-                        onBackClick = { selectedPlaylist = null },
-                        onSongClick = { song -> playbackViewModel.playSong(song, playlistSongs) },
-                        onRemoveSong = { songId -> playlistViewModel.removeSongFromPlaylist(currentPl.id, songId) },
-                        onAddSong = { song -> playlistViewModel.addSongToPlaylist(currentPl.id, song.id) },
-                        onAddSongs = { songs -> playlistViewModel.addSongsToPlaylist(currentPl.id, songs.map { it.id }) },
-                        onMoveSong = { from, to -> playlistViewModel.moveSongInPlaylist(currentPl.id, from, to) },
-                        onPlayOrderedList = { song, ordered -> playbackViewModel.playSong(song, ordered) },
-                        onRenamePlaylist = { newName -> playlistViewModel.renamePlaylist(currentPl.id, newName) },
-                        onDeletePlaylist = { playlistToDelete = currentPl },
-                        onAddPlaylistToQueue = { ordered ->
-                            ordered.forEach { playbackViewModel.addToQueue(it) }
-                            Toast.makeText(context, "${ordered.size} canciones añadidas a la cola", Toast.LENGTH_SHORT).show()
-                        },
-                        onPlayAll = {
-                            if (playlistSongs.isNotEmpty()) playbackViewModel.playSong(playlistSongs.first(), playlistSongs)
-                        },
-                        onShuffle = {
-                            if (playlistSongs.isNotEmpty()) {
-                                val sh = playlistSongs.shuffled()
-                                playbackViewModel.playSong(sh.first(), sh)
-                            }
-                        }
-                    )
-                }
+                )
             }
 
             LarkCategory.CARPETAS -> {
@@ -537,10 +508,11 @@ fun LarkStyleMusicScreen(
                     folderGroups = folderGroups,
                     searchQuery = searchQuery,
                     onFolderClick = { folderName, songs ->
-                        if (songs.isNotEmpty()) {
-                            playbackViewModel.playSong(songs.first(), songs)
-                            Toast.makeText(context, "Reproduciendo carpeta: $folderName", Toast.LENGTH_SHORT).show()
-                        }
+                        val folderPath = songs.firstOrNull()?.path?.let { p ->
+                            val idx = p.lastIndexOf('/')
+                            if (idx > 0) p.substring(0, idx) else folderName
+                        } ?: folderName
+                        onFolderClick(folderPath)
                     }
                 )
             }
@@ -548,24 +520,14 @@ fun LarkStyleMusicScreen(
             LarkCategory.ALBUMES -> {
                 AlbumsContent(
                     albums = libraryViewModel.albums,
-                    onAlbumClick = { album ->
-                        val songs = libraryViewModel.getSongsByAlbum(album.id)
-                        if (songs.isNotEmpty()) {
-                            playbackViewModel.playSong(songs.first(), songs)
-                        }
-                    }
+                    onAlbumClick = onAlbumClick
                 )
             }
 
             LarkCategory.ARTISTAS -> {
                 ArtistsContent(
                     artists = libraryViewModel.artists,
-                    onArtistClick = { artist ->
-                        val songs = libraryViewModel.getSongsByArtist(artist.name)
-                        if (songs.isNotEmpty()) {
-                            playbackViewModel.playSong(songs.first(), songs)
-                        }
-                    }
+                    onArtistClick = onArtistClick
                 )
             }
         }
@@ -769,7 +731,6 @@ fun LarkStyleMusicScreen(
                     onClick = {
                         val name = pl.name
                         playlistViewModel.deletePlaylist(pl.id)
-                        if (selectedPlaylist?.id == pl.id) selectedPlaylist = null
                         playlistToDelete = null
                         Toast.makeText(context, "Playlist \"$name\" eliminada", Toast.LENGTH_SHORT).show()
                     }
