@@ -13,7 +13,7 @@ import subprocess
 import threading
 from typing import Callable, Optional, Dict, Any, List
 
-from downloader import FFMPEG_DIR, is_ffmpeg_available
+from downloader import FFMPEG_DIR, is_ffmpeg_available, format_duration
 
 try:
     import speech_recognition as sr

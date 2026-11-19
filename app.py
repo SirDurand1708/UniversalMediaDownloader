@@ -715,6 +715,19 @@ class OmniVaultApp(ctk.CTk):
         )
         paste_btn.pack(side="left", padx=(0, 6))
 
+        batch_btn = ctk.CTkButton(
+            search_box,
+            text="📚 Lote",
+            width=66,
+            height=36,
+            fg_color=theme.BTN_SECONDARY_BG,
+            hover_color=theme.BTN_SECONDARY_HOVER,
+            text_color=theme.BTN_SECONDARY_TEXT,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._open_batch_url_dialog
+        )
+        batch_btn.pack(side="left", padx=(0, 6))
+
         self.search_btn = ctk.CTkButton(
             search_box,
             text="Buscar / Analizar",
@@ -765,6 +778,100 @@ class OmniVaultApp(ctk.CTk):
     def _dismiss_clipboard_banner(self):
         if self._clipboard_banner_visible:
             self._animate_pack_out(self.clipboard_banner, callback=lambda: setattr(self, '_clipboard_banner_visible', False))
+
+    def _open_batch_url_dialog(self):
+        """Permite pegar múltiples enlaces (o cargar un .txt) para encolar descargas en lote."""
+        dlg = ctk.CTkToplevel(self)
+        dlg.title("Cola por Lotes — Múltiples Enlaces")
+        dlg.geometry("560x420")
+        dlg.transient(self)
+        dlg.grab_set()
+        dlg.configure(fg_color=theme.BG_PRIMARY)
+
+        ctk.CTkLabel(
+            dlg,
+            text="Pega varios enlaces (uno por línea) o carga un archivo .txt:",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=theme.TEXT_PRIMARY
+        ).pack(anchor="w", padx=16, pady=(14, 6))
+
+        textbox = ctk.CTkTextbox(dlg, height=220, fg_color=theme.BG_INPUT, text_color=theme.TEXT_PRIMARY)
+        textbox.pack(fill="both", expand=True, padx=16, pady=(0, 10))
+
+        fmt_row = ctk.CTkFrame(dlg, fg_color="transparent")
+        fmt_row.pack(fill="x", padx=16, pady=(0, 10))
+
+        ctk.CTkLabel(fmt_row, text="Formato:", font=ctk.CTkFont(size=12, weight="bold"), text_color=theme.TEXT_PRIMARY).pack(side="left", padx=(0, 8))
+        batch_fmt_var = ctk.StringVar(value="mp3_320")
+        fmt_map = {
+            "MP3 (320 kbps)": "mp3_320",
+            "M4A (Original HQ)": "m4a_best",
+            "MP4 (1080p HD)": "mp4_1080",
+            "MP4 (720p HD)": "mp4_720",
+        }
+        fmt_choice_var = ctk.StringVar(value="MP3 (320 kbps)")
+        ctk.CTkOptionMenu(
+            fmt_row,
+            values=list(fmt_map.keys()),
+            variable=fmt_choice_var,
+            width=180,
+            command=lambda val: batch_fmt_var.set(fmt_map[val])
+        ).pack(side="left")
+
+        def _load_txt():
+            src = filedialog.askopenfilename(title="Seleccionar archivo .txt", filetypes=[("Texto", "*.txt"), ("Todos", "*.*")])
+            if src:
+                try:
+                    with open(src, "r", encoding="utf-8", errors="ignore") as f:
+                        content = f.read()
+                    textbox.insert(tk.END, ("\n" if textbox.get("1.0", tk.END).strip() else "") + content)
+                except Exception as e:
+                    messagebox.showerror("Error", f"No se pudo leer el archivo:\n{e}", parent=dlg)
+
+        ctk.CTkButton(
+            fmt_row, text="📂 Cargar .txt", width=110,
+            fg_color=theme.BTN_SECONDARY_BG, hover_color=theme.BTN_SECONDARY_HOVER, text_color=theme.BTN_SECONDARY_TEXT,
+            command=_load_txt
+        ).pack(side="right")
+
+        def _enqueue_all():
+            raw_lines = textbox.get("1.0", tk.END).splitlines()
+            seen = set()
+            items = []
+            for line in raw_lines:
+                cleaned = line.strip()
+                if not cleaned or cleaned.startswith("#"):
+                    continue
+                if is_url(cleaned) and cleaned not in seen:
+                    seen.add(cleaned)
+                    items.append({"url": cleaned, "title": cleaned[:60]})
+            if not items:
+                messagebox.showwarning("Sin enlaces válidos", "No se detectó ningún enlace HTTP/HTTPS válido.", parent=dlg)
+                return
+            fmt_code = batch_fmt_var.get()
+            target_dir = self._get_target_dir(fmt_code)
+            self.queue_manager.add_batch(
+                items=items,
+                format_type=fmt_code,
+                output_dir=target_dir,
+                browser=self._get_active_browser()
+            )
+            dlg.destroy()
+            self._show_downloads()
+            messagebox.showinfo("Lote encolado", f"Se añadieron {len(items)} enlaces a la cola de descargas.")
+
+        btn_row = ctk.CTkFrame(dlg, fg_color="transparent")
+        btn_row.pack(fill="x", padx=16, pady=(0, 14))
+        ctk.CTkButton(
+            btn_row, text="⚡ Encolar Todos", height=36,
+            fg_color=theme.BTN_PRIMARY_BG, hover_color=theme.BTN_PRIMARY_HOVER, text_color=theme.BTN_PRIMARY_TEXT,
+            font=ctk.CTkFont(size=12, weight="bold"), command=_enqueue_all
+        ).pack(side="left", fill="x", expand=True, padx=(0, 6))
+        ctk.CTkButton(
+            btn_row, text="Cancelar", width=100, height=36,
+            fg_color=theme.BTN_SECONDARY_BG, hover_color=theme.BTN_SECONDARY_HOVER, text_color=theme.BTN_SECONDARY_TEXT,
+            command=dlg.destroy
+        ).pack(side="right")
 
     def _show_update_banner(self, data: dict):
         """Muestra el banner superior notificando que hay una nueva versión."""
@@ -1401,6 +1508,14 @@ class OmniVaultApp(ctk.CTk):
             if task.status in ["error", "cancelled"]:
                 retry_btn.pack(side="right", padx=(4, 0))
 
+            reveal_btn = ctk.CTkButton(
+                bot_row, text="📁", width=28, height=24,
+                fg_color=theme.BTN_SECONDARY_BG, hover_color=theme.BTN_SECONDARY_HOVER, text_color=theme.BTN_SECONDARY_TEXT,
+                font=ctk.CTkFont(size=11), command=lambda t=task: self.history.reveal_in_folder(t.file_path)
+            )
+            if task.status == "completed":
+                reveal_btn.pack(side="right", padx=(4, 0))
+
             cancel_btn = ctk.CTkButton(
                 bot_row, text="Cancelar", width=70, height=24,
                 fg_color=theme.BTN_DANGER_BG, hover_color=theme.BTN_DANGER_HOVER, text_color=theme.BTN_DANGER_TEXT,
@@ -1413,7 +1528,8 @@ class OmniVaultApp(ctk.CTk):
                 "progress_bar": p_bar,
                 "status_label": status_lbl,
                 "cancel_btn": cancel_btn,
-                "retry_btn": retry_btn
+                "retry_btn": retry_btn,
+                "reveal_btn": reveal_btn
             }
 
     def _on_task_updated(self, task: DownloadTask):
@@ -1431,11 +1547,14 @@ class OmniVaultApp(ctk.CTk):
                 if task.status in ["completed"]:
                     ui["cancel_btn"].pack_forget()
                     ui["retry_btn"].pack_forget()
+                    ui["reveal_btn"].pack(side="right", padx=(4, 0))
                 elif task.status in ["error", "cancelled"]:
                     ui["cancel_btn"].pack_forget()
+                    ui["reveal_btn"].pack_forget()
                     ui["retry_btn"].pack(side="right", padx=(4, 0))
                 else:
                     ui["retry_btn"].pack_forget()
+                    ui["reveal_btn"].pack_forget()
                     ui["cancel_btn"].pack(side="right")
 
         self.after(0, _apply)
@@ -1488,6 +1607,25 @@ class OmniVaultApp(ctk.CTk):
         self.library_search_entry.pack(side="left", fill="x", expand=True, padx=8, pady=4)
         self.library_search_entry.bind("<KeyRelease>", lambda e: self._refresh_library_list())
 
+        self.library_filter_var = ctk.StringVar(value="Todos")
+        ctk.CTkSegmentedButton(
+            filter_box,
+            values=["Todos", "Audios", "Videos"],
+            variable=self.library_filter_var,
+            height=28,
+            command=lambda _: self._refresh_library_list()
+        ).pack(side="left", padx=(0, 6), pady=4)
+
+        self.library_sort_var = ctk.StringVar(value="Más recientes")
+        ctk.CTkOptionMenu(
+            filter_box,
+            values=["Más recientes", "A - Z", "Mayor tamaño"],
+            variable=self.library_sort_var,
+            width=130,
+            height=28,
+            command=lambda _: self._refresh_library_list()
+        ).pack(side="left", padx=(0, 8), pady=4)
+
         self.library_scroll = ctk.CTkScrollableFrame(view, fg_color="transparent", corner_radius=theme.CORNER_RADIUS)
         self.library_scroll.grid(row=2, column=0, sticky="nsew")
         self.library_scroll.grid_columnconfigure(0, weight=1)
@@ -1500,13 +1638,25 @@ class OmniVaultApp(ctk.CTk):
             widget.destroy()
 
         filter_txt = self.library_search_entry.get().strip().lower() if hasattr(self, 'library_search_entry') else ""
+        media_filter = self.library_filter_var.get() if hasattr(self, "library_filter_var") else "Todos"
+        sort_mode = self.library_sort_var.get() if hasattr(self, "library_sort_var") else "Más recientes"
         items = self.history.get_all()
+
+        if media_filter == "Audios":
+            items = [i for i in items if i.get("media_type") == "audio"]
+        elif media_filter == "Videos":
+            items = [i for i in items if i.get("media_type") != "audio"]
 
         if filter_txt:
             items = [
                 i for i in items
                 if filter_txt in i.get("title", "").lower() or filter_txt in i.get("format_label", "").lower()
             ]
+
+        if sort_mode == "A - Z":
+            items = sorted(items, key=lambda i: i.get("title", "").lower())
+        elif sort_mode == "Mayor tamaño":
+            items = sorted(items, key=lambda i: i.get("file_size", 0), reverse=True)
 
         if not items:
             empty_box = ctk.CTkFrame(self.library_scroll, fg_color=theme.BG_CARD, corner_radius=theme.CORNER_RADIUS_LG, border_width=1, border_color=theme.BORDER_COLOR)
@@ -1770,11 +1920,25 @@ class OmniVaultApp(ctk.CTk):
         self.trans_btn.pack(side="left", fill="x", expand=True, padx=(0, 6))
 
         self.trans_open_btn = ctk.CTkButton(
-            trans_btn_row, text="📄 Abrir .SRT", width=110, height=36,
+            trans_btn_row, text="📄 Abrir .SRT", width=100, height=36,
             fg_color=theme.BTN_SECONDARY_BG, hover_color=theme.BTN_SECONDARY_HOVER, text_color=theme.BTN_SECONDARY_TEXT,
             font=ctk.CTkFont(size=11, weight="bold"), command=self._open_transcribed_srt, state="disabled"
         )
-        self.trans_open_btn.pack(side="left")
+        self.trans_open_btn.pack(side="left", padx=(0, 4))
+
+        self.trans_open_txt_btn = ctk.CTkButton(
+            trans_btn_row, text="📝 Abrir .TXT", width=100, height=36,
+            fg_color=theme.BTN_SECONDARY_BG, hover_color=theme.BTN_SECONDARY_HOVER, text_color=theme.BTN_SECONDARY_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"), command=self._open_transcribed_txt, state="disabled"
+        )
+        self.trans_open_txt_btn.pack(side="left", padx=(0, 4))
+
+        self.trans_copy_btn = ctk.CTkButton(
+            trans_btn_row, text="📋 Copiar", width=90, height=36,
+            fg_color=theme.BTN_SECONDARY_BG, hover_color=theme.BTN_SECONDARY_HOVER, text_color=theme.BTN_SECONDARY_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"), command=self._copy_transcribed_txt, state="disabled"
+        )
+        self.trans_copy_btn.pack(side="left")
 
         return view
 
@@ -1783,21 +1947,28 @@ class OmniVaultApp(ctk.CTk):
             ("Archivos Multimedia", "*.mp4 *.mkv *.avi *.mov *.flv *.webm *.mp3 *.wav *.m4a *.aac *.flac *.ogg"),
             ("Todos los archivos", "*.*")
         ]
-        path = filedialog.askopenfilename(title="Seleccionar archivo multimedia para convertir", filetypes=filetypes)
-        if path:
+        paths = list(filedialog.askopenfilenames(title="Seleccionar archivo(s) multimedia para convertir", filetypes=filetypes))
+        if paths:
+            self._conv_input_files = paths
             self.conv_file_entry.configure(state="normal")
             self.conv_file_entry.delete(0, tk.END)
-            self.conv_file_entry.insert(0, path)
-            self.conv_file_entry.configure(state="readonly")
-
-            info = get_media_info(path)
-            dur = info.get("duration_str", "--")
-            sz = info.get("size_str", "--")
-            types = []
-            if info.get("has_video"): types.append("Video")
-            if info.get("has_audio"): types.append("Audio")
-            t_str = " + ".join(types) if types else "Archivo multimedia"
-            self.conv_info_lbl.configure(text=f"Información: {t_str}  •  Duración: {dur}  •  Tamaño: {sz}")
+            if len(paths) == 1:
+                path = paths[0]
+                self.conv_file_entry.insert(0, path)
+                self.conv_file_entry.configure(state="readonly")
+                info = get_media_info(path)
+                dur = info.get("duration_str", "--")
+                sz = info.get("size_str", "--")
+                types = []
+                if info.get("has_video"): types.append("Video")
+                if info.get("has_audio"): types.append("Audio")
+                t_str = " + ".join(types) if types else "Archivo multimedia"
+                self.conv_info_lbl.configure(text=f"Información: {t_str}  •  Duración: {dur}  •  Tamaño: {sz}")
+            else:
+                self.conv_file_entry.insert(0, f"{len(paths)} archivos seleccionados (lote)")
+                self.conv_file_entry.configure(state="readonly")
+                total_mb = sum(os.path.getsize(p) for p in paths if os.path.isfile(p)) / (1024 * 1024)
+                self.conv_info_lbl.configure(text=f"Lote: {len(paths)} archivos  •  Tamaño total: {total_mb:.1f} MB")
 
             fmt = self.conv_format_var.get()
             default_dst = self.config.get_audio_dir() if fmt in ["mp3_320", "mp3_192", "wav", "m4a", "flac"] else self.config.get_video_dir()
@@ -1815,13 +1986,18 @@ class OmniVaultApp(ctk.CTk):
             self.conv_dst_entry.configure(state="readonly")
 
     def _start_conversion(self):
-        in_file = self.conv_file_entry.get().strip()
-        if not in_file or not os.path.isfile(in_file):
-            messagebox.showwarning("Atención", "Por favor selecciona un archivo multimedia válido antes de iniciar.")
+        files = getattr(self, "_conv_input_files", [])
+        if not files:
+            single = self.conv_file_entry.get().strip()
+            if single and os.path.isfile(single):
+                files = [single]
+        files = [f for f in files if os.path.isfile(f)]
+        if not files:
+            messagebox.showwarning("Atención", "Por favor selecciona al menos un archivo multimedia válido antes de iniciar.")
             return
 
         out_fmt = self.conv_format_var.get()
-        out_dir = self.conv_dst_entry.get().strip() or os.path.dirname(in_file)
+        out_dir = self.conv_dst_entry.get().strip() or os.path.dirname(files[0])
 
         self._converter_running = True
         self.conv_start_btn.configure(state="disabled", text="Convirtiendo...")
@@ -1830,33 +2006,75 @@ class OmniVaultApp(ctk.CTk):
         self.conv_progress.set(0.0)
         self.conv_status_lbl.configure(text="Iniciando FFmpeg...", text_color=theme.ACCENT_CYAN)
 
+        total = len(files)
+
         def run():
-            def prog(pct, spd, eta):
-                self.after(0, lambda: self._update_converter_progress(pct, spd, eta))
+            last_res = None
+            success_count = 0
+            errors = []
+            for idx, cur_file in enumerate(files, 1):
+                if self.converter.is_cancelled():
+                    break
 
-            def stat(txt):
-                self.after(0, lambda: self.conv_status_lbl.configure(text=txt))
+                def prog(pct, spd, eta, i=idx):
+                    overall = ((i - 1) + pct) / total
+                    prefix = f"[{i}/{total}] " if total > 1 else ""
+                    self.after(0, lambda o=overall, s=spd, e=eta, p=prefix: self._update_converter_progress(o, s, e, p))
 
-            try:
-                res = self.converter.convert(
-                    input_path=in_file,
-                    output_format=out_fmt,
-                    output_dir=out_dir,
-                    progress_callback=prog,
-                    status_callback=stat,
-                    normalize_audio=self.conv_norm_var.get()
-                )
-                self.after(0, lambda: self._on_converter_success(res))
-            except Exception as e:
-                err = str(e)
-                self.after(0, lambda: self._on_converter_error(err))
+                def stat(txt, i=idx):
+                    prefix = f"[{i}/{total}] " if total > 1 else ""
+                    self.after(0, lambda t=prefix + txt: self.conv_status_lbl.configure(text=t))
+
+                try:
+                    last_res = self.converter.convert(
+                        input_path=cur_file,
+                        output_format=out_fmt,
+                        output_dir=out_dir,
+                        progress_callback=prog,
+                        status_callback=stat,
+                        normalize_audio=self.conv_norm_var.get()
+                    )
+                    success_count += 1
+                except Exception as e:
+                    err_str = str(e)
+                    if "cancelada" in err_str.lower() or self.converter.is_cancelled():
+                        if total == 1:
+                            self.after(0, lambda err=err_str: self._on_converter_error(err))
+                            return
+                        break
+                    if total == 1:
+                        self.after(0, lambda err=err_str: self._on_converter_error(err))
+                        return
+                    errors.append(f"{os.path.basename(cur_file)}: {err_str.splitlines()[0]}")
+
+            if total == 1 and last_res is not None:
+                self.after(0, lambda r=last_res: self._on_converter_success(r))
+            elif self.converter.is_cancelled():
+                self.after(0, lambda: self._on_converter_error("Conversión cancelada por el usuario."))
+            else:
+                self.after(0, lambda: self._on_batch_converter_done(success_count, total, errors, last_res))
 
         threading.Thread(target=run, daemon=True).start()
 
-    def _update_converter_progress(self, pct: float, spd: str, eta: str):
+    def _update_converter_progress(self, pct: float, spd: str, eta: str, prefix: str = ""):
         if self._converter_running:
             self.conv_progress.set(pct)
-            self.conv_status_lbl.configure(text=f"Convirtiendo: {int(pct * 100)}%  •  Velocidad: {spd}  •  Restante: {eta}")
+            self.conv_status_lbl.configure(text=f"{prefix}Convirtiendo: {int(pct * 100)}%  •  Velocidad: {spd}  •  Restante: {eta}")
+
+    def _on_batch_converter_done(self, ok_count: int, total: int, errors: list, last_res: dict):
+        self._converter_running = False
+        self.conv_start_btn.configure(state="normal", text="⚡ INICIAR CONVERSIÓN")
+        self.conv_cancel_btn.configure(state="disabled")
+        if last_res:
+            self._converted_file_path = last_res.get("file_path", "")
+            self.conv_open_btn.configure(state="normal")
+        self.conv_progress.set(1.0 if ok_count > 0 else 0.0)
+        msg = f"✔ Lote finalizado: {ok_count}/{total} archivos convertidos."
+        self.conv_status_lbl.configure(text=msg, text_color=theme.STATUS_SUCCESS if not errors else theme.STATUS_WARNING)
+        if errors:
+            messagebox.showwarning("Lote con advertencias", f"{ok_count}/{total} convertidos.\n\nErrores:\n" + "\n".join(errors[:5]))
+        else:
+            send_notification("✦ OmniVault Conversor", msg)
 
     def _on_converter_success(self, res: dict):
         self._converter_running = False
@@ -1892,7 +2110,11 @@ class OmniVaultApp(ctk.CTk):
 
     # --- TRANSCRIPCIÓN INTELIGENTE Y SUBTÍTULOS IA ---
     def _start_transcription(self):
-        in_file = self.conv_file_entry.get().strip()
+        files = getattr(self, "_conv_input_files", [])
+        if len(files) > 1:
+            messagebox.showwarning("Transcripción de 1 archivo", "La transcripción funciona con un archivo a la vez. Selecciona 1 solo archivo en el paso 1.")
+            return
+        in_file = files[0] if len(files) == 1 else self.conv_file_entry.get().strip()
         if not in_file or not os.path.isfile(in_file):
             messagebox.showwarning("Atención", "Por favor selecciona un archivo multimedia válido en el paso 1.")
             return
@@ -1910,6 +2132,8 @@ class OmniVaultApp(ctk.CTk):
         self._transcription_running = True
         self.trans_btn.configure(state="disabled", text="Transcribiendo audio...")
         self.trans_open_btn.configure(state="disabled")
+        self.trans_open_txt_btn.configure(state="disabled")
+        self.trans_copy_btn.configure(state="disabled")
         self.trans_progress.set(0.0)
         self.trans_status_lbl.configure(text="Iniciando motor de reconocimiento...", text_color=theme.ACCENT_CYAN)
 
@@ -1944,8 +2168,12 @@ class OmniVaultApp(ctk.CTk):
         self._transcription_running = False
         self.trans_btn.configure(state="normal", text="📝 GENERAR SUBTÍTULOS (.SRT Y .TXT)")
         self.trans_open_btn.configure(state="normal")
-        self.trans_progress.set(1.0)
         self._transcribed_srt_path = res.get("srt_path", "")
+        self._transcribed_txt_path = res.get("txt_path", "")
+        if self._transcribed_txt_path and os.path.isfile(self._transcribed_txt_path):
+            self.trans_open_txt_btn.configure(state="normal")
+            self.trans_copy_btn.configure(state="normal")
+        self.trans_progress.set(1.0)
         count = res.get("lines_count", 0)
         fname = os.path.basename(self._transcribed_srt_path)
         self.trans_status_lbl.configure(
@@ -1968,6 +2196,26 @@ class OmniVaultApp(ctk.CTk):
                 os.startfile(self._transcribed_srt_path)
             except Exception:
                 self._open_folder_safe(os.path.dirname(self._transcribed_srt_path))
+
+    def _open_transcribed_txt(self):
+        txt_p = getattr(self, "_transcribed_txt_path", "")
+        if txt_p and os.path.isfile(txt_p):
+            try:
+                os.startfile(txt_p)
+            except Exception:
+                self._open_folder_safe(os.path.dirname(txt_p))
+
+    def _copy_transcribed_txt(self):
+        txt_p = getattr(self, "_transcribed_txt_path", "")
+        if txt_p and os.path.isfile(txt_p):
+            try:
+                with open(txt_p, "r", encoding="utf-8") as f:
+                    content = f.read()
+                self.clipboard_clear()
+                self.clipboard_append(content)
+                messagebox.showinfo("Texto Copiado", "La transcripción completa se copió al portapapeles.")
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo leer la transcripción:\n{e}")
 
     # =========================================================================
     # VISTA 5: CANALES Y MONITOREO AUTOMÁTICO (AUTO-SYNC)
@@ -3329,6 +3577,8 @@ class OmniVaultApp(ctk.CTk):
 
     def _on_shortcut_space(self, event=None):
         focused = self.focus_get()
+        if focused is None or focused.winfo_toplevel() != self:
+            return
         if isinstance(focused, (tk.Entry, tk.Text)) or "entry" in str(focused).lower():
             return
         if self._is_player_visible:
