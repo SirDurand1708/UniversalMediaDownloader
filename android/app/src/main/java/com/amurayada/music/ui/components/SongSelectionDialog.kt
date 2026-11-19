@@ -175,16 +175,36 @@ fun SongSelectionSheet(
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                             } else {
-                                Checkbox(
-                                    checked = isSelected,
-                                    onCheckedChange = { checked ->
-                                        if (checked) {
-                                            if (!selectedSongIds.contains(song.id)) selectedSongIds.add(song.id)
-                                        } else {
-                                            selectedSongIds.remove(song.id)
+                                val orderIndex = selectedSongIds.indexOf(song.id)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (orderIndex >= 0) {
+                                        Surface(
+                                            shape = androidx.compose.foundation.shape.CircleShape,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(22.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    text = "${orderIndex + 1}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onPrimary
+                                                )
+                                            }
                                         }
+                                        Spacer(Modifier.width(6.dp))
                                     }
-                                )
+                                    Checkbox(
+                                        checked = isSelected,
+                                        onCheckedChange = { checked ->
+                                            if (checked) {
+                                                if (!selectedSongIds.contains(song.id)) selectedSongIds.add(song.id)
+                                            } else {
+                                                selectedSongIds.remove(song.id)
+                                            }
+                                        }
+                                    )
+                                }
                             }
                         },
                         modifier = Modifier
@@ -210,8 +230,8 @@ fun SongSelectionSheet(
                 ) {
                     Button(
                         onClick = {
-                            val selectedSet = selectedSongIds.toSet()
-                            val chosen = allSongs.filter { it.id in selectedSet }
+                            val songMap = allSongs.associateBy { it.id }
+                            val chosen = selectedSongIds.mapNotNull { songMap[it] }
                             if (onSongsSelected != null) {
                                 onSongsSelected(chosen)
                             } else {

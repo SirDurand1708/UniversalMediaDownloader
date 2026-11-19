@@ -510,13 +510,27 @@ fun LarkStyleMusicScreen(
             }
 
             LarkCategory.PLAYLISTS -> {
+                val smartPlaylists = remember(rawSongs, playbackViewModel.mostPlayed, playbackViewModel.favorites) {
+                    val rawMap = rawSongs.associateBy { it.id }
+                    val recentIds = rawSongs.sortedByDescending { it.dateAdded }.take(50).map { it.id }
+                    val mostPlayedIds = playbackViewModel.mostPlayed.mapNotNull { rawMap[it.id]?.id }.take(50)
+                    val favIds = playbackViewModel.favorites.mapNotNull { rawMap[it.id]?.id }
+                    listOf(
+                        Playlist(id = -1L, name = "Añadidas recientemente", songIds = recentIds, dateCreated = 0L),
+                        Playlist(id = -2L, name = "Más reproducidas", songIds = mostPlayedIds, dateCreated = 0L),
+                        Playlist(id = -3L, name = "Favoritas", songIds = favIds, dateCreated = 0L)
+                    ).filter { it.songIds.isNotEmpty() }
+                }
                 PlaylistsContent(
                     playlists = playlists,
+                    smartPlaylists = smartPlaylists,
                     allSongs = rawSongs,
+                    searchQuery = searchQuery,
                     onCreatePlaylist = { showCreatePlaylistDialog = true },
                     onPlaylistClick = onPlaylistClick,
                     onPlayPlaylist = { playlist ->
-                        val pSongs = rawSongs.filter { playlist.songIds.contains(it.id) }
+                        val songMap = rawSongs.associateBy { it.id }
+                        val pSongs = playlist.songIds.mapNotNull { songMap[it] }
                         if (pSongs.isNotEmpty()) {
                             playbackViewModel.playSong(pSongs.first(), pSongs)
                             Toast.makeText(context, "Reproduciendo ${playlist.name}", Toast.LENGTH_SHORT).show()
@@ -524,12 +538,20 @@ fun LarkStyleMusicScreen(
                             Toast.makeText(context, "La playlist está vacía", Toast.LENGTH_SHORT).show()
                         }
                     },
+                    onDuplicatePlaylist = { playlist ->
+                        playlistViewModel.duplicatePlaylist(playlist.id)
+                        Toast.makeText(context, "Playlist duplicada", Toast.LENGTH_SHORT).show()
+                    },
                     onRenamePlaylist = { playlist ->
                         playlistToRename = playlist
                         renamePlaylistText = playlist.name
                     },
                     onDeletePlaylist = { playlist ->
                         playlistToDelete = playlist
+                    },
+                    onExportPlaylistsJson = { playlistViewModel.exportPlaylistsJson() },
+                    onImportPlaylistsJson = { jsonText, onDone ->
+                        playlistViewModel.importPlaylistsJson(jsonText, onDone)
                     }
                 )
             }
@@ -680,7 +702,7 @@ fun LarkStyleMusicScreen(
             onDismiss = { songsForPlaylist = emptyList() },
             onPlaylistSelected = { playlist ->
                 val count = songsForPlaylist.size
-                songsForPlaylist.forEach { playlistViewModel.addSongToPlaylist(playlist.id, it.id) }
+                playlistViewModel.addSongsToPlaylist(playlist.id, songsForPlaylist.map { it.id })
                 songsForPlaylist = emptyList()
                 Toast.makeText(context, "$count canciones añadidas a ${playlist.name}", Toast.LENGTH_SHORT).show()
             },
@@ -1702,13 +1724,84 @@ private fun LarkSongRow(
 @Composable
 private fun PlaylistsContent(
     playlists: List<Playlist>,
+    smartPlaylists: List<Playlist> = emptyList(),
     allSongs: List<Song>,
+    searchQuery: String = "",
     onCreatePlaylist: () -> Unit,
     onPlaylistClick: (Playlist) -> Unit,
     onPlayPlaylist: (Playlist) -> Unit,
+    onDuplicatePlaylist: (Playlist) -> Unit = {},
     onRenamePlaylist: (Playlist) -> Unit,
-    onDeletePlaylist: (Playlist) -> Unit
+    onDeletePlaylist: (Playlist) -> Unit,
+    onExportPlaylistsJson: () -> String = { "[]" },
+    onImportPlaylistsJson: (String, (Int) -> Unit) -> Unit = { _, cb -> cb(0) }
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val validSongIds = remember(allSongs) { allSongs.map { it.id }.toSet() }
+    val songMap = remember(allSongs) { allSongs.associateBy { it.id } }
+    var sortMode by remember { mutableIntStateOf(0) } // 0=Recientes, 1=A-Z, 2=Más canciones
+
+    val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val json = onExportPlaylistsJson()
+                    context.contentResolver.openOutputStream(uri)?.use { out ->
+                        out.write(json.toByteArray(Charsets.UTF_8))
+                    }
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        Toast.makeText(context, "Playlists exportadas correctamente", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        Toast.makeText(context, "Error al exportar: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: ""
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onImportPlaylistsJson(text) { count ->
+                            val msg = when {
+                                count > 0 -> "$count playlists importadas"
+                                count == 0 -> "No se encontraron playlists nuevas en el archivo"
+                                else -> "Archivo JSON inválido"
+                            }
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        Toast.makeText(context, "Error al importar: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    val visiblePlaylists = remember(playlists, searchQuery, sortMode, validSongIds) {
+        val filtered = if (searchQuery.isBlank()) playlists else {
+            val q = searchQuery.trim().lowercase()
+            playlists.filter { it.name.lowercase().contains(q) }
+        }
+        when (sortMode) {
+            1 -> filtered.sortedBy { it.name.lowercase() }
+            2 -> filtered.sortedByDescending { pl -> pl.songIds.count { it in validSongIds } }
+            else -> filtered.sortedByDescending { it.dateCreated }
+        }
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -1744,7 +1837,88 @@ private fun PlaylistsContent(
             }
         }
 
-        if (playlists.isEmpty()) {
+        // Barra rápida: Exportar / Importar / Ordenar playlists
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = { exportLauncher.launch("omnivault_playlists.json") },
+                    enabled = playlists.isNotEmpty(),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Icon(Icons.Rounded.Upload, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Exportar", fontSize = 11.sp)
+                }
+                OutlinedButton(
+                    onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Importar", fontSize = 11.sp)
+                }
+                Spacer(Modifier.weight(1f))
+                TextButton(
+                    onClick = { sortMode = (sortMode + 1) % 3 },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Icon(Icons.Rounded.Sort, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF00E5FF))
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = when (sortMode) { 1 -> "A-Z"; 2 -> "Más canciones"; else -> "Recientes" },
+                        fontSize = 11.sp,
+                        color = Color(0xFF00E5FF)
+                    )
+                }
+            }
+        }
+
+        // Playlists Inteligentes automáticas
+        if (smartPlaylists.isNotEmpty() && searchQuery.isBlank()) {
+            item {
+                Text(
+                    text = "PLAYLISTS INTELIGENTES",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF00E5FF),
+                    letterSpacing = 1.sp
+                )
+            }
+            item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(smartPlaylists, key = { it.id }) { smart ->
+                        val iconVec = when (smart.id) {
+                            -1L -> Icons.Rounded.NewReleases
+                            -2L -> Icons.Rounded.TrendingUp
+                            else -> Icons.Rounded.Favorite
+                        }
+                        Surface(
+                            onClick = { onPlaylistClick(smart) },
+                            color = Color(0xFF141923),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.28f)),
+                            modifier = Modifier.width(156.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Icon(iconVec, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(22.dp))
+                                Spacer(Modifier.height(8.dp))
+                                Text(smart.name, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("${smart.songIds.size} canciones", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (visiblePlaylists.isEmpty()) {
             item {
                 Box(
                     modifier = Modifier
@@ -1761,7 +1935,7 @@ private fun PlaylistsContent(
                         )
                         Spacer(Modifier.height(10.dp))
                         Text(
-                            text = "No tienes playlists todavía",
+                            text = if (searchQuery.isBlank()) "No tienes playlists todavía" else "Sin resultados para \"$searchQuery\"",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.Gray
                         )
@@ -1770,11 +1944,14 @@ private fun PlaylistsContent(
             }
         }
 
-        items(playlists, key = { it.id }) { playlist ->
+        items(visiblePlaylists, key = { it.id }) { playlist ->
             var itemMenuExpanded by remember { mutableStateOf(false) }
-            val count = if (playlist.songIds.isNotEmpty()) playlist.songIds.size else playlist.songCount
-            val firstArt = remember(playlist.songIds, allSongs) {
-                allSongs.firstOrNull { playlist.songIds.contains(it.id) && it.albumArtUri != null }?.albumArtUri
+            val validCount = remember(playlist.songIds, validSongIds) {
+                if (playlist.songIds.isNotEmpty()) playlist.songIds.count { it in validSongIds } else playlist.songCount
+            }
+            val firstArt = remember(playlist.artworkUri, playlist.songIds, songMap) {
+                playlist.artworkUri?.let { android.net.Uri.parse(it) }
+                    ?: playlist.songIds.firstNotNullOfOrNull { songMap[it]?.albumArtUri }
             }
 
             Surface(
@@ -1813,8 +1990,8 @@ private fun PlaylistsContent(
                     }
                     Spacer(Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(playlist.name, fontWeight = FontWeight.SemiBold, color = Color.White)
-                        Text("$count canciones", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text(playlist.name, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("$validCount canciones", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     }
 
                     Box {
@@ -1837,6 +2014,14 @@ private fun PlaylistsContent(
                                 onClick = {
                                     itemMenuExpanded = false
                                     onPlayPlaylist(playlist)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Duplicar") },
+                                leadingIcon = { Icon(Icons.Rounded.ContentCopy, contentDescription = null) },
+                                onClick = {
+                                    itemMenuExpanded = false
+                                    onDuplicatePlaylist(playlist)
                                 }
                             )
                             DropdownMenuItem(

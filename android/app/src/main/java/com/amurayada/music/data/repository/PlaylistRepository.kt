@@ -30,16 +30,18 @@ class PlaylistRepository(private val context: Context) {
                         val id = jsonObject.getLong("id")
                         val name = jsonObject.getString("name")
                         val dateCreated = jsonObject.optLong("dateCreated", System.currentTimeMillis())
+                        val artworkUri = jsonObject.optString("artworkUri", "").takeIf { it.isNotBlank() }
                         
                         val songIdsJsonArray = jsonObject.optJSONArray("songIds")
                         val songIds = mutableListOf<Long>()
                         if (songIdsJsonArray != null) {
                             for (j in 0 until songIdsJsonArray.length()) {
-                                songIds.add(songIdsJsonArray.getLong(j))
+                                val sid = songIdsJsonArray.optLong(j, -1L)
+                                if (sid >= 0L) songIds.add(sid)
                             }
                         }
                         
-                        loadedPlaylists.add(Playlist(id, name, songIds, dateCreated))
+                        loadedPlaylists.add(Playlist(id = id, name = name, songIds = songIds, dateCreated = dateCreated, artworkUri = artworkUri))
                     }
                     
                     _playlists.value = loadedPlaylists
@@ -62,6 +64,9 @@ class PlaylistRepository(private val context: Context) {
                     jsonObject.put("id", playlist.id)
                     jsonObject.put("name", playlist.name)
                     jsonObject.put("dateCreated", playlist.dateCreated)
+                    if (!playlist.artworkUri.isNullOrBlank()) {
+                        jsonObject.put("artworkUri", playlist.artworkUri)
+                    }
                     
                     val songIdsJsonArray = JSONArray()
                     playlist.songIds.forEach { songId ->
@@ -166,6 +171,72 @@ class PlaylistRepository(private val context: Context) {
         savePlaylists()
     }
 
+    suspend fun removeSongsFromPlaylist(playlistId: Long, songIds: List<Long>) {
+        if (songIds.isEmpty()) return
+        val toRemove = songIds.toSet()
+        _playlists.value = _playlists.value.map { playlist ->
+            if (playlist.id == playlistId) {
+                playlist.copy(songIds = playlist.songIds.filterNot { it in toRemove })
+            } else {
+                playlist
+            }
+        }
+        savePlaylists()
+    }
+
+    suspend fun moveSongToBoundary(playlistId: Long, songId: Long, toTop: Boolean) {
+        _playlists.value = _playlists.value.map { playlist ->
+            if (playlist.id == playlistId && playlist.songIds.contains(songId)) {
+                val mutable = playlist.songIds.toMutableList()
+                mutable.remove(songId)
+                if (toTop) mutable.add(0, songId) else mutable.add(songId)
+                playlist.copy(songIds = mutable)
+            } else {
+                playlist
+            }
+        }
+        savePlaylists()
+    }
+
+    suspend fun duplicatePlaylist(playlistId: Long) {
+        val original = _playlists.value.find { it.id == playlistId } ?: return
+        val copy = Playlist(
+            id = System.currentTimeMillis(),
+            name = "${original.name} (Copia)",
+            songIds = original.songIds.toList(),
+            dateCreated = System.currentTimeMillis(),
+            artworkUri = original.artworkUri
+        )
+        _playlists.value = _playlists.value + copy
+        savePlaylists()
+    }
+
+    suspend fun updatePlaylistArtwork(playlistId: Long, sourceUri: android.net.Uri?) {
+        val savedPath: String? = withContext(Dispatchers.IO) {
+            val coversDir = File(context.filesDir, "playlist_covers").apply { mkdirs() }
+            val destFile = File(coversDir, "cover_${playlistId}.jpg")
+            if (sourceUri == null) {
+                if (destFile.exists()) destFile.delete()
+                return@withContext null
+            }
+            try {
+                context.contentResolver.openInputStream(sourceUri)?.use { input ->
+                    destFile.outputStream().use { output ->
+                        input.copyTo(output, bufferSize = 65_536)
+                    }
+                }
+                if (destFile.exists() && destFile.length() > 0L) android.net.Uri.fromFile(destFile).toString() else null
+            } catch (e: Exception) {
+                e.printStackTrace()
+                null
+            }
+        }
+        _playlists.value = _playlists.value.map { playlist ->
+            if (playlist.id == playlistId) playlist.copy(artworkUri = savedPath) else playlist
+        }
+        savePlaylists()
+    }
+
     fun exportPlaylistsJson(): String {
         val jsonArray = JSONArray()
         _playlists.value.forEach { playlist ->
@@ -173,6 +244,9 @@ class PlaylistRepository(private val context: Context) {
             obj.put("id", playlist.id)
             obj.put("name", playlist.name)
             obj.put("dateCreated", playlist.dateCreated)
+            if (!playlist.artworkUri.isNullOrBlank()) {
+                obj.put("artworkUri", playlist.artworkUri)
+            }
             val ids = JSONArray()
             playlist.songIds.forEach { ids.put(it) }
             obj.put("songIds", ids)
@@ -189,22 +263,26 @@ class PlaylistRepository(private val context: Context) {
             var imported = 0
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
-                val id = obj.optLong("id", System.currentTimeMillis() + i)
+                var id = obj.optLong("id", System.currentTimeMillis() + i)
+                if (id <= 0L || id in existingIds) {
+                    id = System.currentTimeMillis() + i + 1
+                    while (id in existingIds) id++
+                }
                 val name = obj.optString("name", "").trim()
                 if (name.isEmpty()) continue
                 val dateCreated = obj.optLong("dateCreated", System.currentTimeMillis())
+                val artworkUri = obj.optString("artworkUri", "").takeIf { it.isNotBlank() && it.startsWith("http") }
                 val songIdsArray = obj.optJSONArray("songIds")
                 val songIds = mutableListOf<Long>()
                 if (songIdsArray != null) {
                     for (j in 0 until songIdsArray.length()) {
-                        songIds.add(songIdsArray.getLong(j))
+                        val sid = songIdsArray.optLong(j, -1L)
+                        if (sid >= 0L) songIds.add(sid)
                     }
                 }
-                if (id !in existingIds) {
-                    current.add(Playlist(id = id, name = name, songIds = songIds, dateCreated = dateCreated))
-                    existingIds.add(id)
-                    imported++
-                }
+                current.add(Playlist(id = id, name = name, songIds = songIds, dateCreated = dateCreated, artworkUri = artworkUri))
+                existingIds.add(id)
+                imported++
             }
             if (imported > 0) {
                 _playlists.value = current

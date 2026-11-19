@@ -1033,21 +1033,67 @@ fun MusicPlayerApp(
                 ) { backStackEntry ->
                     val playlistId = backStackEntry.arguments?.getLong("playlistId") ?: 0L
                     val playlists by playlistViewModel.playlists.collectAsState()
-                    val playlist = playlists.find { it.id == playlistId }
-                    val playlistSongs = playlist?.songIds?.mapNotNull { songId ->
-                        songs.find { it.id == songId }
-                    } ?: emptyList()
+                    val cleanAudioSongs = remember(songs, libraryViewModel.hiddenSongIds, libraryViewModel.deletedSongPaths) {
+                        songs.filter { s ->
+                            val lower = s.path.lowercase()
+                            val isVideo = s.mimeType?.startsWith("video/", ignoreCase = true) == true ||
+                                s.album.equals("Video", ignoreCase = true) ||
+                                s.path.contains("/video/", ignoreCase = true) ||
+                                lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".webm")
+                            !isVideo &&
+                                !libraryViewModel.hiddenSongIds.contains(s.id) &&
+                                (s.path.isBlank() || !libraryViewModel.deletedSongPaths.contains(s.path))
+                        }
+                    }
+                    val songMap = remember(cleanAudioSongs) { cleanAudioSongs.associateBy { it.id } }
+                    val playlist = remember(playlistId, playlists, cleanAudioSongs, playbackViewModel.mostPlayed, playbackViewModel.favorites) {
+                        when (playlistId) {
+                            -1L -> com.amurayada.music.data.model.Playlist(
+                                id = -1L,
+                                name = "Añadidas recientemente",
+                                songIds = cleanAudioSongs.sortedByDescending { it.dateAdded }.take(50).map { it.id },
+                                dateCreated = 0L
+                            )
+                            -2L -> com.amurayada.music.data.model.Playlist(
+                                id = -2L,
+                                name = "Más reproducidas",
+                                songIds = playbackViewModel.mostPlayed.mapNotNull { songMap[it.id]?.id }.take(50),
+                                dateCreated = 0L
+                            )
+                            -3L -> com.amurayada.music.data.model.Playlist(
+                                id = -3L,
+                                name = "Favoritas",
+                                songIds = playbackViewModel.favorites.mapNotNull { songMap[it.id]?.id },
+                                dateCreated = 0L
+                            )
+                            else -> playlists.find { it.id == playlistId }
+                        }
+                    }
+                    val playlistSongs = remember(playlist, songMap) {
+                        playlist?.songIds?.mapNotNull { songMap[it] } ?: emptyList()
+                    }
 
                     com.amurayada.music.ui.screens.playlist.PlaylistDetailScreen(
                         playlist = playlist,
                         songs = playlistSongs,
-                        allSongs = songs,
+                        allSongs = cleanAudioSongs,
+                        currentSong = currentSong,
+                        isPlaying = playbackState is com.amurayada.music.data.model.PlaybackState.Playing,
+                        isReadOnly = playlistId < 0L,
                         onBackClick = { navController.popBackStack() },
                         onSongClick = { song ->
                             playbackViewModel.playSong(song, playlistSongs)
                         },
+                        onPlayNext = { song -> playbackViewModel.playNext(song) },
+                        onAddToQueue = { song -> playbackViewModel.addToQueue(song) },
+                        onMoveToBoundary = { songId, toTop ->
+                            playlistViewModel.moveSongToBoundary(playlistId, songId, toTop)
+                        },
                         onRemoveSong = { songId ->
                             playlistViewModel.removeSongFromPlaylist(playlistId, songId)
+                        },
+                        onRemoveSongs = { batchIds ->
+                            playlistViewModel.removeSongsFromPlaylist(playlistId, batchIds)
                         },
                         onAddSong = { song ->
                             playlistViewModel.addSongToPlaylist(playlistId, song.id)
@@ -1067,6 +1113,12 @@ fun MusicPlayerApp(
                         onDeletePlaylist = {
                             playlistViewModel.deletePlaylist(playlistId)
                             navController.popBackStack()
+                        },
+                        onDuplicatePlaylist = {
+                            playlistViewModel.duplicatePlaylist(playlistId)
+                        },
+                        onChangeArtwork = { uri ->
+                            playlistViewModel.updatePlaylistArtwork(playlistId, uri)
                         },
                         onAddPlaylistToQueue = { ordered ->
                             ordered.forEach { playbackViewModel.addToQueue(it) }
