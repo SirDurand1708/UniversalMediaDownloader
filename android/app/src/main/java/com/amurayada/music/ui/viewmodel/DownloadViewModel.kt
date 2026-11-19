@@ -165,7 +165,7 @@ class DownloadViewModel(
                         val songId = state.processId.removePrefix("song_").toLongOrNull()
                             ?: Math.abs(state.url.hashCode().toLong())
                         val mappedStatus = when (state.status) {
-                            DownloadStatus.QUEUED, DownloadStatus.FETCHING_METADATA -> AppDownloadStatus.QUEUED
+                            DownloadStatus.QUEUED, DownloadStatus.FETCHING_METADATA, DownloadStatus.PAUSED -> AppDownloadStatus.QUEUED
                             DownloadStatus.DOWNLOADING, DownloadStatus.PROCESSING -> AppDownloadStatus.DOWNLOADING
                             DownloadStatus.COMPLETED -> AppDownloadStatus.COMPLETED
                             DownloadStatus.CANCELLED -> AppDownloadStatus.CANCELLED

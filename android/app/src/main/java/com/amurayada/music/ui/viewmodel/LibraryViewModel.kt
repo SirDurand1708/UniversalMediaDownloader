@@ -221,7 +221,7 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                 }
             } catch (req: MediaRepository.RequiresPermissionException) {
                 pendingTagEdit = PendingTagEdit(song, cleanTitle, cleanArtist, cleanAlbum, onResult)
-                _permissionEvent.value = IntentSenderRequest.Builder(req.intentSender).build()
+                _permissionEvent.value = androidx.activity.result.IntentSenderRequest.Builder(req.intentSender).build()
             } catch (e: Exception) {
                 onResult(false, e.localizedMessage ?: "No se pudieron editar las etiquetas")
             }

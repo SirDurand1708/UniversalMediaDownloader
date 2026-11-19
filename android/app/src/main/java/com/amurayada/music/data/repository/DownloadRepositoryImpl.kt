@@ -62,7 +62,8 @@ class DownloadRepositoryImpl(
             ) { state ->
                 val mappedStatus = when (state.status) {
                     com.omnivault.media.model.DownloadStatus.QUEUED,
-                    com.omnivault.media.model.DownloadStatus.FETCHING_METADATA -> DownloadStatus.QUEUED
+                    com.omnivault.media.model.DownloadStatus.FETCHING_METADATA,
+                    com.omnivault.media.model.DownloadStatus.PAUSED -> DownloadStatus.QUEUED
                     com.omnivault.media.model.DownloadStatus.DOWNLOADING,
                     com.omnivault.media.model.DownloadStatus.PROCESSING -> DownloadStatus.DOWNLOADING
                     com.omnivault.media.model.DownloadStatus.COMPLETED -> DownloadStatus.COMPLETED
