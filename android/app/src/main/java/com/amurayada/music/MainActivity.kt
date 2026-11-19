@@ -124,6 +124,9 @@ class MainActivity : ComponentActivity() {
                 }
             }
         } else if ((requestCode == 1003 || requestCode == 1002) && resultCode == android.app.Activity.RESULT_OK) {
+            if (requestCode == 1003) {
+                libraryViewModel.retryPendingTagEdit(this)
+            }
             libraryViewModel.loadLibrary()
         }
     }

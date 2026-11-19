@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -97,18 +98,32 @@ fun LarkStyleMusicScreen(
     var renamePlaylistText by remember { mutableStateOf("") }
     var playlistToDelete by remember { mutableStateOf<Playlist?>(null) }
     var songToDelete by remember { mutableStateOf<Song?>(null) }
+    var songToEditTags by remember { mutableStateOf<Song?>(null) }
+    var songForDetails by remember { mutableStateOf<Song?>(null) }
+    var showHiddenSongsDialog by remember { mutableStateOf(false) }
+    var isRefreshing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(libraryViewModel.isLoading) {
+        if (!libraryViewModel.isLoading) {
+            isRefreshing = false
+        }
+    }
 
     val rawSongs = remember(
         libraryViewModel.songs,
         libraryViewModel.hiddenSongIds,
-        libraryViewModel.deletedSongPaths
+        libraryViewModel.deletedSongPaths,
+        libraryViewModel.filterShortAudio
     ) {
         libraryViewModel.songs.filter {
             val lower = it.path.lowercase()
-            val isVideo = it.album.equals("Video", ignoreCase = true) ||
+            val isVideo = it.mimeType?.startsWith("video/", ignoreCase = true) == true ||
+                it.album.equals("Video", ignoreCase = true) ||
                 it.path.contains("/video/", ignoreCase = true) ||
                 lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".webm")
+            val passesDuration = !libraryViewModel.filterShortAudio || it.duration <= 0L || it.duration >= 15_000L
             !isVideo &&
+                passesDuration &&
                 !libraryViewModel.hiddenSongIds.contains(it.id) &&
                 (it.path.isBlank() || !libraryViewModel.deletedSongPaths.contains(it.path))
         }
@@ -363,9 +378,23 @@ fun LarkStyleMusicScreen(
                     songs = displayedSongs,
                     currentSong = currentSong,
                     isPlaying = isPlaying,
+                    currentSort = currentSort,
+                    lrcKeys = libraryViewModel.lrcKeys,
+                    hiddenSongsCount = libraryViewModel.hiddenSongs.size,
+                    isRefreshing = isRefreshing,
+                    onRefresh = {
+                        isRefreshing = true
+                        libraryViewModel.loadLibrary()
+                    },
+                    onShowHiddenSongs = { showHiddenSongsDialog = true },
                     onSongClick = { song ->
                         if (isSearchActive && searchQuery.isNotBlank()) saveSearchQuery(searchQuery)
                         playbackViewModel.playSong(song, displayedSongs)
+                    },
+                    onPlayAll = {
+                        if (displayedSongs.isNotEmpty()) {
+                            playbackViewModel.playSong(displayedSongs.first(), displayedSongs)
+                        }
                     },
                     onShuffle = {
                         if (displayedSongs.isNotEmpty()) {
@@ -373,6 +402,8 @@ fun LarkStyleMusicScreen(
                             playbackViewModel.playSong(shuffled.first(), shuffled)
                         }
                     },
+                    onEditTags = { song -> songToEditTags = song },
+                    onShowDetails = { song -> songForDetails = song },
                     onPlayNext = { song ->
                         playbackViewModel.playNext(song)
                         Toast.makeText(context, "Se reproducirá a continuación", Toast.LENGTH_SHORT).show()
@@ -597,6 +628,24 @@ fun LarkStyleMusicScreen(
                             Text(sort.label, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { libraryViewModel.setFilterShortAudio(!libraryViewModel.filterShortAudio) }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Ocultar audios cortos", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text("Filtra tonos y notas (< 15 s)", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        }
+                        Switch(
+                            checked = libraryViewModel.filterShortAudio,
+                            onCheckedChange = { libraryViewModel.setFilterShortAudio(it) }
+                        )
+                    }
                 }
             },
             confirmButton = {
@@ -787,18 +836,163 @@ fun LarkStyleMusicScreen(
             }
         )
     }
+
+    // Diálogo Editor de Etiquetas (JAudioTagger + MediaStore + DownloadDatabase)
+    songToEditTags?.let { song ->
+        var editTitle by remember(song.id) { mutableStateOf(song.title) }
+        var editArtist by remember(song.id) { mutableStateOf(song.artist) }
+        var editAlbum by remember(song.id) { mutableStateOf(song.album) }
+        AlertDialog(
+            onDismissRequest = { songToEditTags = null },
+            title = { Text("Editar etiquetas", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = editTitle,
+                        onValueChange = { editTitle = it },
+                        label = { Text("Título") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = editArtist,
+                        onValueChange = { editArtist = it },
+                        label = { Text("Artista") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = editAlbum,
+                        onValueChange = { editAlbum = it },
+                        label = { Text("Álbum") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val target = song
+                        songToEditTags = null
+                        libraryViewModel.updateSongMetadata(
+                            context = context,
+                            song = target,
+                            newTitle = editTitle,
+                            newArtist = editArtist,
+                            newAlbum = editAlbum
+                        ) { _, msg ->
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                ) {
+                    Text("Guardar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { songToEditTags = null }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // Diálogo Detalles del archivo
+    songForDetails?.let { song ->
+        val fmtLabel = resolveAudioFormatLabel(song)
+        val durLabel = if (song.duration > 0L) com.amurayada.music.ui.screens.nowplaying.formatDuration(song.duration) else "Desconocida"
+        val sizeLabel = if (song.fileSize > 0L) com.omnivault.media.utils.StorageHelper.formatFileSize(song.fileSize) else "No disponible"
+        AlertDialog(
+            onDismissRequest = { songForDetails = null },
+            title = { Text("Detalles del archivo", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Título: ${song.title}", style = MaterialTheme.typography.bodySmall)
+                    Text("Artista: ${song.artist}", style = MaterialTheme.typography.bodySmall)
+                    Text("Álbum: ${song.album}", style = MaterialTheme.typography.bodySmall)
+                    Text("Formato: $fmtLabel${song.mimeType?.let { " ($it)" } ?: ""}", style = MaterialTheme.typography.bodySmall)
+                    Text("Duración: $durLabel", style = MaterialTheme.typography.bodySmall)
+                    Text("Tamaño: $sizeLabel", style = MaterialTheme.typography.bodySmall)
+                    Text("Ubicación: ${song.path}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { songForDetails = null }) {
+                    Text("Cerrar")
+                }
+            }
+        )
+    }
+
+    // Gestor ligero de canciones ocultadas
+    if (showHiddenSongsDialog) {
+        val hiddenList = libraryViewModel.hiddenSongs
+        AlertDialog(
+            onDismissRequest = { showHiddenSongsDialog = false },
+            title = { Text("Canciones ocultas (${hiddenList.size})", fontWeight = FontWeight.Bold) },
+            text = {
+                if (hiddenList.isEmpty()) {
+                    Text("No hay canciones ocultas.")
+                } else {
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(hiddenList, key = { it.id }) { hSong ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(hSong.title, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(hSong.artist, style = MaterialTheme.typography.labelSmall, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                TextButton(onClick = { libraryViewModel.unhideSong(hSong.id) }) {
+                                    Text("Restaurar")
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (hiddenList.isNotEmpty()) {
+                    Button(onClick = {
+                        libraryViewModel.unhideAllSongs()
+                        showHiddenSongsDialog = false
+                        Toast.makeText(context, "Todas las canciones restauradas", Toast.LENGTH_SHORT).show()
+                    }) {
+                        Text("Restaurar todas")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showHiddenSongsDialog = false }) {
+                    Text("Cerrar")
+                }
+            }
+        )
+    }
 }
 
 /**
  * Vista de lista de canciones idéntica a Lark Player:
  * Fila compacta con carátula, título en negrita, insignia [LETRAS] y 3 puntos de opciones.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SongsListContent(
     songs: List<Song>,
     currentSong: Song?,
     isPlaying: Boolean,
+    currentSort: SongSort = SongSort.RECENT,
+    lrcKeys: Set<String> = emptySet(),
+    hiddenSongsCount: Int = 0,
+    isRefreshing: Boolean = false,
+    onRefresh: () -> Unit = {},
+    onShowHiddenSongs: () -> Unit = {},
     onSongClick: (Song) -> Unit,
+    onPlayAll: () -> Unit = {},
     onShuffle: () -> Unit,
     onPlayNext: (Song) -> Unit,
     onAddToQueue: (Song) -> Unit = {},
@@ -807,29 +1001,43 @@ private fun SongsListContent(
     onAddMultipleToPlaylist: (List<Song>) -> Unit = {},
     onHideMultiple: (List<Song>) -> Unit = {},
     onDeleteMultiple: (List<Song>) -> Unit = {},
+    onEditTags: (Song) -> Unit = {},
+    onShowDetails: (Song) -> Unit = {},
     onStandardize: (Song) -> Unit,
     onShare: (Song) -> Unit,
     onHide: (Song) -> Unit,
     onDelete: (Song) -> Unit
 ) {
     if (songs.isEmpty()) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier.fillMaxSize()
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    imageVector = Icons.Rounded.MusicNote,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = Color.Gray.copy(alpha = 0.5f)
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = "No se encontraron canciones locales",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Color.Gray
-                )
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Rounded.MusicNote,
+                        contentDescription = null,
+                        modifier = Modifier.size(64.dp),
+                        tint = Color.Gray.copy(alpha = 0.5f)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = "No se encontraron canciones locales",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.Gray
+                    )
+                    if (hiddenSongsCount > 0) {
+                        Spacer(Modifier.height(12.dp))
+                        TextButton(onClick = onShowHiddenSongs) {
+                            Text("Ver canciones ocultas ($hiddenSongsCount)", color = Color(0xFF00E5FF))
+                        }
+                    }
+                }
             }
         }
         return
@@ -840,12 +1048,21 @@ private fun SongsListContent(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val showScrollToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 12 } }
+    val showAlphabetIndex = (currentSort == SongSort.NAME_ASC || currentSort == SongSort.NAME_DESC) && songs.size > 30
+    val currentSongIndex = remember(songs, currentSong?.id) {
+        if (currentSong == null) -1 else songs.indexOfFirst { it.id == currentSong.id }
+    }
 
     BackHandler(enabled = inSelectionMode) {
         selectedIds.clear()
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = onRefresh,
+        modifier = Modifier.fillMaxSize()
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
@@ -937,7 +1154,7 @@ private fun SongsListContent(
                     }
                 }
             } else {
-                // Cabecera rápida: Total de pistas y botón Aleatorio
+                // Cabecera rápida: Total de pistas + acciones rápidas
                 item {
                     Row(
                         modifier = Modifier
@@ -946,36 +1163,95 @@ private fun SongsListContent(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = "${songs.size} canciones",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White.copy(alpha = 0.7f)
-                        )
-
-                        Surface(
-                            onClick = onShuffle,
-                            color = Color(0xFF141923),
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF263248))
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Shuffle,
-                                    contentDescription = null,
-                                    tint = Color(0xFF00E5FF),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(Modifier.width(6.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "${songs.size} canciones",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White.copy(alpha = 0.7f),
+                                maxLines = 1
+                            )
+                            if (hiddenSongsCount > 0) {
                                 Text(
-                                    text = "Aleatorio",
+                                    text = "Ocultas ($hiddenSongsCount)",
                                     style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = Color(0xFF00E5FF),
+                                    modifier = Modifier.clickable { onShowHiddenSongs() }
                                 )
+                            }
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (currentSongIndex >= 0) {
+                                Surface(
+                                    onClick = { scope.launch { listState.animateScrollToItem(currentSongIndex + 1) } },
+                                    color = Color(0xFF141923),
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF263248))
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.MyLocation,
+                                        contentDescription = "Ir a canción actual",
+                                        tint = Color(0xFF00E5FF),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp).size(16.dp)
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                onClick = onPlayAll,
+                                color = Color(0xFF141923),
+                                shape = RoundedCornerShape(12.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF263248))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.PlayArrow,
+                                        contentDescription = null,
+                                        tint = Color(0xFF00E5FF),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = "Todo",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                onClick = onShuffle,
+                                color = Color(0xFF141923),
+                                shape = RoundedCornerShape(12.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF263248))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Shuffle,
+                                        contentDescription = null,
+                                        tint = Color(0xFF00E5FF),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = "Aleatorio",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
                             }
                         }
                     }
@@ -991,6 +1267,8 @@ private fun SongsListContent(
                     isPlaying = isCurrent && isPlaying,
                     inSelectionMode = inSelectionMode,
                     isSelected = isSelected,
+                    lrcKeys = lrcKeys,
+                    showAlphabetPadding = showAlphabetIndex,
                     onClick = {
                         if (inSelectionMode) {
                             if (isSelected) selectedIds.remove(song.id) else selectedIds.add(song.id)
@@ -1004,6 +1282,8 @@ private fun SongsListContent(
                     onPlayNext = { onPlayNext(song) },
                     onAddToQueue = { onAddToQueue(song) },
                     onAddToPlaylist = { onAddToPlaylist(song) },
+                    onEditTags = { onEditTags(song) },
+                    onShowDetails = { onShowDetails(song) },
                     onStandardize = { onStandardize(song) },
                     onShare = { onShare(song) },
                     onHide = { onHide(song) },
@@ -1012,8 +1292,8 @@ private fun SongsListContent(
             }
         }
 
-        // Índice alfabético A-Z arrastrable cuando hay más de 30 canciones
-        if (songs.size > 30) {
+        // Índice alfabético A-Z arrastrable solo en orden alfabético cuando hay > 30 canciones
+        if (showAlphabetIndex) {
             val alphabet = remember { ('A'..'Z').map { it.toString() } }
             var activeLetter by remember { mutableStateOf<String?>(null) }
             var barHeightPx by remember { mutableIntStateOf(1) }
@@ -1086,7 +1366,7 @@ private fun SongsListContent(
             exit = fadeOut() + scaleOut(),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(16.dp)
+                .padding(end = if (showAlphabetIndex) 36.dp else 16.dp, bottom = 16.dp)
         ) {
             SmallFloatingActionButton(
                 onClick = { scope.launch { listState.animateScrollToItem(0) } },
@@ -1095,6 +1375,23 @@ private fun SongsListContent(
             ) {
                 Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "Ir arriba")
             }
+        }
+        }
+    }
+}
+
+private fun resolveAudioFormatLabel(song: Song): String {
+    val mime = song.mimeType?.lowercase() ?: ""
+    return when {
+        mime.contains("flac") -> "FLAC"
+        mime.contains("mpeg") || mime.contains("mp3") -> "MP3"
+        mime.contains("mp4") || mime.contains("m4a") || mime.contains("aac") -> "M4A"
+        mime.contains("ogg") || mime.contains("vorbis") -> "OGG"
+        mime.contains("opus") -> "OPUS"
+        mime.contains("wav") -> "WAV"
+        else -> {
+            val ext = song.path.substringAfterLast('.', "").uppercase()
+            if (ext in setOf("MP3", "M4A", "FLAC", "WAV", "OGG", "OPUS", "AAC")) ext else "AUDIO"
         }
     }
 }
@@ -1110,11 +1407,15 @@ private fun LarkSongRow(
     isPlaying: Boolean,
     inSelectionMode: Boolean = false,
     isSelected: Boolean = false,
+    lrcKeys: Set<String> = emptySet(),
+    showAlphabetPadding: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit = {},
     onPlayNext: () -> Unit,
     onAddToQueue: () -> Unit = {},
     onAddToPlaylist: () -> Unit,
+    onEditTags: () -> Unit = {},
+    onShowDetails: () -> Unit = {},
     onStandardize: () -> Unit,
     onShare: () -> Unit,
     onHide: () -> Unit,
@@ -1123,17 +1424,19 @@ private fun LarkSongRow(
     val context = LocalContext.current
     var menuExpanded by remember { mutableStateOf(false) }
 
-    // Detección en memoria con caché O(1) de archivo de letra (.lrc) para scrolling fluido a 120 FPS
-    val hasLyrics = remember(song.path) {
-        if (!song.path.startsWith("/")) return@remember false
-        lyricsCache.getOrPut(song.path) {
-            try {
-                val lrcFile = File(song.path.substringBeforeLast(".") + ".lrc")
-                lrcFile.exists() && lrcFile.length() > 0L
-            } catch (_: Exception) {
-                false
-            }
+    // Lookup O(1) sin I/O en el hilo principal, compatible con rutas físicas y content://
+    val hasLyrics = remember(song.path, song.title, lrcKeys) {
+        if (lrcKeys.isEmpty()) false
+        else {
+            val byPath = song.path.startsWith("/") && lrcKeys.contains(song.path.substringBeforeLast("."))
+            val byTitle = lrcKeys.contains(song.title.trim().lowercase()) ||
+                lrcKeys.contains(com.omnivault.media.utils.FilenameStandardizer.standardizeTitle(song.title).lowercase())
+            byPath || byTitle
         }
+    }
+    val formatLabel = remember(song.mimeType, song.path) { resolveAudioFormatLabel(song) }
+    val durationLabel = remember(song.duration) {
+        if (song.duration > 0L) com.amurayada.music.ui.screens.nowplaying.formatDuration(song.duration) else ""
     }
 
     Row(
@@ -1147,7 +1450,12 @@ private fun LarkSongRow(
                     else -> Color.Transparent
                 }
             )
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(
+                start = 16.dp,
+                end = if (showAlphabetPadding) 26.dp else 12.dp,
+                top = 8.dp,
+                bottom = 8.dp
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (inSelectionMode) {
@@ -1253,7 +1561,37 @@ private fun LarkSongRow(
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.55f),
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+            }
+        }
+
+        Column(
+            horizontalAlignment = Alignment.End,
+            modifier = Modifier.padding(horizontal = 6.dp)
+        ) {
+            if (durationLabel.isNotEmpty()) {
+                Text(
+                    text = durationLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.65f),
+                    fontSize = 10.sp
+                )
+            }
+            Spacer(Modifier.height(2.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Color(0xFF00E5FF).copy(alpha = 0.14f))
+                    .padding(horizontal = 4.dp, vertical = 1.dp)
+            ) {
+                Text(
+                    text = formatLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF00E5FF),
+                    fontSize = 8.sp
                 )
             }
         }
@@ -1303,6 +1641,22 @@ private fun LarkSongRow(
                     onClick = {
                         menuExpanded = false
                         onAddToPlaylist()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Editar etiquetas") },
+                    leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
+                    onClick = {
+                        menuExpanded = false
+                        onEditTags()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Detalles del archivo") },
+                    leadingIcon = { Icon(Icons.Rounded.Info, contentDescription = null) },
+                    onClick = {
+                        menuExpanded = false
+                        onShowDetails()
                     }
                 )
                 DropdownMenuItem(

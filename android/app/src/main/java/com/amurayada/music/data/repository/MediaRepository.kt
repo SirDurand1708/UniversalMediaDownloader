@@ -22,13 +22,20 @@ class MediaRepository(private val context: Context) {
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.DATA,
             MediaStore.Audio.Media.DATE_ADDED,
-            MediaStore.Audio.Media.ALBUM_ID
+            MediaStore.Audio.Media.ALBUM_ID,
+            MediaStore.Audio.Media.MIME_TYPE,
+            MediaStore.Audio.Media.SIZE
         )
 
-        val prefs = context.getSharedPreferences("music_settings", Context.MODE_PRIVATE)
-        val filterShortAudio = prefs.getBoolean("filter_short_audio", true)
+        val omniPrefs = context.getSharedPreferences("omnivault_prefs", Context.MODE_PRIVATE)
+        val musicPrefs = context.getSharedPreferences("music_settings", Context.MODE_PRIVATE)
+        val filterShortAudio = if (omniPrefs.contains("filter_short_audio")) {
+            omniPrefs.getBoolean("filter_short_audio", true)
+        } else {
+            musicPrefs.getBoolean("filter_short_audio", true)
+        }
         val selection = if (filterShortAudio) {
-            "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.SIZE} >= 30000) AND ${MediaStore.Audio.Media.DURATION} >= 30000"
+            "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.SIZE} >= 30000) AND ${MediaStore.Audio.Media.DURATION} >= 15000"
         } else {
             "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.SIZE} >= 30000)"
         }
@@ -49,6 +56,8 @@ class MediaRepository(private val context: Context) {
             val dataColumn = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
             val dateAddedColumn = cursor.getColumnIndex(MediaStore.Audio.Media.DATE_ADDED)
             val albumIdColumn = cursor.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID)
+            val mimeTypeColumn = cursor.getColumnIndex(MediaStore.Audio.Media.MIME_TYPE)
+            val sizeColumn = cursor.getColumnIndex(MediaStore.Audio.Media.SIZE)
 
             if (idColumn == -1) return@use
 
@@ -61,6 +70,8 @@ class MediaRepository(private val context: Context) {
                 val dateAdded = if (dateAddedColumn != -1) cursor.getLong(dateAddedColumn) else 0L
                 val albumId = if (albumIdColumn != -1) cursor.getLong(albumIdColumn) else 0L
                 val rawPath = if (dataColumn != -1) cursor.getString(dataColumn) else null
+                val mimeType = if (mimeTypeColumn != -1) cursor.getString(mimeTypeColumn) else null
+                val fileSize = if (sizeColumn != -1) cursor.getLong(sizeColumn) else 0L
 
                 val albumArtUri = ContentUris.withAppendedId(
                     Uri.parse("content://media/external/audio/albumart"),
@@ -83,7 +94,9 @@ class MediaRepository(private val context: Context) {
                         albumArtUri = albumArtUri,
                         path = if (!rawPath.isNullOrBlank()) rawPath else contentUri,
                         dateAdded = dateAdded,
-                        albumId = albumId
+                        albumId = albumId,
+                        mimeType = mimeType,
+                        fileSize = fileSize
                     )
                 )
             }
@@ -259,13 +272,20 @@ class MediaRepository(private val context: Context) {
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.DATA,
             MediaStore.Audio.Media.DATE_ADDED,
-            MediaStore.Audio.Media.ALBUM_ID
+            MediaStore.Audio.Media.ALBUM_ID,
+            MediaStore.Audio.Media.MIME_TYPE,
+            MediaStore.Audio.Media.SIZE
         )
 
-        val prefs = context.getSharedPreferences("music_settings", Context.MODE_PRIVATE)
-        val filterShortAudio = prefs.getBoolean("filter_short_audio", true)
+        val omniPrefs = context.getSharedPreferences("omnivault_prefs", Context.MODE_PRIVATE)
+        val musicPrefs = context.getSharedPreferences("music_settings", Context.MODE_PRIVATE)
+        val filterShortAudio = if (omniPrefs.contains("filter_short_audio")) {
+            omniPrefs.getBoolean("filter_short_audio", true)
+        } else {
+            musicPrefs.getBoolean("filter_short_audio", true)
+        }
         val selection = if (filterShortAudio) {
-            "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.SIZE} >= 30000) AND ${MediaStore.Audio.Media.DURATION} >= 30000"
+            "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.SIZE} >= 30000) AND ${MediaStore.Audio.Media.DURATION} >= 15000"
         } else {
             "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.SIZE} >= 30000)"
         }
@@ -605,5 +625,115 @@ class MediaRepository(private val context: Context) {
         }
         null
     }
+    /**
+     * Actualiza las etiquetas (Título, Artista, Álbum) de una canción usando JAudioTagger + MediaStore
+     * con soporte completo de Scoped Storage (RecoverableSecurityException en API 29 y createWriteRequest en API 30+).
+     */
+    suspend fun updateSongTags(
+        song: Song,
+        resolvedUri: Uri?,
+        newTitle: String,
+        newArtist: String,
+        newAlbum: String
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val targetUri = resolvedUri ?: if (song.path.startsWith("content://")) Uri.parse(song.path) else null
+        try {
+            org.jaudiotagger.tag.TagOptionSingleton.getInstance().iD3V2Version =
+                org.jaudiotagger.tag.reference.ID3V2Version.ID3_V23
+
+            if (targetUri != null) {
+                val ext = song.path.substringAfterLast('.', "").lowercase().let {
+                    if (it in setOf("mp3", "m4a", "flac", "wav", "ogg", "opus", "aac")) it
+                    else when {
+                        song.mimeType?.contains("mpeg", true) == true -> "mp3"
+                        song.mimeType?.contains("flac", true) == true -> "flac"
+                        song.mimeType?.contains("mp4", true) == true || song.mimeType?.contains("m4a", true) == true -> "m4a"
+                        else -> "mp3"
+                    }
+                }
+                val tempFile = java.io.File(context.cacheDir, "tag_edit_${System.currentTimeMillis()}.$ext")
+                try {
+                    context.contentResolver.openInputStream(targetUri)?.use { input ->
+                        java.io.FileOutputStream(tempFile).use { output ->
+                            input.copyTo(output, bufferSize = 65_536)
+                        }
+                    } ?: return@withContext Result.failure(Exception("No se pudo leer el archivo de audio"))
+
+                    if (tempFile.length() == 0L) {
+                        return@withContext Result.failure(Exception("Archivo temporal vacío"))
+                    }
+
+                    // Intentar editar etiquetas físicas con JAudioTagger si el contenedor es soportado
+                    try {
+                        val audioFile = org.jaudiotagger.audio.AudioFileIO.read(tempFile)
+                        val tag = audioFile.tagOrCreateAndSetDefault
+                        tag.setField(org.jaudiotagger.tag.FieldKey.TITLE, newTitle)
+                        tag.setField(org.jaudiotagger.tag.FieldKey.ARTIST, newArtist)
+                        tag.setField(org.jaudiotagger.tag.FieldKey.ALBUM, newAlbum)
+                        audioFile.commit()
+                    } catch (e: Exception) {
+                        android.util.Log.w("MediaRepo", "JAudioTagger skipped/unsupported for $ext: ${e.message}")
+                    }
+
+                    // Escribir al descriptor solo si tempFile es válido
+                    if (tempFile.exists() && tempFile.length() > 0L) {
+                        context.contentResolver.openFileDescriptor(targetUri, "rwt")?.use { writePfd ->
+                            java.io.FileInputStream(tempFile).use { input ->
+                                java.io.FileOutputStream(writePfd.fileDescriptor).use { output ->
+                                    input.copyTo(output, bufferSize = 65_536)
+                                    output.flush()
+                                }
+                            }
+                        }
+                    }
+                } finally {
+                    try { tempFile.delete() } catch (_: Exception) {}
+                }
+
+                // Actualizar también columnas en MediaStore
+                try {
+                    val cv = android.content.ContentValues().apply {
+                        put(MediaStore.Audio.Media.TITLE, newTitle)
+                        put(MediaStore.Audio.Media.ARTIST, newArtist)
+                        put(MediaStore.Audio.Media.ALBUM, newAlbum)
+                    }
+                    context.contentResolver.update(targetUri, cv, null, null)
+                    context.contentResolver.notifyChange(targetUri, null)
+                } catch (_: Exception) {}
+
+                if (song.path.startsWith("/")) {
+                    android.media.MediaScannerConnection.scanFile(context, arrayOf(song.path), null, null)
+                }
+                return@withContext Result.success(Unit)
+            } else if (song.path.startsWith("/")) {
+                val physicalFile = java.io.File(song.path)
+                if (!physicalFile.exists() || !physicalFile.canWrite()) {
+                    return@withContext Result.failure(Exception("El archivo no permite escritura directa"))
+                }
+                val audioFile = org.jaudiotagger.audio.AudioFileIO.read(physicalFile)
+                val tag = audioFile.tagOrCreateAndSetDefault
+                tag.setField(org.jaudiotagger.tag.FieldKey.TITLE, newTitle)
+                tag.setField(org.jaudiotagger.tag.FieldKey.ARTIST, newArtist)
+                tag.setField(org.jaudiotagger.tag.FieldKey.ALBUM, newAlbum)
+                audioFile.commit()
+                android.media.MediaScannerConnection.scanFile(context, arrayOf(song.path), null, null)
+                return@withContext Result.success(Unit)
+            }
+            Result.failure(Exception("Origen de archivo no compatible para edición"))
+        } catch (sec: SecurityException) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && targetUri != null) {
+                val pendingIntent = MediaStore.createWriteRequest(context.contentResolver, listOf(targetUri))
+                throw RequiresPermissionException(pendingIntent.intentSender)
+            } else if (android.os.Build.VERSION.SDK_INT == android.os.Build.VERSION_CODES.Q &&
+                sec is android.app.RecoverableSecurityException
+            ) {
+                throw RequiresPermissionException(sec.userAction.actionIntent.intentSender)
+            }
+            Result.failure(sec)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     class RequiresPermissionException(val intentSender: android.content.IntentSender) : Exception("Permission required")
 }

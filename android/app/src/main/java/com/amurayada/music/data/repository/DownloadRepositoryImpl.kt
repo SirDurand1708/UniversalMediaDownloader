@@ -150,7 +150,9 @@ class DownloadRepositoryImpl(
                     albumArtUri = entity.thumbnailUrl?.let { Uri.parse(it) },
                     path = entity.localPath ?: entity.youtubeUrl,
                     dateAdded = entity.downloadedAt,
-                    albumId = entity.album.hashCode().toLong()
+                    albumId = entity.album.hashCode().toLong(),
+                    mimeType = entity.mimeType,
+                    fileSize = entity.fileSize
                 )
             }
     }
@@ -169,7 +171,9 @@ class DownloadRepositoryImpl(
                         albumArtUri = entity.thumbnailUrl?.let { Uri.parse(it) },
                         path = entity.localPath ?: entity.youtubeUrl,
                         dateAdded = entity.downloadedAt,
-                        albumId = entity.album.hashCode().toLong()
+                        albumId = entity.album.hashCode().toLong(),
+                        mimeType = entity.mimeType,
+                        fileSize = entity.fileSize
                     )
                 }
         }

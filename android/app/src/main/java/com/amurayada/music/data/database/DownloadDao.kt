@@ -17,6 +17,12 @@ interface DownloadDao {
     @Query("SELECT * FROM downloads WHERE isVideo = :isVideo")
     suspend fun getDownloadsByType(isVideo: Boolean): List<DownloadEntity>
     
+    @Query("UPDATE downloads SET title = :title, artist = :artist, album = :album WHERE songId = :songId")
+    suspend fun updateDownloadMetadata(songId: Long, title: String, artist: String, album: String)
+
+    @Query("UPDATE downloads SET title = :title, artist = :artist, album = :album WHERE localPath = :localPath")
+    suspend fun updateDownloadMetadataByPath(localPath: String, title: String, artist: String, album: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDownload(download: DownloadEntity)
     

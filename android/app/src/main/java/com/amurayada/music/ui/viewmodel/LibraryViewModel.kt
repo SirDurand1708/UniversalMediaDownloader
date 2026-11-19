@@ -133,10 +133,105 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         omniPrefs.edit().putStringSet("hidden_song_ids", updated.map { it.toString() }.toHashSet()).apply()
     }
 
+    var hiddenSongs by mutableStateOf<List<Song>>(emptyList())
+        private set
+
+    var lrcKeys by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    var filterShortAudio by mutableStateOf(
+        application.getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE)
+            .let { op ->
+                if (op.contains("filter_short_audio")) op.getBoolean("filter_short_audio", true)
+                else application.getSharedPreferences("music_settings", android.content.Context.MODE_PRIVATE)
+                    .getBoolean("filter_short_audio", true)
+            }
+    )
+        private set
+
+    fun setFilterShortAudio(enabled: Boolean) {
+        filterShortAudio = enabled
+        omniPrefs.edit().putBoolean("filter_short_audio", enabled).apply()
+        prefs.edit().putBoolean("filter_short_audio", enabled).apply()
+        loadLibrary()
+    }
+
+    private var loadJob: kotlinx.coroutines.Job? = null
+    private data class PendingTagEdit(
+        val song: Song,
+        val title: String,
+        val artist: String,
+        val album: String,
+        val onResult: (Boolean, String) -> Unit
+    )
+    private var pendingTagEdit: PendingTagEdit? = null
+
     fun unhideSong(songId: Long) {
         val updated = hiddenSongIds - songId
         hiddenSongIds = updated
         omniPrefs.edit().putStringSet("hidden_song_ids", updated.map { it.toString() }.toHashSet()).apply()
+        loadLibrary()
+    }
+
+    fun unhideAllSongs() {
+        val keepDeletedIds = deletedSongPaths.let { delPaths ->
+            hiddenSongs.filter { delPaths.contains(it.path) }.map { it.id }.toSet()
+        }
+        hiddenSongIds = keepDeletedIds
+        omniPrefs.edit().putStringSet("hidden_song_ids", keepDeletedIds.map { it.toString() }.toHashSet()).apply()
+        loadLibrary()
+    }
+
+    fun updateSongMetadata(
+        context: android.content.Context,
+        song: Song,
+        newTitle: String,
+        newArtist: String,
+        newAlbum: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        val cleanTitle = newTitle.trim().ifBlank { song.title }
+        val cleanArtist = newArtist.trim().ifBlank { song.artist }
+        val cleanAlbum = newAlbum.trim().ifBlank { song.album }
+
+        viewModelScope.launch {
+            try {
+                val resolvedUri = if (song.path.startsWith("content://")) {
+                    android.net.Uri.parse(song.path)
+                } else {
+                    withContext(Dispatchers.IO) {
+                        resolveMediaStoreAudioUri(context, song)
+                    }
+                }
+
+                val repoResult = repository.updateSongTags(song, resolvedUri, cleanTitle, cleanArtist, cleanAlbum)
+                withContext(Dispatchers.IO) {
+                    val dao = com.amurayada.music.data.database.DownloadDatabase.getDatabase(context).downloadDao()
+                    dao.updateDownloadMetadata(song.id, cleanTitle, cleanArtist, cleanAlbum)
+                    if (song.path.isNotBlank()) {
+                        dao.updateDownloadMetadataByPath(song.path, cleanTitle, cleanArtist, cleanAlbum)
+                    }
+                }
+                pendingTagEdit = null
+                loadLibrary()
+                if (repoResult.isSuccess) {
+                    onResult(true, "Etiquetas actualizadas")
+                } else {
+                    onResult(true, "Etiquetas actualizadas en biblioteca")
+                }
+            } catch (req: MediaRepository.RequiresPermissionException) {
+                pendingTagEdit = PendingTagEdit(song, cleanTitle, cleanArtist, cleanAlbum, onResult)
+                _permissionEvent.value = IntentSenderRequest.Builder(req.intentSender).build()
+            } catch (e: Exception) {
+                onResult(false, e.localizedMessage ?: "No se pudieron editar las etiquetas")
+            }
+        }
+    }
+
+    fun retryPendingTagEdit(context: android.content.Context) {
+        val pending = pendingTagEdit ?: return
+        pendingTagEdit = null
+        updateSongMetadata(context, pending.song, pending.title, pending.artist, pending.album, pending.onResult)
     }
 
     private fun markSongDeleted(song: Song) {
@@ -390,7 +485,8 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         private set
 
     fun loadLibrary() {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             isLoading = true
             try {
                 android.util.Log.d("LibraryViewModel", "loadLibrary() starting...")
@@ -410,10 +506,34 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                     // Combine and deduplicate by path (to avoid duplicates if MediaStore indexed the downloaded file)
                     val excludedIds = hiddenSongIds
                     val excludedPaths = deletedSongPaths
-                    val allSongs = (localSongs + downloadedSongs)
-                        .distinctBy { it.path }
+                    val mergedAll = (localSongs + downloadedSongs).distinctBy { it.path }
+                    val hiddenFound = mergedAll.filter {
+                        excludedIds.contains(it.id) && (it.path.isBlank() || !excludedPaths.contains(it.path))
+                    }
+                    val allSongs = mergedAll
                         .filter { !excludedIds.contains(it.id) && (it.path.isBlank() || !excludedPaths.contains(it.path)) }
                     val sortedSongs = allSongs.sortedBy { it.title }
+
+                    // Pre-indexar archivos .lrc en IO (O(1) para UI Thread y compatible con content://)
+                    val lrcFound = HashSet<String>()
+                    try {
+                        val dirsToScan = linkedSetOf<java.io.File>()
+                        dirsToScan.add(com.omnivault.media.utils.StorageHelper.getOutputDirectory(true, getApplication()))
+                        allSongs.forEach { s ->
+                            if (s.path.startsWith("/")) {
+                                java.io.File(s.path).parentFile?.let { dirsToScan.add(it) }
+                            }
+                        }
+                        dirsToScan.forEach { dir ->
+                            if (dir.isDirectory) {
+                                dir.listFiles { f -> f.isFile && f.extension.equals("lrc", ignoreCase = true) && f.length() > 0L }
+                                    ?.forEach { lrcFile ->
+                                        lrcFound.add(lrcFile.absolutePath.substringBeforeLast("."))
+                                        lrcFound.add(lrcFile.nameWithoutExtension.lowercase())
+                                    }
+                            }
+                        }
+                    } catch (_: Exception) {}
 
                     // Merge Albums: Start with MediaStore albums, add downloaded albums
                     val mediaStoreAlbums = repository.getAllAlbums()
@@ -478,7 +598,9 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                         albums = finalAlbums,
                         artists = finalArtists,
                         genres = finalGenres,
-                        playlists = emptyList() // Don't block for playlists
+                        playlists = emptyList(), // Don't block for playlists
+                        hiddenSongs = hiddenFound,
+                        lrcKeys = lrcFound
                     )
                 }
                 
@@ -487,6 +609,8 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                 albums = result.albums
                 artists = result.artists
                 genres = result.genres
+                hiddenSongs = result.hiddenSongs
+                lrcKeys = result.lrcKeys
                 
                 // Update version to force UI refresh (especially images)
                 libraryVersion = System.currentTimeMillis()
@@ -648,6 +772,8 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         val albums: List<Album>,
         val artists: List<Artist>,
         val genres: List<com.amurayada.music.data.model.Genre>,
-        val playlists: List<com.amurayada.music.data.model.Playlist>
+        val playlists: List<com.amurayada.music.data.model.Playlist>,
+        val hiddenSongs: List<Song> = emptyList(),
+        val lrcKeys: Set<String> = emptySet()
     )
 }
