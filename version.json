@@ -1,13 +1,13 @@
 {
-  "version": "2.5.34",
-  "version_code": 284,
+  "version": "2.5.35",
+  "version_code": 285,
   "release_date": "2026-11-18",
-  "title": "OmniVault v2.5.34 — Windows PC & Android",
+  "title": "OmniVault v2.5.35 — Windows PC & Android",
   "changelog": "✨ Nuevo diseño de Playlist (portada, renombrar con lápiz, Reproducir/Aleatorio, menú completo) con orden por Más recientes añadidos, A-Z, Z-A y arrastrar para organizar manualmente",
   "android": {
-    "version": "2.5.34",
-    "version_code": 284,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.34/OmniVault-v2.5.34-Android.apk",
+    "version": "2.5.35",
+    "version_code": 285,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.35/OmniVault-v2.5.35-Android.apk",
     "min_version_code": 201
   },
   "windows": {

@@ -44,7 +44,8 @@ import com.omnivault.media.model.MediaFormat
 @Composable
 fun OmniVaultDownloaderScreen(
     downloadViewModel: DownloadViewModel,
-    onPlayMedia: (DownloadItem) -> Unit = {}
+    onPlayMedia: (DownloadItem) -> Unit = {},
+    onOpenYouTubeLogin: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -74,6 +75,20 @@ fun OmniVaultDownloaderScreen(
     val analyzeTimeoutMessage by downloadViewModel.analyzeTimeoutMessage.collectAsState()
     val universalDownloadStates by downloadViewModel.universalDownloadStates.collectAsState()
     val downloadedSongs by downloadViewModel.downloadedSongs.collectAsState()
+    val batchUrls by downloadViewModel.batchUrls.collectAsState()
+    val hybridPlaylistPromptUrl by downloadViewModel.hybridPlaylistPromptUrl.collectAsState()
+    val playlistEntries by downloadViewModel.playlistEntries.collectAsState()
+    val isExtractingPlaylist by downloadViewModel.isExtractingPlaylist.collectAsState()
+    val duplicateWarning by downloadViewModel.duplicateWarning.collectAsState()
+    val lastQueuedUrl by downloadViewModel.lastQueuedUrl.collectAsState()
+    val batchFeedbackMessage by downloadViewModel.batchFeedbackMessage.collectAsState()
+
+    LaunchedEffect(batchFeedbackMessage) {
+        batchFeedbackMessage?.let { msg ->
+            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            downloadViewModel.batchFeedbackMessage.value = null
+        }
+    }
 
     val activeDownloadList = remember(universalDownloadStates) {
         universalDownloadStates.values.filter { state ->
@@ -82,6 +97,9 @@ fun OmniVaultDownloaderScreen(
                 state.status == DownloadStatus.DOWNLOADING ||
                 state.status == DownloadStatus.PROCESSING
         }
+    }
+    val pausedDownloadList = remember(universalDownloadStates) {
+        universalDownloadStates.values.filter { it.status == DownloadStatus.PAUSED }
     }
     val failedDownloadList = remember(universalDownloadStates) {
         universalDownloadStates.values.filter { it.status == DownloadStatus.ERROR }
@@ -119,13 +137,14 @@ fun OmniVaultDownloaderScreen(
     val borderCol = Color(0xFF263248)
 
     var detectedClipboardUrl by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(urlInput) {
+    LaunchedEffect(urlInput, lastQueuedUrl) {
         if (urlInput.isBlank()) {
             try {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                 val clipText = clipboard?.primaryClip?.getItemAt(0)?.text?.toString()?.trim() ?: ""
-                if (clipText.startsWith("http://", ignoreCase = true) ||
-                    clipText.startsWith("https://", ignoreCase = true)
+                if ((clipText.startsWith("http://", ignoreCase = true) ||
+                        clipText.startsWith("https://", ignoreCase = true)) &&
+                    clipText != lastQueuedUrl
                 ) {
                     detectedClipboardUrl = clipText
                 } else {
@@ -197,7 +216,11 @@ fun OmniVaultDownloaderScreen(
 
                 Spacer(Modifier.width(8.dp))
 
+                val isYtLoggedIn = remember {
+                    try { com.amurayada.music.data.auth.YouTubeAuthManager.getInstance(context).isLoggedIn() } catch (_: Exception) { false }
+                }
                 Surface(
+                    onClick = onOpenYouTubeLogin,
                     modifier = Modifier.wrapContentWidth(),
                     color = neonGreen.copy(alpha = 0.15f),
                     shape = RoundedCornerShape(20.dp),
@@ -208,7 +231,7 @@ fun OmniVaultDownloaderScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "⚡ Auto-Sync",
+                            text = if (isYtLoggedIn) "⚡ YT Activo" else "⚡ Sesión YT",
                             style = MaterialTheme.typography.labelSmall,
                             color = neonGreen,
                             fontWeight = FontWeight.Bold,
@@ -339,8 +362,16 @@ fun OmniVaultDownloaderScreen(
 
                     OutlinedTextField(
                         value = urlInput,
-                        onValueChange = { downloadViewModel.urlInput.value = it },
-                        placeholder = { Text("Pega enlace de YouTube, TikTok, IG, X...", fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        onValueChange = {
+                            downloadViewModel.urlInput.value = it
+                            val multi = com.omnivault.media.utils.UrlUtils.extractAllUrlsFromText(it)
+                            if (multi.size > 1) {
+                                downloadViewModel.batchUrls.value = multi
+                            } else if (downloadViewModel.batchUrls.value.isNotEmpty()) {
+                                downloadViewModel.batchUrls.value = emptyList()
+                            }
+                        },
+                        placeholder = { Text("Pega uno o varios enlaces (YouTube, TikTok, IG, Playlist)...", fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         leadingIcon = { Icon(Icons.Rounded.Link, contentDescription = null, tint = Color.Gray) },
                         trailingIcon = {
                             if (urlInput.isNotEmpty()) {
@@ -348,12 +379,14 @@ fun OmniVaultDownloaderScreen(
                                     downloadViewModel.abortAnalysis()
                                     downloadViewModel.urlInput.value = ""
                                     downloadViewModel.mediaPreview.value = null
+                                    downloadViewModel.batchUrls.value = emptyList()
                                 }) {
                                     Icon(Icons.Rounded.Clear, contentDescription = "Limpiar", tint = Color.Gray)
                                 }
                             }
                         },
-                        singleLine = true,
+                        singleLine = false,
+                        maxLines = 4,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -436,7 +469,10 @@ fun OmniVaultDownloaderScreen(
                                 strokeWidth = 2.dp
                             )
                             Spacer(Modifier.width(8.dp))
-                            Text("Analizando… (Toca para abortar)", fontSize = 13.sp)
+                            Text(
+                                text = if (isExtractingPlaylist) "Extrayendo playlist… (Toca para abortar)" else "Analizando… (Toca para abortar)",
+                                fontSize = 13.sp
+                            )
                         } else {
                             Icon(
                                 Icons.Rounded.Search,
@@ -529,10 +565,13 @@ fun OmniVaultDownloaderScreen(
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Spacer(Modifier.height(4.dp))
+                                        val durPart = if (preview.durationText.isNotBlank()) " • ${preview.durationText}" else ""
                                         Text(
-                                            text = "${preview.platform.displayName} • ${preview.author}",
+                                            text = "${preview.platform.displayName} • ${preview.author}$durPart",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = neonGreen
+                                            color = neonGreen,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                 }
@@ -593,37 +632,52 @@ fun OmniVaultDownloaderScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         FormatChip(
-                            label = "MP4 • 1080p Full HD",
+                            label = "MP4 • 1080p",
                             selected = selectedFormat == MediaFormat.MP4_1080,
                             modifier = Modifier.weight(1f),
                             onClick = { downloadViewModel.selectedFormat.value = MediaFormat.MP4_1080 }
                         )
                         FormatChip(
-                            label = "MP4 • 720p HD",
+                            label = "MP4 • 720p",
                             selected = selectedFormat == MediaFormat.MP4_720,
                             modifier = Modifier.weight(1f),
                             onClick = { downloadViewModel.selectedFormat.value = MediaFormat.MP4_720 }
+                        )
+                        FormatChip(
+                            label = "MP4 • 480p",
+                            selected = selectedFormat == MediaFormat.MP4_480,
+                            modifier = Modifier.weight(1f),
+                            onClick = { downloadViewModel.selectedFormat.value = MediaFormat.MP4_480 }
                         )
                     }
 
                     Spacer(Modifier.height(14.dp))
 
-                    val btnLabel = when (selectedFormat) {
-                        MediaFormat.MP3_320 -> "⚡ DESCARGAR (MP3 320K)"
-                        MediaFormat.M4A -> "⚡ DESCARGAR (M4A HQ)"
-                        MediaFormat.MP4_1080 -> "⚡ DESCARGAR (MP4 1080P)"
-                        MediaFormat.MP4_720 -> "⚡ DESCARGAR (MP4 720P)"
-                        MediaFormat.MP4_480 -> "⚡ DESCARGAR (MP4 480P)"
+                    val btnLabel = if (batchUrls.size > 1) {
+                        "⚡ DESCARGAR LOTE (${batchUrls.size} ENLACES)"
+                    } else {
+                        when (selectedFormat) {
+                            MediaFormat.MP3_320 -> "⚡ DESCARGAR (MP3 320K)"
+                            MediaFormat.M4A -> "⚡ DESCARGAR (M4A HQ)"
+                            MediaFormat.MP4_1080 -> "⚡ DESCARGAR (MP4 1080P)"
+                            MediaFormat.MP4_720 -> "⚡ DESCARGAR (MP4 720P)"
+                            MediaFormat.MP4_480 -> "⚡ DESCARGAR (MP4 480P)"
+                        }
                     }
 
                     Button(
                         onClick = {
-                            val targetUrl = mediaPreview?.originalUrl?.takeIf { it.isNotBlank() } ?: urlInput
-                            if (targetUrl.isBlank()) {
-                                Toast.makeText(context, "Por favor pega un enlace multimedia", Toast.LENGTH_SHORT).show()
+                            if (batchUrls.size > 1) {
+                                downloadViewModel.enqueueBatch(batchUrls, selectedFormat)
                             } else {
-                                downloadViewModel.startUniversalDownload(targetUrl, selectedFormat)
-                                Toast.makeText(context, "Descarga iniciada en segundo plano", Toast.LENGTH_SHORT).show()
+                                val targetUrl = mediaPreview?.originalUrl?.takeIf { it.isNotBlank() } ?: urlInput
+                                if (targetUrl.isBlank()) {
+                                    Toast.makeText(context, "Por favor pega un enlace multimedia", Toast.LENGTH_SHORT).show()
+                                } else if (com.omnivault.media.utils.UrlUtils.isDirectPlaylistUrl(targetUrl)) {
+                                    downloadViewModel.analyzeUrl(targetUrl, forcePlaylist = true)
+                                } else {
+                                    downloadViewModel.startUniversalDownload(targetUrl, selectedFormat)
+                                }
                             }
                         },
                         modifier = Modifier
@@ -649,7 +703,35 @@ fun OmniVaultDownloaderScreen(
             }
         }
 
-        // 4. Sección de Descargas Activas (universalDownloadStates)
+        // 4. Controles globales de cola y Descargas Activas / Pausadas / Error
+        if (activeDownloadList.isNotEmpty() || pausedDownloadList.isNotEmpty() || failedDownloadList.isNotEmpty()) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (pausedDownloadList.isNotEmpty() || failedDownloadList.isNotEmpty()) {
+                        OutlinedButton(
+                            onClick = { downloadViewModel.retryFailedAndPaused() },
+                            modifier = Modifier.weight(1f),
+                            border = BorderStroke(1.dp, neonGreen.copy(alpha = 0.6f)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = neonGreen)
+                        ) {
+                            Text("Reanudar / Reintentar todas", maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = { downloadViewModel.cancelAllDownloads() },
+                        modifier = Modifier.weight(1f),
+                        border = BorderStroke(1.dp, Color(0xFFFF5252).copy(alpha = 0.5f)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF8A80))
+                    ) {
+                        Text("Cancelar todas", maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
         if (activeDownloadList.isNotEmpty()) {
             item {
                 Text(
@@ -666,6 +748,56 @@ fun OmniVaultDownloaderScreen(
                     state = state,
                     onCancel = { downloadViewModel.cancelOmniDownload(state.processId) }
                 )
+            }
+        }
+
+        if (pausedDownloadList.isNotEmpty()) {
+            item {
+                Text(
+                    text = "EN PAUSA (${pausedDownloadList.size})",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFFFB300),
+                    letterSpacing = 1.sp
+                )
+            }
+            items(pausedDownloadList, key = { "paused_${it.processId}" }) { state ->
+                Surface(
+                    color = Color(0xFF1A1914),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, Color(0xFFFFB300).copy(alpha = 0.45f))
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = state.title,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = state.errorReason ?: "Pausada • Toca Reanudar",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFFFE082),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        TextButton(
+                            onClick = {
+                                downloadViewModel.cancelOmniDownload(state.processId)
+                                downloadViewModel.startUniversalDownload(state.url, state.format, forceDuplicate = true)
+                            }
+                        ) {
+                            Text("Reanudar", color = neonGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                }
             }
         }
 
@@ -879,6 +1011,144 @@ fun OmniVaultDownloaderScreen(
             }
         }
     }
+
+    // Diálogo URL híbrida (video + playlist)
+    hybridPlaylistPromptUrl?.let { hybridUrl ->
+        AlertDialog(
+            onDismissRequest = { downloadViewModel.hybridPlaylistPromptUrl.value = null },
+            title = { Text("Playlist detectada en enlace") },
+            text = { Text("Este enlace pertenece a una playlist de YouTube. ¿Qué deseas analizar o descargar?") },
+            confirmButton = {
+                Button(
+                    onClick = { downloadViewModel.analyzeUrl(hybridUrl, forcePlaylist = true) }
+                ) {
+                    Text("Playlist completa")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { downloadViewModel.analyzeUrl(hybridUrl, forceSingleVideo = true) }
+                ) {
+                    Text("Solo este video")
+                }
+            }
+        )
+    }
+
+    // Diálogo de confirmación de duplicado
+    duplicateWarning?.let { (dupUrl, dupFormat) ->
+        AlertDialog(
+            onDismissRequest = { downloadViewModel.duplicateWarning.value = null },
+            title = { Text("Ya descargado") },
+            text = { Text("Ya tienes este enlace descargado en formato ${if (dupFormat.isAudio) "Audio" else "Video"}. ¿Deseas descargar una copia adicional?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        downloadViewModel.duplicateWarning.value = null
+                        downloadViewModel.startUniversalDownload(dupUrl, dupFormat, forceDuplicate = true)
+                    }
+                ) {
+                    Text("Descargar copia")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { downloadViewModel.duplicateWarning.value = null }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // Diálogo de selección de ítems de Playlist
+    if (playlistEntries.isNotEmpty()) {
+        val selectedIndices = remember(playlistEntries) {
+            mutableStateListOf<Int>().apply { addAll(playlistEntries.indices) }
+        }
+        AlertDialog(
+            onDismissRequest = { downloadViewModel.dismissPlaylistSheet() },
+            title = {
+                Text(
+                    text = "Playlist (${playlistEntries.size} elementos)",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${selectedIndices.size} seleccionados",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = neonGreen
+                        )
+                        TextButton(
+                            onClick = {
+                                if (selectedIndices.size == playlistEntries.size) {
+                                    selectedIndices.clear()
+                                } else {
+                                    selectedIndices.clear()
+                                    selectedIndices.addAll(playlistEntries.indices)
+                                }
+                            }
+                        ) {
+                            Text(if (selectedIndices.size == playlistEntries.size) "Ninguno" else "Todos")
+                        }
+                    }
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        items(playlistEntries.size) { idx ->
+                            val entry = playlistEntries[idx]
+                            val checked = idx in selectedIndices
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = checked,
+                                    onCheckedChange = {
+                                        if (checked) selectedIndices.remove(idx) else selectedIndices.add(idx)
+                                    }
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = entry.title,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    if (entry.durationText.isNotBlank()) {
+                                        Text(
+                                            text = entry.durationText,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.Gray
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = selectedIndices.isNotEmpty(),
+                    onClick = {
+                        val urls = selectedIndices.sorted().map { playlistEntries[it].url }
+                        downloadViewModel.enqueueBatch(urls, selectedFormat)
+                    }
+                ) {
+                    Text("Descargar (${selectedIndices.size})")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { downloadViewModel.dismissPlaylistSheet() }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -917,6 +1187,7 @@ fun FormatChip(
             }
         }
     }
+
 }
 
 @Composable
@@ -999,6 +1270,7 @@ fun UniversalActiveDownloadCard(
             }
         }
     }
+
 }
 
 @Composable
@@ -1072,6 +1344,39 @@ fun CompletedDownloadSongCard(
                 )
             }
 
+            val shareContext = LocalContext.current
+            IconButton(
+                onClick = {
+                    try {
+                        val shareUri = if (song.path.startsWith("content://")) {
+                            android.net.Uri.parse(song.path)
+                        } else {
+                            androidx.core.content.FileProvider.getUriForFile(
+                                shareContext,
+                                "${shareContext.packageName}.fileprovider",
+                                java.io.File(song.path)
+                            )
+                        }
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = if (isVideo) "video/*" else "audio/*"
+                            putExtra(Intent.EXTRA_STREAM, shareUri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        shareContext.startActivity(Intent.createChooser(shareIntent, "Compartir ${song.title}"))
+                    } catch (_: Exception) {
+                        Toast.makeText(shareContext, "No se pudo compartir este archivo", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier.size(34.dp)
+            ) {
+                Icon(
+                    Icons.Rounded.Share,
+                    contentDescription = "Compartir",
+                    tint = Color.White.copy(alpha = 0.75f),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
             IconButton(onClick = onPlay, modifier = Modifier.size(34.dp)) {
                 Icon(
                     Icons.Rounded.PlayArrow,
@@ -1091,4 +1396,5 @@ fun CompletedDownloadSongCard(
             }
         }
     }
+
 }

@@ -30,8 +30,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.nio.ByteBuffer
+import java.security.MessageDigest
+import com.amurayada.music.data.database.DownloadQueueEntity
+
+data class PlaylistEntryPreview(
+    val title: String,
+    val url: String,
+    val durationText: String = ""
+)
 
 data class UniversalMediaMetadata(
     val title: String,
@@ -77,12 +88,149 @@ data class UniversalDownloadResult(
 class UniversalDownloadEngine private constructor(context: Context) {
 
     private val appContext = context.applicationContext
-    private val downloadDao = DownloadDatabase.getDatabase(appContext).downloadDao()
+    private val db = DownloadDatabase.getDatabase(appContext)
+    private val downloadDao = db.downloadDao()
+    private val downloadQueueDao = db.downloadQueueDao()
+    private val downloadSemaphore = Semaphore(2)
 
     private val _downloadsState = MutableStateFlow<Map<String, UniversalDownloadState>>(emptyMap())
     val downloadsState: StateFlow<Map<String, UniversalDownloadState>> = _downloadsState.asStateFlow()
     private val activeProcesses = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private val metadataCache = LruCache<String, UniversalMediaMetadata>(40)
+
+    fun computeStableSongId(url: String, isVideo: Boolean): Long {
+        val norm = UrlUtils.normalizeMediaUrl(url)
+        val key = "$norm|${if (isVideo) "video" else "audio"}"
+        val digest = MessageDigest.getInstance("SHA-256").digest(key.toByteArray())
+        val rawLong = ByteBuffer.wrap(digest, 0, 8).long
+        return if (rawLong == Long.MIN_VALUE) 1L else kotlin.math.abs(rawLong)
+    }
+
+    suspend fun isAlreadyDownloaded(url: String, isVideo: Boolean): Boolean {
+        val norm = UrlUtils.normalizeMediaUrl(url)
+        val stableId = computeStableSongId(url, isVideo)
+        if (downloadDao.isDownloaded(stableId)) return true
+        return downloadDao.getDownloadsByType(isVideo).any {
+            UrlUtils.normalizeMediaUrl(it.youtubeUrl) == norm
+        }
+    }
+
+    suspend fun persistQueuedItem(processId: String, url: String, format: MediaFormat, title: String = "En cola…") {
+        downloadQueueDao.upsert(
+            DownloadQueueEntity(
+                processId = processId,
+                url = url,
+                normalizedUrl = UrlUtils.normalizeMediaUrl(url),
+                formatName = format.name,
+                title = title,
+                status = "QUEUED"
+            )
+        )
+    }
+
+    suspend fun restorePersistedQueueOnStartup(): List<DownloadQueueEntity> {
+        val pending = downloadQueueDao.getAll()
+        if (pending.isEmpty()) return emptyList()
+        val settingsPrefs = appContext.getSharedPreferences("music_settings", Context.MODE_PRIVATE)
+        val autoResume = settingsPrefs.getBoolean("auto_resume_downloads", false)
+        val updatedStates = mutableMapOf<String, UniversalDownloadState>()
+        for (entity in pending) {
+            val fmt = MediaFormat.entries.firstOrNull { it.name == entity.formatName } ?: MediaFormat.MP3_320
+            val targetStatus = if (autoResume) DownloadStatus.QUEUED else DownloadStatus.PAUSED
+            if (!autoResume && entity.status != "ERROR") {
+                downloadQueueDao.updateStatus(entity.processId, "PAUSED", entity.errorReason)
+            }
+            updatedStates[entity.processId] = UniversalDownloadState(
+                processId = entity.processId,
+                url = entity.url,
+                title = entity.title,
+                format = fmt,
+                status = if (entity.status == "ERROR") DownloadStatus.ERROR else targetStatus,
+                speedText = if (entity.status == "ERROR") "Error" else if (autoResume) "Reanudando…" else "En pausa",
+                errorReason = entity.errorReason
+            )
+        }
+        _downloadsState.update { it + updatedStates }
+        return if (autoResume) pending.filter { it.status != "ERROR" } else emptyList()
+    }
+
+    suspend fun markActiveDownloadsPaused(reason: String = "Pausado por límite de sistema") {
+        val current = _downloadsState.value.values.filter {
+            it.status == DownloadStatus.QUEUED ||
+                it.status == DownloadStatus.FETCHING_METADATA ||
+                it.status == DownloadStatus.DOWNLOADING ||
+                it.status == DownloadStatus.PROCESSING
+        }
+        for (item in current) {
+            cancelAnalysisProcess(item.processId)
+            downloadQueueDao.updateStatus(item.processId, "PAUSED", reason)
+            _downloadsState.update { map ->
+                map + (item.processId to item.copy(status = DownloadStatus.PAUSED, speedText = "En pausa", errorReason = reason))
+            }
+        }
+    }
+
+    suspend fun removePersistedQueueItem(processId: String) {
+        downloadQueueDao.deleteById(processId)
+        _downloadsState.update { it - processId }
+    }
+
+    suspend fun getResumableQueueItems(): List<DownloadQueueEntity> {
+        return downloadQueueDao.getAll()
+    }
+
+    suspend fun extractPlaylistEntries(playlistUrl: String): List<PlaylistEntryPreview> = withContext(Dispatchers.IO) {
+        ensureInitialized()
+        val cleanUrl = UrlUtils.extractUrlFromText(playlistUrl)?.trim() ?: playlistUrl.trim()
+        val processId = "pl_extract_${System.currentTimeMillis()}"
+        val request = YoutubeDLRequest(cleanUrl).apply {
+            addOption("--flat-playlist")
+            addOption("--dump-single-json")
+            addOption("--no-warnings")
+            addOption("--socket-timeout", 15)
+        }
+        val tempCookieDir = File(appContext.cacheDir, "ytdl_pl_cookie_$processId").apply { mkdirs() }
+        try {
+            writeAuthCookiesIfAvailable(tempCookieDir)?.let { cookieFile ->
+                request.addOption("--cookies", cookieFile.absolutePath)
+            }
+            val response = YoutubeDL.getInstance().execute(request, processId, null)
+            val jsonText = response.out.trim()
+            if (jsonText.isNotBlank()) {
+                val root = org.json.JSONObject(jsonText)
+                val entries = root.optJSONArray("entries")
+                if (entries != null && entries.length() > 0) {
+                    val result = mutableListOf<PlaylistEntryPreview>()
+                    for (i in 0 until entries.length()) {
+                        val obj = entries.optJSONObject(i) ?: continue
+                        val id = obj.optString("id", "")
+                        val rawEntryUrl = obj.optString("url", "")
+                        val resolvedUrl = when {
+                            rawEntryUrl.startsWith("http") -> rawEntryUrl
+                            id.isNotBlank() -> "https://www.youtube.com/watch?v=$id"
+                            else -> ""
+                        }
+                        if (resolvedUrl.isBlank()) continue
+                        val title = obj.optString("title", "Elemento ${i + 1}").ifBlank { "Elemento ${i + 1}" }
+                        val durSec = obj.optLong("duration", 0L)
+                        val durText = if (durSec > 0) com.amurayada.music.ui.screens.nowplaying.formatDuration(durSec * 1000L) else ""
+                        result.add(PlaylistEntryPreview(title = title, url = resolvedUrl, durationText = durText))
+                    }
+                    if (result.isNotEmpty()) return@withContext result
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("UniversalDownloadEngine", "extractPlaylistEntries yt-dlp fallback: ${e.message}")
+        } finally {
+            try { tempCookieDir.deleteRecursively() } catch (_: Exception) {}
+        }
+
+        // Fallback via MediaExtractor
+        val fallbackUrls = MediaExtractor.extractPlaylistVideoUrls(cleanUrl)
+        return@withContext fallbackUrls.mapIndexed { idx, u ->
+            PlaylistEntryPreview(title = "Pista / Video ${idx + 1}", url = u)
+        }
+    }
 
     private fun normalizeCacheKey(url: String): String =
         (UrlUtils.extractUrlFromText(url) ?: url).trim()
@@ -247,8 +395,8 @@ class UniversalDownloadEngine private constructor(context: Context) {
             processId = processId,
             url = cleanUrl,
             format = format,
-            status = DownloadStatus.FETCHING_METADATA,
-            speedText = "Obteniendo metadatos…"
+            status = DownloadStatus.QUEUED,
+            speedText = "En cola…"
         )
 
         fun publishState(state: UniversalDownloadState) {
@@ -256,7 +404,15 @@ class UniversalDownloadEngine private constructor(context: Context) {
             onStateChanged?.invoke(state)
         }
 
+        publishState(currentState)
+        persistQueuedItem(processId, cleanUrl, format, currentState.title)
+
+        downloadSemaphore.withPermit {
         try {
+            if (!StorageHelper.hasEnoughFreeSpace(appContext)) {
+                throw IllegalStateException("Espacio insuficiente en el dispositivo (mínimo 250 MB libres)")
+            }
+
             activeProcesses.add(processId)
             cleanupOrphanCacheDirs()
             if (tempCacheDir.exists()) tempCacheDir.deleteRecursively()
@@ -312,8 +468,9 @@ class UniversalDownloadEngine private constructor(context: Context) {
 
                 val hasAria2c = File(appContext.applicationInfo.nativeLibraryDir, "libaria2c.so").exists()
                 if (hasAria2c) {
+                    val connCount = if (activeProcesses.size > 1) 4 else 16
                     addOption("--downloader", "aria2c")
-                    addOption("--downloader-args", "aria2c:-x 16 -s 16 --max-connection-per-server=16 -k 1M --min-split-size=1M --file-allocation=none --summary-interval=0")
+                    addOption("--downloader-args", "aria2c:-x $connCount -s $connCount --max-connection-per-server=$connCount -k 1M --min-split-size=1M --file-allocation=none --summary-interval=0")
                 }
 
                 writeAuthCookiesIfAvailable(tempCacheDir)?.let { cookieFile ->
@@ -459,7 +616,7 @@ class UniversalDownloadEngine private constructor(context: Context) {
             )
 
             // Registrar en DownloadDatabase (Room SQLite)
-            val entitySongId = preloadedSongId ?: Math.abs(cleanUrl.hashCode().toLong())
+            val entitySongId = preloadedSongId ?: computeStableSongId(cleanUrl, !format.isAudio)
             val entity = DownloadEntity(
                 songId = entitySongId,
                 title = metadata.title,
@@ -474,6 +631,7 @@ class UniversalDownloadEngine private constructor(context: Context) {
                 mimeType = finalMimeType
             )
             downloadDao.insertDownload(entity)
+            downloadQueueDao.deleteById(processId)
 
             currentState = currentState.copy(
                 progress = 1f,
@@ -499,10 +657,12 @@ class UniversalDownloadEngine private constructor(context: Context) {
             cancelDownload(processId)
             throw e
         } catch (e: Exception) {
+            val errMsg = e.localizedMessage ?: "Error en descarga con yt-dlp"
+            downloadQueueDao.updateStatus(processId, "ERROR", errMsg)
             val failedState = currentState.copy(
                 status = DownloadStatus.ERROR,
                 speedText = "Error",
-                errorReason = e.localizedMessage ?: "Error en descarga con yt-dlp"
+                errorReason = errMsg
             )
             publishState(failedState)
             throw e
@@ -511,6 +671,7 @@ class UniversalDownloadEngine private constructor(context: Context) {
             try {
                 if (tempCacheDir.exists()) tempCacheDir.deleteRecursively()
             } catch (_: Exception) {}
+        }
         }
     }
 

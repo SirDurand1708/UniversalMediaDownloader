@@ -155,9 +155,11 @@ class MediaDownloadService : Service() {
             DownloadStatus.DOWNLOADING -> {
                 acquireWakeLockIfNeeded()
                 // Actualizar la notificación persistente del Foreground Service con la barra de carga (0..100%)
+                val activeCount = downloadManager.getActiveDownloads().size
+                val notifTitle = if (activeCount > 1) "[$activeCount en cola] ${item.title}" else item.title
                 val notif = NotificationHelper.buildForegroundProgressNotification(
                     context = this,
-                    title = item.title,
+                    title = notifTitle,
                     progress = item.progress.coerceIn(0, 100),
                     speed = item.speedText,
                     indeterminate = item.progress <= 0
@@ -197,7 +199,7 @@ class MediaDownloadService : Service() {
                 checkIfAllDownloadsFinished()
             }
 
-            DownloadStatus.CANCELLED -> {
+            DownloadStatus.CANCELLED, DownloadStatus.PAUSED -> {
                 NotificationHelper.cancelNotification(this, notifId)
                 checkIfAllDownloadsFinished()
             }
@@ -256,15 +258,32 @@ class MediaDownloadService : Service() {
         } else {
             // Aún hay descargas activas en la cola: mostrar el progreso de la siguiente
             val next = active.first()
+            val notifTitle = if (active.size > 1) "[${active.size} en cola] ${next.title}" else next.title
             val nextNotif = NotificationHelper.buildForegroundProgressNotification(
                 context = this,
-                title = next.title,
+                title = notifTitle,
                 progress = next.progress,
                 speed = next.speedText,
                 indeterminate = next.progress <= 0
             ).build()
             promoteToForeground(nextNotif)
         }
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                com.omnivault.media.downloader.UniversalDownloadEngine
+                    .getInstance(applicationContext)
+                    .markActiveDownloadsPaused("Pausado por límite de tiempo en 2º plano (Android)")
+            } catch (_: Exception) {}
+        }
+        releaseWakeLockSafely()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        }
+        stopSelf()
+        super.onTimeout(startId, fgsType)
     }
 
     override fun onDestroy() {

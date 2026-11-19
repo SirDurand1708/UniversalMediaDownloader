@@ -71,8 +71,16 @@ class DownloadViewModel(
     val mediaPreview = MutableStateFlow<MediaPreview?>(null)
     val isAnalyzing = MutableStateFlow(false)
     val analyzeTimeoutMessage = MutableStateFlow<String?>(null)
+    val batchUrls = MutableStateFlow<List<String>>(emptyList())
+    val hybridPlaylistPromptUrl = MutableStateFlow<String?>(null)
+    val playlistEntries = MutableStateFlow<List<com.omnivault.media.downloader.PlaylistEntryPreview>>(emptyList())
+    val isExtractingPlaylist = MutableStateFlow(false)
+    val duplicateWarning = MutableStateFlow<Pair<String, MediaFormat>?>(null)
+    val lastQueuedUrl = MutableStateFlow<String?>(null)
+    val batchFeedbackMessage = MutableStateFlow<String?>(null)
     private var analyzeJob: Job? = null
     private var activeAnalyzeProcessId: String? = null
+    private var omniListener: ((DownloadItem) -> Unit)? = null
 
     private val _omniActiveDownloads = MutableStateFlow<List<DownloadItem>>(emptyList())
     val omniActiveDownloads: StateFlow<List<DownloadItem>> = _omniActiveDownloads.asStateFlow()
@@ -84,18 +92,45 @@ class DownloadViewModel(
         observeDownloadedSongs()
         observeActiveDownloads()
         initOmniVaultListener()
+        restorePersistedQueue()
+    }
+
+    private fun restorePersistedQueue() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val toAutoResume = universalEngine.restorePersistedQueueOnStartup()
+                if (toAutoResume.isNotEmpty()) {
+                    com.omnivault.media.utils.NotificationHelper.createNotificationChannels(getApplication())
+                    toAutoResume.forEach { item ->
+                        val fmt = MediaFormat.entries.firstOrNull { it.name == item.formatName } ?: MediaFormat.MP3_320
+                        try {
+                            MediaDownloadService.startDownload(getApplication(), item.url, fmt)
+                        } catch (_: Exception) {
+                            omniDownloadManager.enqueueDownload(item.url, fmt)
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
     }
 
     private fun initOmniVaultListener() {
         _omniActiveDownloads.value = omniDownloadManager.getActiveDownloads()
         _omniHistory.value = omniDownloadManager.getHistory()
 
-        omniDownloadManager.addDownloadListener {
+        val listener: (DownloadItem) -> Unit = {
             viewModelScope.launch(Dispatchers.Main) {
                 _omniActiveDownloads.value = omniDownloadManager.getActiveDownloads()
                 _omniHistory.value = omniDownloadManager.getHistory()
             }
         }
+        omniListener = listener
+        omniDownloadManager.addDownloadListener(listener)
+    }
+
+    override fun onCleared() {
+        omniListener?.let { omniDownloadManager.removeDownloadListener(it) }
+        super.onCleared()
     }
     
     private fun observeDownloadedSongs() {
@@ -205,7 +240,11 @@ class DownloadViewModel(
         analyzeTimeoutMessage.value = null
     }
 
-    fun analyzeUrl(url: String) {
+    fun analyzeUrl(
+        url: String,
+        forceSingleVideo: Boolean = false,
+        forcePlaylist: Boolean = false
+    ) {
         val trimmed = url.trim()
         if (trimmed.isBlank()) return
 
@@ -213,14 +252,47 @@ class DownloadViewModel(
         activeAnalyzeProcessId?.let { universalEngine.cancelAnalysisProcess(it) }
         activeAnalyzeProcessId = null
         analyzeTimeoutMessage.value = null
+        hybridPlaylistPromptUrl.value = null
+
+        val allExtracted = com.omnivault.media.utils.UrlUtils.extractAllUrlsFromText(trimmed)
+        if (allExtracted.size > 1) {
+            batchUrls.value = allExtracted
+            mediaPreview.value = null
+            isAnalyzing.value = false
+            return
+        }
+        batchUrls.value = emptyList()
+
+        val singleUrl = allExtracted.firstOrNull() ?: trimmed
+
+        if (!forceSingleVideo && !forcePlaylist && com.omnivault.media.utils.UrlUtils.isHybridPlaylistUrl(singleUrl)) {
+            hybridPlaylistPromptUrl.value = singleUrl
+            isAnalyzing.value = false
+            return
+        }
+
+        if (forcePlaylist || com.omnivault.media.utils.UrlUtils.isDirectPlaylistUrl(singleUrl)) {
+            extractPlaylist(singleUrl)
+            return
+        }
+
+        val targetUrl = if (forceSingleVideo) {
+            com.omnivault.media.utils.UrlUtils.normalizeMediaUrl(singleUrl)
+        } else {
+            singleUrl
+        }
 
         // Respuesta instantánea desde caché en memoria si ya fue analizado recientemente
-        universalEngine.getCachedMetadata(trimmed)?.let { cached ->
+        universalEngine.getCachedMetadata(targetUrl)?.let { cached ->
+            val durStr = if (cached.durationMs > 0) {
+                com.amurayada.music.ui.screens.nowplaying.formatDuration(cached.durationMs)
+            } else ""
             mediaPreview.value = MediaPreview(
                 title = cached.title,
                 author = cached.artist,
                 thumbnailUrl = cached.thumbnailUrl,
-                platform = PlatformType.fromUrl(trimmed),
+                durationText = durStr,
+                platform = PlatformType.fromUrl(targetUrl),
                 originalUrl = cached.sourceUrl
             )
             isAnalyzing.value = false
@@ -233,7 +305,7 @@ class DownloadViewModel(
         analyzeJob = viewModelScope.launch {
             isAnalyzing.value = true
             try {
-                val platform = PlatformType.fromUrl(trimmed)
+                val platform = PlatformType.fromUrl(targetUrl)
                 val fastPlatforms = setOf(
                     PlatformType.YOUTUBE,
                     PlatformType.TIKTOK,
@@ -242,10 +314,11 @@ class DownloadViewModel(
                     PlatformType.TWITTER
                 )
 
+                var extractedDurationMs = 0L
                 val preview = withTimeoutOrNull(4_000L) {
                     if (platform in fastPlatforms) {
                         val fastPreview = try {
-                            MediaExtractor.analyze(trimmed)
+                            MediaExtractor.analyze(targetUrl)
                         } catch (ce: CancellationException) {
                             throw ce
                         } catch (_: Exception) {
@@ -259,21 +332,31 @@ class DownloadViewModel(
                         if (isMeaningfulFastPreview) {
                             fastPreview
                         } else {
-                            val meta = universalEngine.extractMetadata(trimmed, selectedFormat.value, processId)
+                            val meta = universalEngine.extractMetadata(targetUrl, selectedFormat.value, processId)
+                            extractedDurationMs = meta.durationMs
+                            val durStr = if (meta.durationMs > 0) {
+                                com.amurayada.music.ui.screens.nowplaying.formatDuration(meta.durationMs)
+                            } else ""
                             MediaPreview(
                                 title = meta.title,
                                 author = meta.artist,
                                 thumbnailUrl = meta.thumbnailUrl,
+                                durationText = durStr,
                                 platform = platform,
                                 originalUrl = meta.sourceUrl
                             )
                         }
                     } else {
-                        val meta = universalEngine.extractMetadata(trimmed, selectedFormat.value, processId)
+                        val meta = universalEngine.extractMetadata(targetUrl, selectedFormat.value, processId)
+                        extractedDurationMs = meta.durationMs
+                        val durStr = if (meta.durationMs > 0) {
+                            com.amurayada.music.ui.screens.nowplaying.formatDuration(meta.durationMs)
+                        } else ""
                         MediaPreview(
                             title = meta.title,
                             author = meta.artist,
                             thumbnailUrl = meta.thumbnailUrl,
+                            durationText = durStr,
                             platform = platform,
                             originalUrl = meta.sourceUrl
                         )
@@ -282,14 +365,14 @@ class DownloadViewModel(
 
                 if (preview != null) {
                     universalEngine.cacheMetadata(
-                        trimmed,
+                        targetUrl,
                         UniversalMediaMetadata(
                             title = preview.title,
                             artist = preview.author.ifBlank { "OmniVault" },
                             album = preview.author.ifBlank { "OmniVault" },
-                            durationMs = 0L,
+                            durationMs = extractedDurationMs,
                             thumbnailUrl = preview.thumbnailUrl,
-                            sourceUrl = preview.originalUrl.ifBlank { trimmed }
+                            sourceUrl = preview.originalUrl.ifBlank { targetUrl }
                         )
                     )
                     mediaPreview.value = preview
@@ -312,14 +395,53 @@ class DownloadViewModel(
         }
     }
 
-    fun startUniversalDownload(url: String, format: MediaFormat) {
+    private fun extractPlaylist(playlistUrl: String) {
+        analyzeJob?.cancel()
+        analyzeJob = viewModelScope.launch {
+            isExtractingPlaylist.value = true
+            isAnalyzing.value = true
+            analyzeTimeoutMessage.value = null
+            try {
+                val entries = withTimeoutOrNull(20_000L) {
+                    universalEngine.extractPlaylistEntries(playlistUrl)
+                } ?: emptyList()
+
+                if (entries.isNotEmpty()) {
+                    playlistEntries.value = entries
+                } else {
+                    analyzeTimeoutMessage.value = "No se pudieron extraer los elementos de la playlist. Intenta de nuevo."
+                }
+            } catch (_: CancellationException) {
+            } catch (e: Exception) {
+                analyzeTimeoutMessage.value = "Error leyendo playlist: ${e.localizedMessage ?: "revisa tu conexión"}"
+            } finally {
+                isExtractingPlaylist.value = false
+                isAnalyzing.value = false
+            }
+        }
+    }
+
+    fun dismissPlaylistSheet() {
+        playlistEntries.value = emptyList()
+    }
+
+    fun startUniversalDownload(url: String, format: MediaFormat, forceDuplicate: Boolean = false) {
         val trimmed = url.trim()
         if (trimmed.isBlank()) return
 
-        // 1. Asegurar canales del sistema
+        viewModelScope.launch {
+            if (!forceDuplicate && withContext(Dispatchers.IO) { universalEngine.isAlreadyDownloaded(trimmed, !format.isAudio) }) {
+                duplicateWarning.value = trimmed to format
+                return@launch
+            }
+            dispatchSingleDownload(trimmed, format)
+        }
+    }
+
+    private fun dispatchSingleDownload(trimmed: String, format: MediaFormat) {
+        lastQueuedUrl.value = trimmed
         com.omnivault.media.utils.NotificationHelper.createNotificationChannels(getApplication())
 
-        // 2. Iniciar Foreground Service (que delega a DownloadManager -> UniversalDownloadEngine con yt-dlp + FFmpeg)
         try {
             MediaDownloadService.startDownload(getApplication(), trimmed, format)
         } catch (e: Exception) {
@@ -329,11 +451,80 @@ class DownloadViewModel(
 
         urlInput.value = ""
         mediaPreview.value = null
+        batchUrls.value = emptyList()
+    }
+
+    fun enqueueBatch(urls: List<String>, format: MediaFormat, skipDuplicates: Boolean = true) {
+        val unique = urls.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+        if (unique.isEmpty()) return
+
+        viewModelScope.launch {
+            com.omnivault.media.utils.NotificationHelper.createNotificationChannels(getApplication())
+            var enqueued = 0
+            var skipped = 0
+            for (u in unique) {
+                val isDup = if (skipDuplicates) {
+                    withContext(Dispatchers.IO) { universalEngine.isAlreadyDownloaded(u, !format.isAudio) }
+                } else false
+                if (isDup) {
+                    skipped++
+                    continue
+                }
+                try {
+                    MediaDownloadService.startDownload(getApplication(), u, format)
+                } catch (_: Exception) {
+                    omniDownloadManager.enqueueDownload(u, format)
+                }
+                enqueued++
+            }
+            urlInput.value = ""
+            mediaPreview.value = null
+            batchUrls.value = emptyList()
+            playlistEntries.value = emptyList()
+            batchFeedbackMessage.value = buildString {
+                append("Encoladas $enqueued descargas")
+                if (skipped > 0) append(" ($skipped duplicadas omitidas)")
+            }
+        }
+    }
+
+    fun retryFailedAndPaused() {
+        viewModelScope.launch {
+            val targets = universalEngine.downloadsState.value.values.filter {
+                it.status == DownloadStatus.ERROR || it.status == DownloadStatus.PAUSED
+            }
+            if (targets.isEmpty()) return@launch
+            com.omnivault.media.utils.NotificationHelper.createNotificationChannels(getApplication())
+            for (item in targets) {
+                withContext(Dispatchers.IO) { universalEngine.removePersistedQueueItem(item.processId) }
+                try {
+                    MediaDownloadService.startDownload(getApplication(), item.url, item.format)
+                } catch (_: Exception) {
+                    omniDownloadManager.enqueueDownload(item.url, item.format)
+                }
+            }
+        }
+    }
+
+    fun cancelAllDownloads() {
+        viewModelScope.launch {
+            val allPending = universalEngine.downloadsState.value.values.filter {
+                it.status != DownloadStatus.COMPLETED
+            }
+            for (item in allPending) {
+                universalEngine.cancelDownload(item.processId)
+                omniDownloadManager.cancelDownload(item.processId)
+                withContext(Dispatchers.IO) { universalEngine.removePersistedQueueItem(item.processId) }
+            }
+        }
     }
 
     fun cancelOmniDownload(taskId: String) {
         universalEngine.cancelDownload(taskId)
         omniDownloadManager.cancelDownload(taskId)
+        viewModelScope.launch(Dispatchers.IO) {
+            universalEngine.removePersistedQueueItem(taskId)
+        }
     }
 
     fun updateYoutubeDLEngine(onResult: ((Boolean) -> Unit)? = null) {

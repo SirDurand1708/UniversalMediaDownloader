@@ -172,7 +172,12 @@ class DownloadManager private constructor(private val context: Context) {
                     request.addOption("--audio-format", "m4a")
                 }
             } else {
-                val maxH = if (item.format == MediaFormat.MP4_1080) 1080 else 720
+                val maxH = when (item.format) {
+                    MediaFormat.MP4_1080 -> 1080
+                    MediaFormat.MP4_720 -> 720
+                    MediaFormat.MP4_480 -> 480
+                    else -> 720
+                }
                 request.addOption(
                     "-f",
                     "bestvideo[height<=$maxH][ext=mp4]+bestaudio[ext=m4a]/best[height<=$maxH][ext=mp4]/18/best"

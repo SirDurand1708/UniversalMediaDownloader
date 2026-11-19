@@ -13,6 +13,9 @@ interface DownloadDao {
     
     @Query("SELECT EXISTS(SELECT 1 FROM downloads WHERE songId = :songId)")
     suspend fun isDownloaded(songId: Long): Boolean
+
+    @Query("SELECT * FROM downloads WHERE isVideo = :isVideo")
+    suspend fun getDownloadsByType(isVideo: Boolean): List<DownloadEntity>
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDownload(download: DownloadEntity)

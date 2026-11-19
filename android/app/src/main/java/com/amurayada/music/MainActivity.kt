@@ -1347,6 +1347,7 @@ fun MusicPlayerApp(
                     val downloadedSongs by downloadViewModel.downloadedSongs.collectAsState()
                     OmniVaultDownloaderScreen(
                         downloadViewModel = downloadViewModel,
+                        onOpenYouTubeLogin = { navController.navigate(Screen.YouTubeLogin.route) },
                         onPlayMedia = { item: com.omnivault.media.model.DownloadItem ->
                             if (!item.format.isAudio) {
                                 navController.navigate(Screen.VideoPlayer.createRoute(item.localFilePath ?: item.url, item.title))

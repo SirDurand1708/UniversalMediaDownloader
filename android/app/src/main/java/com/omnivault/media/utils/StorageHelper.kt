@@ -190,6 +190,19 @@ object StorageHelper {
         }
     }
 
+    fun getAvailableSpaceBytes(context: Context): Long {
+        return try {
+            val stat = android.os.StatFs(context.cacheDir.absolutePath)
+            stat.availableBytes
+        } catch (_: Exception) {
+            Long.MAX_VALUE
+        }
+    }
+
+    fun hasEnoughFreeSpace(context: Context, minBytes: Long = 250L * 1024L * 1024L): Boolean {
+        return getAvailableSpaceBytes(context) >= minBytes
+    }
+
     fun formatFileSize(bytes: Long): String {
         if (bytes <= 0) return "0 B"
         val units = arrayOf("B", "KB", "MB", "GB")

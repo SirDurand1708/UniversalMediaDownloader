@@ -328,6 +328,20 @@ fun SettingsScreen(
                     )
                 }
             }
+
+            // Descargas y Cola
+            item {
+                val autoResume by settingsViewModel.autoResumeDownloads.collectAsState()
+                SettingsSection(title = "Descargas y Cola", icon = Icons.Rounded.CloudDownload) {
+                    SettingsToggleItem(
+                        title = "Reanudar descargas automáticamente",
+                        subtitle = if (autoResume) "Al abrir la app se reanuda la cola pendiente" else "Pausa pendientes al reiniciar (requiere tocar Reanudar)",
+                        icon = Icons.Rounded.PlayCircleOutline,
+                        checked = autoResume,
+                        onCheckedChange = { settingsViewModel.setAutoResumeDownloads(it) }
+                    )
+                }
+            }
             
             // Audio Section
             item {

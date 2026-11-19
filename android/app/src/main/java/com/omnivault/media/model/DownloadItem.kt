@@ -8,6 +8,7 @@ enum class DownloadStatus {
     FETCHING_METADATA,
     DOWNLOADING,
     PROCESSING,
+    PAUSED,
     COMPLETED,
     ERROR,
     CANCELLED

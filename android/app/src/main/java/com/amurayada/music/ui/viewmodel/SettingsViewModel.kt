@@ -55,6 +55,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _sleepTimerMinutes = MutableStateFlow(prefs.getInt("sleep_timer", 0))
     val sleepTimerMinutes: StateFlow<Int> = _sleepTimerMinutes.asStateFlow()
 
+    private val _autoResumeDownloads = MutableStateFlow(prefs.getBoolean("auto_resume_downloads", false))
+    val autoResumeDownloads: StateFlow<Boolean> = _autoResumeDownloads.asStateFlow()
+
     // --- Personalización Visual ---
     
     private val _customPrimaryColor = MutableStateFlow<Int?>(
@@ -353,6 +356,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             "dark" -> "Oscuro"
             else -> "Sistema"
         }
+    }
+
+    fun setAutoResumeDownloads(enabled: Boolean) {
+        _autoResumeDownloads.value = enabled
+        prefs.edit().putBoolean("auto_resume_downloads", enabled).apply()
     }
 
     /**
