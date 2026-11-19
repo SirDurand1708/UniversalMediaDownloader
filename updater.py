@@ -9,6 +9,7 @@ import sys
 import json
 import re
 import urllib.request
+import urllib.error
 import threading
 import subprocess
 
@@ -308,12 +309,75 @@ def get_desktop_diagnostics(data_dir: str, ffmpeg_ok: bool, aria_ok: bool) -> st
             pass
     return "\n".join(lines)
 
-def download_and_install_update(download_url: str, is_installer: bool, progress_callback=None, finished_callback=None, error_callback=None, remote_version: str = None):
+def verify_file_sha256(filepath: str, expected_hex: str) -> bool:
+    """Compara el SHA-256 real de filepath contra expected_hex (insensible a mayúsculas)."""
+    import hashlib
+    sha256 = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        while chunk := f.read(65536):
+            sha256.update(chunk)
+    return sha256.hexdigest().lower() == expected_hex.strip().lower()
+
+
+def verify_release_checksum(dest_file: str, target_url: str) -> tuple[bool, str]:
     """
-    Descarga el nuevo paquete (.exe o .zip) con seguimiento de progreso
-    y ejecuta la actualización automáticamente.
+    Descarga SHA256SUMS.txt del mismo directorio de release y valida dest_file.
+    - Omite solo si SHA256SUMS.txt devuelve HTTP 404 (releases antiguos).
+    - Falla ante cualquier error de red/HTTP != 404, entrada faltante o hash distinto.
+    """
+    from urllib.parse import urlsplit, urlunsplit
+    parts = urlsplit(target_url)
+    base_path = parts.path.rsplit("/", 1)[0] + "/SHA256SUMS.txt"
+    sums_url = urlunsplit((parts.scheme, parts.netloc, base_path, "", ""))
+    try:
+        req = urllib.request.Request(sums_url, headers={"User-Agent": "OmniVault-Desktop-Updater"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            content = resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return True, "SHA256SUMS.txt no disponible en este release"
+        return False, f"No se pudo descargar SHA256SUMS.txt (HTTP {e.code})"
+    except Exception as e:
+        return False, f"Error verificando integridad SHA-256: {e}"
+
+    target_name = os.path.basename(dest_file)
+    expected_hex = None
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        tokens = stripped.split(None, 1)
+        if len(tokens) != 2:
+            continue
+        hex_val, fname = tokens[0].strip(), tokens[1].strip().lstrip("*")
+        if fname == target_name or fname.lower() == target_name.lower():
+            expected_hex = hex_val
+            break
+
+    if not expected_hex:
+        return False, f"'{target_name}' no figura en SHA256SUMS.txt"
+
+    if not verify_file_sha256(dest_file, expected_hex):
+        return False, f"Hash SHA-256 inválido para '{target_name}' (archivo corrupto o alterado)"
+
+    return True, "Integridad SHA-256 verificada"
+
+
+def download_and_install_update(
+    download_url: str,
+    is_installer: bool,
+    progress_callback=None,
+    finished_callback=None,
+    error_callback=None,
+    remote_version: str = None,
+    on_install_started=None,
+):
+    """
+    Descarga el nuevo paquete (.exe o .zip) con seguimiento de progreso,
+    verifica su SHA-256 y ejecuta la actualización automáticamente.
     """
     def _download():
+        dest_file = None
         try:
             # Resolución dinámica a prueba de 404
             target_url = resolve_download_url(download_url, is_installer, remote_version)
@@ -340,16 +404,24 @@ def download_and_install_update(download_url: str, is_installer: bool, progress_
                             percent = int((downloaded / total_bytes) * 100)
                             progress_callback(percent, downloaded, total_bytes)
 
+            ok_hash, hash_msg = verify_release_checksum(dest_file, target_url)
+            if not ok_hash:
+                try:
+                    if os.path.exists(dest_file):
+                        os.remove(dest_file)
+                except Exception:
+                    pass
+                raise ValueError(hash_msg)
+
             if finished_callback:
                 finished_callback(dest_file)
 
             # Ejecutar actualización
             if dest_file.lower().endswith(".exe"):
-                # Ejecutar instalador Inno Setup con elevación y cierre de instancias previas
-                subprocess.Popen([dest_file, "/CLOSEAPPLICATIONS"], shell=True)
-                sys.exit(0)
+                subprocess.Popen([dest_file, "/CLOSEAPPLICATIONS"])
+                if on_install_started:
+                    on_install_started()
             else:
-                # Versión portátil: abrir carpeta con el zip descargado
                 if sys.platform == "win32":
                     os.startfile(target_dir)
 

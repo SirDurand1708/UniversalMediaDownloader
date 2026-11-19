@@ -200,10 +200,15 @@ class SubscriptionsManager:
         # Si hay elementos nuevos y auto_download está habilitado, encolar en el gestor de descargas
         if new_items and sub.get("auto_download", True) and queue_manager:
             fmt = sub.get("format_type", "mp3_320")
-            target_dir = get_target_dir_func(fmt) if get_target_dir_func else None
 
             for it in new_items:
                 try:
+                    target_dir = None
+                    if get_target_dir_func:
+                        try:
+                            target_dir = get_target_dir_func(fmt, it["url"])
+                        except TypeError:
+                            target_dir = get_target_dir_func(fmt)
                     queue_manager.add_download(
                         url=it["url"],
                         format_type=fmt,

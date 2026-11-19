@@ -28,7 +28,7 @@ from downloader import (
 from queue_manager import QueueManager, DownloadTask
 from history_manager import HistoryManager
 from image_cache import ThumbnailCache
-from config_manager import ConfigManager, get_data_dir
+from config_manager import ConfigManager, get_data_dir, resolve_target_dir
 from audio_player import AudioPlayer
 from notifications import send_notification
 import updater
@@ -298,11 +298,13 @@ class OmniVaultApp(ctk.CTk):
         b = self.config.get("browser_cookies", "none")
         return None if b == "none" else b
 
-    def _get_target_dir(self, format_type: str) -> str:
-        """Enruta descargas de audio a la carpeta de música y videos a la carpeta de videos."""
+    def _get_target_dir(self, format_type: str, url: str = None) -> str:
+        """Enruta descargas de audio a música y videos a videos, con subcarpeta opcional por plataforma."""
         if format_type in ["mp3_320", "mp3_192", "m4a_best", "wav"]:
-            return self.config.get_audio_dir()
-        return self.config.get_video_dir()
+            base_dir = self.config.get_audio_dir()
+        else:
+            base_dir = self.config.get_video_dir()
+        return resolve_target_dir(base_dir, bool(self.config.get("organize_by_platform", False)), url)
 
     def _build_layout(self):
         self.grid_rowconfigure(0, weight=1)
@@ -850,8 +852,12 @@ class OmniVaultApp(ctk.CTk):
                 return
             fmt_code = batch_fmt_var.get()
             target_dir = self._get_target_dir(fmt_code)
+            routed_items = [
+                {**it, "output_dir": self._get_target_dir(fmt_code, it.get("url"))}
+                for it in items
+            ]
             self.queue_manager.add_batch(
-                items=items,
+                items=routed_items,
                 format_type=fmt_code,
                 output_dir=target_dir,
                 browser=self._get_active_browser()
@@ -1113,12 +1119,16 @@ class OmniVaultApp(ctk.CTk):
 
         fmt = self.selected_format.get()
         target_dir = self._get_target_dir(fmt)
+        routed_items = [
+            {**it, "output_dir": self._get_target_dir(fmt, it.get("url"))}
+            for it in selected_items
+        ]
         browser = self._get_active_browser()
         subtitles = bool(self.config.get("subtitles_enabled", False))
         aria2c = bool(self.config.get("aria2c_enabled", True))
         normalize = bool(self.config.get("normalize_audio", False))
         count = self.queue_manager.add_batch(
-            selected_items, format_type=fmt, output_dir=target_dir,
+            routed_items, format_type=fmt, output_dir=target_dir,
             browser=browser, download_subtitles=subtitles, use_aria2c=aria2c,
             normalize_audio=normalize
         )
@@ -1263,12 +1273,16 @@ class OmniVaultApp(ctk.CTk):
 
         fmt = self.selected_format.get()
         target_dir = self._get_target_dir(fmt)
+        routed_items = [
+            {**it, "output_dir": self._get_target_dir(fmt, it.get("url"))}
+            for it in selected
+        ]
         browser = self._get_active_browser()
         subtitles = bool(self.config.get("subtitles_enabled", False))
         aria2c = bool(self.config.get("aria2c_enabled", True))
         normalize = bool(self.config.get("normalize_audio", False))
         count = self.queue_manager.add_batch(
-            selected, format_type=fmt, output_dir=target_dir,
+            routed_items, format_type=fmt, output_dir=target_dir,
             browser=browser, download_subtitles=subtitles, use_aria2c=aria2c,
             normalize_audio=normalize
         )
@@ -1418,8 +1432,8 @@ class OmniVaultApp(ctk.CTk):
             return
 
         fmt = self.selected_format.get()
-        target_dir = self._get_target_dir(fmt)
         url = self.current_media.get("url")
+        target_dir = self._get_target_dir(fmt, url)
         title = self.current_media.get("title")
         thumb = self.current_media.get("thumbnail")
         browser = self._get_active_browser()
@@ -2562,6 +2576,15 @@ class OmniVaultApp(ctk.CTk):
             command=self._on_normalize_toggle
         )
         norm_sw.pack(anchor="w", padx=14, pady=(2, 6))
+
+        # Switch Organizar por Plataforma
+        self.platform_org_var = ctk.BooleanVar(value=bool(self.config.get("organize_by_platform", False)))
+        platform_sw = ctk.CTkSwitch(
+            box2, text="Organizar descargas en subcarpetas por plataforma (YouTube, TikTok, etc.)",
+            variable=self.platform_org_var, font=ctk.CTkFont(size=11),
+            command=lambda: self.config.set("organize_by_platform", bool(self.platform_org_var.get()))
+        )
+        platform_sw.pack(anchor="w", padx=14, pady=(2, 6))
 
         # Control de Ancho de Banda y Límite de Velocidad
         rate_row = ctk.CTkFrame(box2, fg_color="transparent")
@@ -3724,7 +3747,8 @@ class OmniVaultApp(ctk.CTk):
                 progress_callback=_progress,
                 finished_callback=_finish,
                 error_callback=_error,
-                remote_version=remote_version
+                remote_version=remote_version,
+                on_install_started=lambda: self.after(0, self.destroy)
             )
 
         btn_up = ctk.CTkButton(

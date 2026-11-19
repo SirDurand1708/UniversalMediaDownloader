@@ -227,6 +227,8 @@ class MiniHUD:
             out_dir = self.config.get_audio_dir()
         else:
             out_dir = self.config.get_video_dir()
+        from config_manager import resolve_target_dir
+        out_dir = resolve_target_dir(out_dir, bool(self.config.get("organize_by_platform", False)), url)
 
         try:
             self.queue_manager.add_download(

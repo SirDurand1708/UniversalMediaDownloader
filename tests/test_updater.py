@@ -103,6 +103,51 @@ class TestUpdater(unittest.TestCase):
         _, eff_port = evaluate_update_availability(mock_data, current_version="2.1.0", install_type="portable")
         self.assertEqual(eff_port["target_url"], "https://example.com/portable.zip")
 
+    def test_verify_release_checksum(self):
+        import hashlib, io, os, tempfile, urllib.error, urllib.request
+        from unittest.mock import patch
+        from updater import verify_file_sha256, verify_release_checksum
+
+        with tempfile.TemporaryDirectory() as tmp:
+            sample = os.path.join(tmp, "OmniVault-Setup.exe")
+            with open(sample, "wb") as f:
+                f.write(b"omnivault-binary-test")
+            real_hex = hashlib.sha256(b"omnivault-binary-test").hexdigest()
+
+            self.assertTrue(verify_file_sha256(sample, real_hex))
+            self.assertFalse(verify_file_sha256(sample, "0" * 64))
+
+            class _FakeResp:
+                def __init__(self, body: bytes):
+                    self._body = body
+                def read(self):
+                    return self._body
+                def __enter__(self):
+                    return self
+                def __exit__(self, *args):
+                    return False
+
+            # 1. Valid match (with *binary marker)
+            with patch.object(urllib.request, "urlopen", return_value=_FakeResp(f"{real_hex} *OmniVault-Setup.exe\n".encode())):
+                ok, _ = verify_release_checksum(sample, "https://example.com/v2.5.40/OmniVault-Setup.exe")
+                self.assertTrue(ok)
+
+            # 2. Hash mismatch fails loudly
+            with patch.object(urllib.request, "urlopen", return_value=_FakeResp(f"{'a'*64}  OmniVault-Setup.exe\n".encode())):
+                ok, _ = verify_release_checksum(sample, "https://example.com/v2.5.40/OmniVault-Setup.exe")
+                self.assertFalse(ok)
+
+            # 3. HTTP 200 with missing file entry fails loudly
+            with patch.object(urllib.request, "urlopen", return_value=_FakeResp(f"{real_hex}  OtherFile.zip\n".encode())):
+                ok, _ = verify_release_checksum(sample, "https://example.com/v2.5.40/OmniVault-Setup.exe")
+                self.assertFalse(ok)
+
+            # 4. HTTP 404 skips gracefully for legacy releases
+            err404 = urllib.error.HTTPError("https://example.com/SHA256SUMS.txt", 404, "Not Found", {}, io.BytesIO(b""))
+            with patch.object(urllib.request, "urlopen", side_effect=err404):
+                ok, _ = verify_release_checksum(sample, "https://example.com/v2.0.0/OmniVault-Setup.exe")
+                self.assertTrue(ok)
+
 
 if __name__ == "__main__":
     unittest.main()

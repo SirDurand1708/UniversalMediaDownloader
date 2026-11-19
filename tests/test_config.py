@@ -44,5 +44,23 @@ class TestConfigManager(unittest.TestCase):
         self.assertTrue(isinstance(audio_dir, str) and len(audio_dir) > 0)
         self.assertTrue(os.path.isdir(audio_dir))
 
+    def test_platform_detection_and_target_dir(self):
+        from config_manager import detect_platform_name, resolve_target_dir
+
+        self.assertFalse(self.cfg.get("organize_by_platform"))
+        self.assertEqual(detect_platform_name("https://www.youtube.com/watch?v=123"), "YouTube")
+        self.assertEqual(detect_platform_name("https://youtu.be/abc"), "YouTube")
+        self.assertEqual(detect_platform_name("https://vm.tiktok.com/ZM123/"), "TikTok")
+        self.assertEqual(detect_platform_name("https://www.instagram.com/reel/abc/"), "Instagram")
+        self.assertEqual(detect_platform_name("https://fb.watch/xyz/"), "Facebook")
+        self.assertEqual(detect_platform_name("https://x.com/user/status/1"), "X")
+        # Negative host checks (must NOT false-match x.com)
+        self.assertEqual(detect_platform_name("https://www.dropbox.com/s/123"), "Otros")
+        self.assertEqual(detect_platform_name("https://www.netflix.com/title/1"), "Otros")
+
+        base = os.path.join(self.temp_dir, "Media")
+        self.assertEqual(resolve_target_dir(base, False, "https://youtu.be/abc"), base)
+        self.assertEqual(resolve_target_dir(base, True, "https://youtu.be/abc"), os.path.join(base, "YouTube"))
+
 if __name__ == "__main__":
     unittest.main()

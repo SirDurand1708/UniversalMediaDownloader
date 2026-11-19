@@ -156,7 +156,7 @@ jobs:
       - name: 🛡️ Calcular Sumas de Verificación SHA-256
         run: |
           cd dist/Releases
-          sha256sum * > SHA256SUMS.txt
+          sha256sum *.exe *.zip *.apk > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: 🔖 Resolver nombre de tag efectivo

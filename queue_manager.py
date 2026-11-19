@@ -146,10 +146,11 @@ class QueueManager:
                 continue
             title = item.get("title", "")
             thumb = item.get("thumbnail", "")
+            item_dir = item.get("output_dir") or output_dir
             self.add_download(
                 url=url,
                 format_type=format_type,
-                output_dir=output_dir,
+                output_dir=item_dir,
                 title=title,
                 thumbnail_url=thumb,
                 browser=browser,

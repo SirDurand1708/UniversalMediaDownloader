@@ -7,7 +7,8 @@ import os
 import sys
 import json
 import threading
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+from urllib.parse import urlparse
 
 def get_app_dir() -> str:
     if getattr(sys, 'frozen', False):
@@ -42,6 +43,46 @@ def get_data_dir() -> str:
         data_dir = os.path.join(local_app_data, "OmniVault")
         os.makedirs(data_dir, exist_ok=True)
         return data_dir
+
+def detect_platform_name(url: Optional[str]) -> str:
+    """Detecta la plataforma por host exacto/subdominio para organizar descargas en subcarpetas."""
+    if not url or not isinstance(url, str):
+        return "Otros"
+    try:
+        host = (urlparse(url.strip()).netloc or "").lower().split(":")[0]
+    except Exception:
+        return "Otros"
+    if not host:
+        return "Otros"
+
+    def _matches(domains: tuple) -> bool:
+        return any(host == d or host.endswith("." + d) for d in domains)
+
+    if _matches(("youtube.com", "youtu.be", "youtube-nocookie.com")):
+        return "YouTube"
+    if _matches(("tiktok.com",)):
+        return "TikTok"
+    if _matches(("instagram.com", "instagr.am")):
+        return "Instagram"
+    if _matches(("facebook.com", "fb.watch", "fb.com")):
+        return "Facebook"
+    if _matches(("x.com", "twitter.com", "t.co")):
+        return "X"
+    return "Otros"
+
+
+def resolve_target_dir(base_dir: str, organize_by_platform: bool, url: Optional[str] = None) -> str:
+    """Resuelve el directorio final de descarga (con subcarpeta por plataforma si está habilitado)."""
+    if organize_by_platform and url:
+        target = os.path.join(base_dir, detect_platform_name(url))
+    else:
+        target = base_dir
+    try:
+        os.makedirs(target, exist_ok=True)
+    except Exception:
+        pass
+    return target
+
 
 CONFIG_FILE = os.path.join(get_data_dir(), "config.json")
 
@@ -96,6 +137,7 @@ class ConfigManager:
             "sync_channels_auto": True,
             "sync_channels_interval_min": 30,
             "floating_hud_enabled": False,
+            "organize_by_platform": False,
         }
 
     def _load(self) -> Dict[str, Any]:
