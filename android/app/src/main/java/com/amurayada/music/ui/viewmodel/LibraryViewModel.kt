@@ -139,7 +139,7 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     var lrcKeys by mutableStateOf<Set<String>>(emptySet())
         private set
 
-    var filterShortAudio by mutableStateOf(
+    private var _filterShortAudio by mutableStateOf(
         application.getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE)
             .let { op ->
                 if (op.contains("filter_short_audio")) op.getBoolean("filter_short_audio", true)
@@ -147,10 +147,10 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                     .getBoolean("filter_short_audio", true)
             }
     )
-        private set
+    val filterShortAudio: Boolean get() = _filterShortAudio
 
     fun setFilterShortAudio(enabled: Boolean) {
-        filterShortAudio = enabled
+        _filterShortAudio = enabled
         omniPrefs.edit().putBoolean("filter_short_audio", enabled).apply()
         prefs.edit().putBoolean("filter_short_audio", enabled).apply()
         loadLibrary()
