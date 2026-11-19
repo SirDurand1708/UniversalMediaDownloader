@@ -526,6 +526,8 @@ fun LarkStyleMusicScreen(
                     smartPlaylists = smartPlaylists,
                     allSongs = rawSongs,
                     searchQuery = searchQuery,
+                    currentSongId = currentSong?.id,
+                    isPlaying = isPlaying,
                     onCreatePlaylist = { showCreatePlaylistDialog = true },
                     onPlaylistClick = onPlaylistClick,
                     onPlayPlaylist = { playlist ->
@@ -1727,6 +1729,8 @@ private fun PlaylistsContent(
     smartPlaylists: List<Playlist> = emptyList(),
     allSongs: List<Song>,
     searchQuery: String = "",
+    currentSongId: Long? = null,
+    isPlaying: Boolean = false,
     onCreatePlaylist: () -> Unit,
     onPlaylistClick: (Playlist) -> Unit,
     onPlayPlaylist: (Playlist) -> Unit,
@@ -1899,17 +1903,52 @@ private fun PlaylistsContent(
                             -2L -> Icons.Rounded.TrendingUp
                             else -> Icons.Rounded.Favorite
                         }
+                        val hasActiveSong = currentSongId != null && currentSongId in smart.songIds
                         Surface(
                             onClick = { onPlaylistClick(smart) },
-                            color = Color(0xFF141923),
+                            color = if (hasActiveSong) Color(0xFF14242E) else Color(0xFF141923),
                             shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.28f)),
+                            border = androidx.compose.foundation.BorderStroke(
+                                if (hasActiveSong) 1.5.dp else 1.dp,
+                                if (hasActiveSong) Color(0xFF00E5FF) else Color(0xFF00E5FF).copy(alpha = 0.28f)
+                            ),
                             modifier = Modifier.width(156.dp)
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
-                                Icon(iconVec, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(22.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(iconVec, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(22.dp))
+                                    if (hasActiveSong) {
+                                        Surface(
+                                            color = Color(0xFF00E5FF).copy(alpha = 0.16f),
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                            ) {
+                                                Icon(
+                                                    if (isPlaying) Icons.Rounded.GraphicEq else Icons.Rounded.Pause,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF00E5FF),
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Text(
+                                                    text = if (isPlaying) "Activa" else "Pausa",
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFF00E5FF)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                                 Spacer(Modifier.height(8.dp))
-                                Text(smart.name, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(smart.name, fontWeight = FontWeight.Bold, color = if (hasActiveSong) Color(0xFF00E5FF) else Color.White, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text("${smart.songIds.size} canciones", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                             }
                         }
@@ -1953,12 +1992,16 @@ private fun PlaylistsContent(
                 playlist.artworkUri?.let { android.net.Uri.parse(it) }
                     ?: playlist.songIds.firstNotNullOfOrNull { songMap[it]?.albumArtUri }
             }
+            val hasActiveSong = currentSongId != null && currentSongId in playlist.songIds
 
             Surface(
                 onClick = { onPlaylistClick(playlist) },
-                color = Color(0xFF141923).copy(alpha = 0.7f),
+                color = if (hasActiveSong) Color(0xFF12232D).copy(alpha = 0.9f) else Color(0xFF141923).copy(alpha = 0.7f),
                 shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF263248)),
+                border = androidx.compose.foundation.BorderStroke(
+                    if (hasActiveSong) 1.5.dp else 1.dp,
+                    if (hasActiveSong) Color(0xFF00E5FF) else Color(0xFF263248)
+                ),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -1990,8 +2033,44 @@ private fun PlaylistsContent(
                     }
                     Spacer(Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(playlist.name, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("$validCount canciones", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text(
+                            playlist.name,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (hasActiveSong) Color(0xFF00E5FF) else Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text("$validCount canciones", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            if (hasActiveSong) {
+                                Surface(
+                                    color = Color(0xFF00E5FF).copy(alpha = 0.16f),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Icon(
+                                            if (isPlaying) Icons.Rounded.GraphicEq else Icons.Rounded.Pause,
+                                            contentDescription = null,
+                                            tint = Color(0xFF00E5FF),
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Text(
+                                            text = if (isPlaying) "Reproduciendo" else "En pausa",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF00E5FF)
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     Box {

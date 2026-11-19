@@ -17,11 +17,24 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
+import java.util.UUID
+
+data class VideoPlaylist(
+    val id: String,
+    val name: String,
+    val videoIds: List<String>,
+    val createdAt: Long = System.currentTimeMillis()
+)
 
 class VideosViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _rawVideos = MutableStateFlow<List<DownloadItem>>(emptyList())
+    val rawVideos: StateFlow<List<DownloadItem>> = _rawVideos.asStateFlow()
+    private val _videoPlaylists = MutableStateFlow<List<VideoPlaylist>>(emptyList())
+    val videoPlaylists: StateFlow<List<VideoPlaylist>> = _videoPlaylists.asStateFlow()
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -138,6 +151,7 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
+        loadVideoPlaylists()
         loadVideos()
     }
 
@@ -247,6 +261,17 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
                 .downloadDao()
                 .deleteDownloadByPath(path)
         }
+        purgeVideoFromPlaylists(item.id)
+    }
+
+    private fun purgeVideoFromPlaylists(videoId: String) {
+        val current = _videoPlaylists.value
+        if (current.none { videoId in it.videoIds }) return
+        val updated = current.map { pl ->
+            if (videoId in pl.videoIds) pl.copy(videoIds = pl.videoIds.filterNot { it == videoId }) else pl
+        }
+        _videoPlaylists.value = updated
+        persistVideoPlaylists(updated)
     }
 
     fun confirmVideoDeleted(item: DownloadItem) {
@@ -406,5 +431,118 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
                 withContext(Dispatchers.Main) { onComplete(false) }
             }
         }
+    }
+
+    private fun playlistsFile(): File =
+        File(getApplication<Application>().filesDir, "video_playlists.json")
+
+    private fun loadVideoPlaylists() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val file = playlistsFile()
+                if (!file.exists()) return@launch
+                val arr = JSONArray(file.readText())
+                val parsed = buildList {
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.optJSONObject(i) ?: continue
+                        val id = obj.optString("id").takeIf { it.isNotBlank() } ?: continue
+                        val name = obj.optString("name").takeIf { it.isNotBlank() } ?: continue
+                        val idsArr = obj.optJSONArray("videoIds") ?: JSONArray()
+                        val ids = buildList {
+                            for (j in 0 until idsArr.length()) {
+                                val vid = idsArr.optString(j)
+                                if (vid.isNotBlank()) add(vid)
+                            }
+                        }
+                        add(
+                            VideoPlaylist(
+                                id = id,
+                                name = name,
+                                videoIds = ids,
+                                createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+                            )
+                        )
+                    }
+                }
+                _videoPlaylists.value = parsed
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private fun persistVideoPlaylists(list: List<VideoPlaylist>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val arr = JSONArray()
+                list.forEach { pl ->
+                    val obj = JSONObject().apply {
+                        put("id", pl.id)
+                        put("name", pl.name)
+                        put("createdAt", pl.createdAt)
+                        put("videoIds", JSONArray(pl.videoIds))
+                    }
+                    arr.put(obj)
+                }
+                playlistsFile().writeText(arr.toString())
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun createVideoPlaylist(name: String, initialVideoIds: List<String> = emptyList()): VideoPlaylist? {
+        val clean = name.trim()
+        if (clean.isEmpty()) return null
+        val created = VideoPlaylist(
+            id = UUID.randomUUID().toString(),
+            name = clean,
+            videoIds = initialVideoIds.distinct()
+        )
+        val updated = listOf(created) + _videoPlaylists.value
+        _videoPlaylists.value = updated
+        persistVideoPlaylists(updated)
+        return created
+    }
+
+    fun renameVideoPlaylist(playlistId: String, newName: String) {
+        val clean = newName.trim()
+        if (clean.isEmpty()) return
+        val updated = _videoPlaylists.value.map {
+            if (it.id == playlistId) it.copy(name = clean) else it
+        }
+        _videoPlaylists.value = updated
+        persistVideoPlaylists(updated)
+    }
+
+    fun deleteVideoPlaylist(playlistId: String) {
+        val updated = _videoPlaylists.value.filterNot { it.id == playlistId }
+        _videoPlaylists.value = updated
+        persistVideoPlaylists(updated)
+    }
+
+    fun addVideosToPlaylist(playlistId: String, videoIds: List<String>) {
+        if (videoIds.isEmpty()) return
+        val updated = _videoPlaylists.value.map { pl ->
+            if (pl.id == playlistId) {
+                pl.copy(videoIds = (pl.videoIds + videoIds).distinct())
+            } else {
+                pl
+            }
+        }
+        _videoPlaylists.value = updated
+        persistVideoPlaylists(updated)
+    }
+
+    fun removeVideoFromPlaylist(playlistId: String, videoId: String) {
+        val updated = _videoPlaylists.value.map { pl ->
+            if (pl.id == playlistId) {
+                pl.copy(videoIds = pl.videoIds.filterNot { it == videoId })
+            } else {
+                pl
+            }
+        }
+        _videoPlaylists.value = updated
+        persistVideoPlaylists(updated)
     }
 }

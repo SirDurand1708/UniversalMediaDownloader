@@ -220,6 +220,19 @@ fun NowPlayingScreen(
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
+    var showSyncedLyrics by remember { mutableStateOf(false) }
+    var showFullLyrics by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = showFullLyrics) {
+        showFullLyrics = false
+    }
+
+    BackHandler(
+        enabled = !showQueueSheet && !showFullLyrics && !showSpeedDialog &&
+            !showSleepTimerDialog && !showShareDialog && !showSongInfoDialog && !showLyricsDialog
+    ) {
+        onBackClick()
+    }
 
     if (showShareDialog) {
         com.amurayada.music.ui.components.ShareDialog(
@@ -243,8 +256,6 @@ fun NowPlayingScreen(
             }
         }
     }
-    var showSyncedLyrics by remember { mutableStateOf(false) }
-    var showFullLyrics by remember { mutableStateOf(false) }
 
     // Animation State
     val dismissOffsetY = remember { Animatable(0f) }
@@ -485,23 +496,10 @@ fun NowPlayingScreen(
                     modifier = Modifier.weight(1f).alpha(immersiveAlpha)
                 )
                 
-                val songInfoWeight by animateFloatAsState(
-                    targetValue = when {
-                        !isUserInteracting && isCanvaPlaying -> 0.3f
-                        else -> 1f
-                    },
-                    animationSpec = tween(1000),
-                    label = "songInfoWeight"
-                )
-                
-                // Bottom Section
+                // Bottom Section (takes natural height so NowPlayingBottomOptions is never clipped on 2-line titles)
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(songInfoWeight)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Spacer(modifier = Modifier.weight(1f))
-                    
                     NowPlayingSongInfo(
                         currentSong = currentSong,
                         isFavorite = isFavorite,
@@ -518,7 +516,7 @@ fun NowPlayingScreen(
                             .fillMaxWidth()
                             .alpha(immersiveAlpha)
                     ) {
-                        Spacer(modifier = Modifier.height(24.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
                         
                         NowPlayingControls(
                             currentPosition = currentPosition,
@@ -535,7 +533,7 @@ fun NowPlayingScreen(
                             modifier = Modifier.padding(horizontal = 24.dp)
                         )
                         
-                        Spacer(modifier = Modifier.height(24.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
                         
                         NowPlayingBottomOptions(
                             showSyncedLyrics = showSyncedLyrics,

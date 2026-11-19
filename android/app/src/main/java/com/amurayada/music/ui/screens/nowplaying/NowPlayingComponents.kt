@@ -451,17 +451,19 @@ fun NowPlayingBottomOptions(
             )
         }
 
-        TextButton(
+        Surface(
             onClick = onShowSpeedSelector,
-            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+            shape = RoundedCornerShape(8.dp),
+            color = if (playbackSpeed != 1.0f) effectivePrimaryColor.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.12f)
         ) {
             Text(
                 text = if (playbackSpeed == 1.0f) "1.0x" else "${playbackSpeed}x",
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
-                color = if (playbackSpeed != 1.0f) effectivePrimaryColor else Color.White.copy(alpha = 0.85f),
+                color = if (playbackSpeed != 1.0f) effectivePrimaryColor else Color.White,
                 maxLines = 1,
-                softWrap = false
+                softWrap = false,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
             )
         }
         

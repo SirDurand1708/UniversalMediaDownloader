@@ -662,7 +662,9 @@ fun MusicPlayerApp(
                     currentDestination?.route != Screen.VideoPlayer.route
                 if (showMiniPlayer || showBottomNav) {
                     var showMiniQueueSheet by remember { mutableStateOf(false) }
-                    Column {
+                    Column(
+                        modifier = if (!showBottomNav) Modifier.navigationBarsPadding() else Modifier
+                    ) {
                         AnimatedVisibility(
                             visible = showMiniPlayer,
                             enter = slideInVertically { it } + fadeIn(),
