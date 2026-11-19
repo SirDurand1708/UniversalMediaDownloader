@@ -69,6 +69,13 @@ jobs:
         run: |
           python build_exe.py
 
+      - name: 🔍 Smoke Test del ejecutable y binarios (FFmpeg / Aria2c)
+        run: |
+          .\dist\OmniVault\bin\ffmpeg.exe -version | Select-Object -First 2
+          .\dist\OmniVault\bin\aria2c.exe --version | Select-Object -First 2
+          $p = Start-Process -FilePath ".\dist\OmniVault\OmniVault.exe" -ArgumentList "--smoke-test" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Smoke test del ejecutable falló con código $($p.ExitCode)" }
+
       - name: 📦 Generar paquetes portátiles e instalador
         run: |
           python package_release.py --version "${{ github.ref_name }}"

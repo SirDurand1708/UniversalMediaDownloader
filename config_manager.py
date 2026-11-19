@@ -53,15 +53,27 @@ class ConfigManager:
 
     def _default_settings(self) -> Dict[str, Any]:
         user_home = os.path.expanduser("~")
-        
-        # Carpetas predeterminadas especializadas solicitadas por el usuario
-        music_base = os.path.join(user_home, "Music")
-        videos_base = os.path.join(user_home, "Videos")
-        downloads_base = os.path.join(user_home, "Downloads")
+        is_portable = False
+        try:
+            import updater
+            is_portable = updater.get_installation_type() == "portable"
+        except Exception:
+            pass
 
-        default_audio = os.path.join(music_base, "OmniVault Audios") if os.path.exists(music_base) else os.path.join(downloads_base, "OmniVault Audios")
-        default_video = os.path.join(videos_base, "OmniVault Videos") if os.path.exists(videos_base) else os.path.join(downloads_base, "OmniVault Videos")
-        default_dl = downloads_base if os.path.exists(downloads_base) else user_home
+        if is_portable:
+            portable_base = os.path.join(get_app_dir(), "Descargas")
+            default_audio = os.path.join(portable_base, "Audios")
+            default_video = os.path.join(portable_base, "Videos")
+            default_dl = portable_base
+        else:
+            # Carpetas predeterminadas especializadas solicitadas por el usuario
+            music_base = os.path.join(user_home, "Music")
+            videos_base = os.path.join(user_home, "Videos")
+            downloads_base = os.path.join(user_home, "Downloads")
+
+            default_audio = os.path.join(music_base, "OmniVault Audios") if os.path.exists(music_base) else os.path.join(downloads_base, "OmniVault Audios")
+            default_video = os.path.join(videos_base, "OmniVault Videos") if os.path.exists(videos_base) else os.path.join(downloads_base, "OmniVault Videos")
+            default_dl = downloads_base if os.path.exists(downloads_base) else user_home
 
         return {
             "audio_download_dir": default_audio,

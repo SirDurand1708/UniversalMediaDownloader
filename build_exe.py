@@ -54,6 +54,13 @@ def build():
     for pkg in packages_to_collect:
         collect_args.extend(["--collect-all", pkg])
 
+    exclude_args = [
+        "--exclude-module", "unittest",
+        "--exclude-module", "pydoc",
+        "--exclude-module", "tkinter.test",
+        "--exclude-module", "test",
+    ]
+
     print("[*] Preparando argumentos de PyInstaller...")
     cmd = [
         sys.executable,
@@ -64,7 +71,7 @@ def build():
         "--windowed",
         "--name", "OmniVault",
         "--clean",
-    ] + collect_args + icon_args + [os.path.join(base_dir, "app.py")]
+    ] + exclude_args + collect_args + icon_args + [os.path.join(base_dir, "app.py")]
 
     print("[*] Ejecutando compilación...")
     ret = subprocess.call(cmd)

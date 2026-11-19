@@ -6,6 +6,7 @@ Soporte universal para YouTube, TikTok (sin marcas de agua), Reels, Playlists y 
 
 import os
 import sys
+import json
 import threading
 import subprocess
 import tkinter as tk
@@ -2609,6 +2610,42 @@ class OmniVaultApp(ctk.CTk):
             text_color=theme.BTN_SECONDARY_TEXT,
             font=ctk.CTkFont(size=11, weight="bold"),
             command=self._open_data_dir
+        ).pack(side="left", padx=(0, 6))
+
+        ctk.CTkButton(
+            mode_row,
+            text="📋 Copiar Diagnóstico",
+            height=30,
+            fg_color=theme.BTN_SECONDARY_BG,
+            hover_color=theme.BTN_SECONDARY_HOVER,
+            text_color=theme.BTN_SECONDARY_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=self._copy_desktop_diagnostics
+        ).pack(side="left")
+
+        tools_row = ctk.CTkFrame(box4, fg_color="transparent")
+        tools_row.pack(fill="x", padx=14, pady=(0, 12))
+
+        ctk.CTkButton(
+            tools_row,
+            text="💾 Exportar Respaldo",
+            height=30,
+            fg_color=theme.BTN_SECONDARY_BG,
+            hover_color=theme.BTN_SECONDARY_HOVER,
+            text_color=theme.BTN_SECONDARY_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=self._export_desktop_backup
+        ).pack(side="left", padx=(0, 6))
+
+        ctk.CTkButton(
+            tools_row,
+            text="📥 Importar Respaldo",
+            height=30,
+            fg_color=theme.BTN_SECONDARY_BG,
+            hover_color=theme.BTN_SECONDARY_HOVER,
+            text_color=theme.BTN_SECONDARY_TEXT,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=self._import_desktop_backup
         ).pack(side="left")
 
         # Bloque 5: Actualizaciones Oficiales
@@ -2850,6 +2887,83 @@ class OmniVaultApp(ctk.CTk):
                 subprocess.Popen(["xdg-open", data_dir])
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo abrir la carpeta de datos:\n{data_dir}\n\n{e}")
+
+    def _copy_desktop_diagnostics(self):
+        """Copia el reporte técnico del sistema al portapapeles."""
+        report = updater.get_desktop_diagnostics(
+            data_dir=get_data_dir(),
+            ffmpeg_ok=is_ffmpeg_available(),
+            aria_ok=is_aria2c_available()
+        )
+        self.clipboard_clear()
+        self.clipboard_append(report)
+        messagebox.showinfo("Diagnóstico Copiado", "El diagnóstico técnico se copió al portapapeles.")
+
+    def _export_desktop_backup(self):
+        """Exporta configuración, biblioteca y suscripciones a un respaldo .json."""
+        dest = filedialog.asksaveasfilename(
+            title="Guardar respaldo de OmniVault",
+            defaultextension=".json",
+            initialfile="omnivault_desktop_backup.json",
+            filetypes=[("JSON", "*.json")]
+        )
+        if not dest:
+            return
+        data_dir = get_data_dir()
+        bundle = {}
+        read_errors = []
+        for name in ("config.json", "library.json", "subscriptions.json"):
+            p = os.path.join(data_dir, name)
+            if os.path.isfile(p):
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        bundle[name] = json.load(f)
+                except Exception as e:
+                    read_errors.append(f"{name}: {e}")
+        if read_errors:
+            messagebox.showwarning("Respaldo parcial", "Algunos archivos no se pudieron leer:\n" + "\n".join(read_errors))
+        if not bundle:
+            messagebox.showinfo("Sin datos", "No hay archivos de configuración o historial para exportar.")
+            return
+        try:
+            with open(dest, "w", encoding="utf-8") as f:
+                json.dump(bundle, f, indent=2, ensure_ascii=False)
+            messagebox.showinfo("Respaldo Exportado", f"Respaldo guardado en:\n{dest}")
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo guardar el respaldo:\n{e}")
+
+    def _import_desktop_backup(self):
+        """Importa configuración, biblioteca y suscripciones desde un respaldo .json."""
+        src = filedialog.askopenfilename(
+            title="Seleccionar respaldo de OmniVault",
+            filetypes=[("JSON", "*.json")]
+        )
+        if not src:
+            return
+        try:
+            with open(src, "r", encoding="utf-8") as f:
+                bundle = json.load(f)
+            if not isinstance(bundle, dict):
+                raise ValueError("El archivo JSON no contiene un objeto de respaldo válido.")
+            expected_types = {
+                "config.json": dict,
+                "library.json": (list, dict),
+                "subscriptions.json": (list, dict),
+            }
+            data_dir = get_data_dir()
+            os.makedirs(data_dir, exist_ok=True)
+            restored = 0
+            for name, allowed_type in expected_types.items():
+                if name in bundle and isinstance(bundle[name], allowed_type):
+                    with open(os.path.join(data_dir, name), "w", encoding="utf-8") as out:
+                        json.dump(bundle[name], out, indent=2, ensure_ascii=False)
+                    restored += 1
+            if restored == 0:
+                messagebox.showwarning("Sin datos válidos", "El respaldo no contiene secciones válidas para restaurar.")
+            else:
+                messagebox.showinfo("Respaldo Restaurado", f"Se restauraron {restored} archivos. Reinicia OmniVault para aplicar los cambios.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Archivo de respaldo inválido:\n{e}")
 
     def _get_current_theme_label(self) -> str:
         cur = self.config.get("accent_theme", "violet")
@@ -3386,6 +3500,16 @@ class OmniVaultApp(ctk.CTk):
 
 
 if __name__ == "__main__":
+    if "--smoke-test" in sys.argv:
+        sys.excepthook = sys.__excepthook__
+        _data_dir = get_data_dir()
+        _ff = is_ffmpeg_available()
+        _ar = is_aria2c_available()
+        if getattr(sys, "frozen", False) and not (_ff and _ar):
+            sys.exit(2)
+        if sys.stdout:
+            print(f"SMOKE_OK version={updater.CURRENT_VERSION} mode={updater.get_installation_type()} ffmpeg={_ff} aria2c={_ar} data_dir={_data_dir}")
+        sys.exit(0)
     if notify_running_instance():
         sys.exit(0)
     app = OmniVaultApp()

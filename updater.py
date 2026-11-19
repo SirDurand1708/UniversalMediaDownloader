@@ -276,6 +276,38 @@ def check_for_updates_async(callback, verify_asset_exists: bool = True):
     thread = threading.Thread(target=_worker, daemon=True)
     thread.start()
 
+
+def get_desktop_diagnostics(data_dir: str, ffmpeg_ok: bool, aria_ok: bool) -> str:
+    """Genera un reporte técnico resumido para diagnóstico y soporte."""
+    import platform
+    ytdlp_ver = "unknown"
+    try:
+        import yt_dlp
+        ytdlp_ver = getattr(yt_dlp.version, "__version__", "unknown")
+    except Exception:
+        pass
+    lines = [
+        f"App: OmniVault Desktop v{CURRENT_VERSION}",
+        f"Modo: {get_installation_type()}",
+        f"SO: {platform.system()} {platform.release()} ({platform.machine()})",
+        f"Python: {sys.version.split()[0]}",
+        f"yt-dlp: {ytdlp_ver}",
+        f"DataDir: {data_dir}",
+        f"FFmpeg: {'OK' if ffmpeg_ok else 'NO'}",
+        f"Aria2c: {'OK' if aria_ok else 'NO'}",
+    ]
+    crash_log = os.path.join(data_dir, "crash_log.txt")
+    if os.path.isfile(crash_log):
+        try:
+            with open(crash_log, "r", encoding="utf-8", errors="ignore") as f:
+                tail = f.readlines()[-12:]
+            if tail:
+                lines.append("--- Último crash_log.txt ---")
+                lines.extend(line.rstrip("\r\n") for line in tail)
+        except Exception:
+            pass
+    return "\n".join(lines)
+
 def download_and_install_update(download_url: str, is_installer: bool, progress_callback=None, finished_callback=None, error_callback=None, remote_version: str = None):
     """
     Descarga el nuevo paquete (.exe o .zip) con seguimiento de progreso
