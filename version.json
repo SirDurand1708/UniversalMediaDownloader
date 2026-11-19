@@ -1,19 +1,19 @@
 {
-  "version": "2.5.40",
-  "version_code": 290,
+  "version": "2.5.41",
+  "version_code": 291,
   "release_date": "2026-11-19",
-  "title": "OmniVault v2.5.40 — Windows PC & Android",
-  "changelog": "✨ Release unificado PC + Android: Portable USB con rutas relativas, smoke-test del .exe en CI, cola por lotes, filtros/ordenamiento en Biblioteca, conversor por lotes, Transcriptor .TXT/Copiar, verificación SHA-256 en actualizaciones y organización opcional por plataforma",
+  "title": "OmniVault v2.5.41 — Windows PC & Android",
+  "changelog": "✨ Android: Playlists virtuales de videos (subcarpetas personalizadas), BackHandler corregido en reproductor y letra completa, controles inferiores siempre visibles con botón de velocidad 1.0x, MiniPlayer sin solapamiento con la barra del sistema e indicador de reproducción activa en Playlists",
   "android": {
-    "version": "2.5.40",
-    "version_code": 290,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.40/OmniVault-v2.5.40-Android.apk",
+    "version": "2.5.41",
+    "version_code": 291,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.41/OmniVault-v2.5.41-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.40",
-    "version_code": 290,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.40/OmniVault-v2.5.40-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.40/OmniVault-v2.5.40-Windows-x64-Portable.zip"
+    "version": "2.5.41",
+    "version_code": 291,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.41/OmniVault-v2.5.41-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.41/OmniVault-v2.5.41-Windows-x64-Portable.zip"
   }
 }
