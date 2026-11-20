@@ -39,6 +39,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.omnivault.media.model.DownloadItem
 import kotlinx.coroutines.delay
 import java.io.File
 
@@ -47,10 +48,19 @@ import java.io.File
 fun VideoPlayerScreen(
     videoPath: String,
     videoTitle: String,
+    queue: List<DownloadItem> = emptyList(),
     onBackClick: () -> Unit,
     onPlayInBackground: (videoPath: String, videoTitle: String, currentPositionMs: Long) -> Unit = { _, _, _ -> }
 ) {
     val context = LocalContext.current
+    var activeIndex by remember(videoPath, queue) {
+        mutableIntStateOf(
+            queue.indexOfFirst { (it.localFilePath ?: it.url) == videoPath }.coerceAtLeast(0)
+        )
+    }
+    val currentQueueItem = queue.getOrNull(activeIndex)
+    val activePath = currentQueueItem?.let { it.localFilePath ?: it.url } ?: videoPath
+    val activeTitle = currentQueueItem?.title ?: videoTitle
     var isPlaying by remember { mutableStateOf(true) }
     var currentPosition by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
@@ -90,10 +100,10 @@ fun VideoPlayerScreen(
         ExoPlayer.Builder(context)
             .setAudioAttributes(audioAttributes, true)
             .build().apply {
-                val uri = if (videoPath.startsWith("http://") || videoPath.startsWith("https://") || videoPath.startsWith("content://")) {
-                    Uri.parse(videoPath)
+                val uri = if (activePath.startsWith("http://") || activePath.startsWith("https://") || activePath.startsWith("content://")) {
+                    Uri.parse(activePath)
                 } else {
-                    Uri.fromFile(File(videoPath))
+                    Uri.fromFile(File(activePath))
                 }
                 setMediaItem(MediaItem.fromUri(uri))
                 prepare()
@@ -101,7 +111,24 @@ fun VideoPlayerScreen(
             }
     }
 
-    DisposableEffect(Unit) {
+    val playAtIndex: (Int) -> Unit = { targetIndex ->
+        val item = queue.getOrNull(targetIndex)
+        if (item != null) {
+            activeIndex = targetIndex
+            val nextPath = item.localFilePath ?: item.url
+            val uri = if (nextPath.startsWith("http://") || nextPath.startsWith("https://") || nextPath.startsWith("content://")) {
+                Uri.parse(nextPath)
+            } else {
+                Uri.fromFile(File(nextPath))
+            }
+            exoPlayer.setMediaItem(MediaItem.fromUri(uri))
+            exoPlayer.prepare()
+            exoPlayer.playWhenReady = true
+            currentPosition = 0L
+        }
+    }
+
+    DisposableEffect(queue) {
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
@@ -110,6 +137,8 @@ fun VideoPlayerScreen(
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_READY) {
                     duration = exoPlayer.duration.coerceAtLeast(0L)
+                } else if (playbackState == Player.STATE_ENDED && queue.size > 1 && activeIndex + 1 < queue.size) {
+                    playAtIndex(activeIndex + 1)
                 }
             }
         }
@@ -117,6 +146,11 @@ fun VideoPlayerScreen(
 
         onDispose {
             exoPlayer.removeListener(listener)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
             exoPlayer.release()
         }
     }
@@ -251,7 +285,7 @@ fun VideoPlayerScreen(
                         )
                     }
                     Text(
-                        text = videoTitle,
+                        text = activeTitle,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White,
@@ -304,7 +338,7 @@ fun VideoPlayerScreen(
                         onClick = {
                             val pos = exoPlayer.currentPosition.coerceAtLeast(0L)
                             exoPlayer.pause()
-                            onPlayInBackground(videoPath, videoTitle, pos)
+                            onPlayInBackground(activePath, activeTitle, pos)
                             onBackClick()
                         }
                     ) {
@@ -348,8 +382,22 @@ fun VideoPlayerScreen(
                 Row(
                     modifier = Modifier.align(Alignment.Center),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(32.dp)
+                    horizontalArrangement = Arrangement.spacedBy(if (queue.size > 1) 16.dp else 32.dp)
                 ) {
+                    if (queue.size > 1) {
+                        IconButton(
+                            onClick = { if (activeIndex > 0) playAtIndex(activeIndex - 1) },
+                            enabled = activeIndex > 0,
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Icon(
+                                Icons.Rounded.SkipPrevious,
+                                contentDescription = "Video anterior",
+                                tint = if (activeIndex > 0) Color.White else Color.White.copy(alpha = 0.35f),
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    }
                     IconButton(
                         onClick = {
                             val newPos = (exoPlayer.currentPosition - 10000).coerceAtLeast(0L)
@@ -399,6 +447,20 @@ fun VideoPlayerScreen(
                             tint = Color.White,
                             modifier = Modifier.size(36.dp)
                         )
+                    }
+                    if (queue.size > 1) {
+                        IconButton(
+                            onClick = { if (activeIndex + 1 < queue.size) playAtIndex(activeIndex + 1) },
+                            enabled = activeIndex + 1 < queue.size,
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Icon(
+                                Icons.Rounded.SkipNext,
+                                contentDescription = "Siguiente video",
+                                tint = if (activeIndex + 1 < queue.size) Color.White else Color.White.copy(alpha = 0.35f),
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
                     }
                 }
 

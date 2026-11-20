@@ -152,7 +152,8 @@ object LocalMediaScanner {
             MediaStore.Video.Media.SIZE,
             MediaStore.Video.Media.DURATION,
             MediaStore.Video.Media.DATE_ADDED,
-            MediaStore.Video.Media.RESOLUTION
+            MediaStore.Video.Media.RESOLUTION,
+            MediaStore.Video.Media.MIME_TYPE
         )
 
         // Filtrar videos de más de 20 KB sin exigir duración previa para no descartar descargas recientes
@@ -174,6 +175,7 @@ object LocalMediaScanner {
                 val durCol = cursor.getColumnIndex(MediaStore.Video.Media.DURATION)
                 val dateCol = cursor.getColumnIndex(MediaStore.Video.Media.DATE_ADDED)
                 val resCol = cursor.getColumnIndex(MediaStore.Video.Media.RESOLUTION)
+                val mimeCol = cursor.getColumnIndex(MediaStore.Video.Media.MIME_TYPE)
 
                 if (idCol == -1 || dataCol == -1) return@use
 
@@ -181,6 +183,14 @@ object LocalMediaScanner {
                     val id = cursor.getLong(idCol)
                     val rawTitle = if (titleCol != -1) cursor.getString(titleCol) ?: "Video" else "Video"
                     val path = cursor.getString(dataCol) ?: continue
+                    val mimeType = if (mimeCol != -1) cursor.getString(mimeCol) ?: "" else ""
+                    if (
+                        mimeType.equals("image/gif", ignoreCase = true) ||
+                        path.endsWith(".gif", ignoreCase = true) ||
+                        rawTitle.endsWith(".gif", ignoreCase = true) ||
+                        path.contains("WhatsApp Animated Gifs", ignoreCase = true) ||
+                        path.contains("Animated Gifs", ignoreCase = true)
+                    ) continue
                     val sizeBytes = if (sizeCol != -1) cursor.getLong(sizeCol) else 0L
                     val dateAddedSec = if (dateCol != -1) cursor.getLong(dateCol) else 0L
                     val resolution = if (resCol != -1) cursor.getString(resCol) ?: "" else ""

@@ -2,6 +2,7 @@ package com.amurayada.music.data.repository
 
 import android.content.Context
 import com.amurayada.music.data.model.Playlist
+import com.omnivault.media.utils.PlaylistBackupManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,9 +20,25 @@ class PlaylistRepository(private val context: Context) {
 
     suspend fun loadPlaylists() {
         withContext(Dispatchers.IO) {
-            if (playlistsFile.exists()) {
+            var content: String? = if (playlistsFile.exists()) {
+                playlistsFile.readText().takeIf { it.isNotBlank() && it.trim() != "[]" }
+            } else null
+
+            if (content == null) {
+                val backup = PlaylistBackupManager.readBackup(context, "playlists.json")
+                if (!backup.isNullOrBlank() && backup.trim() != "[]") {
+                    content = backup
+                    try { playlistsFile.writeText(backup) } catch (_: Exception) {}
+                }
+            } else {
+                // Asegurar respaldo inicial de playlists ya existentes
+                if (PlaylistBackupManager.readBackup(context, "playlists.json").isNullOrBlank()) {
+                    PlaylistBackupManager.saveBackup(context, "playlists.json", content)
+                }
+            }
+
+            if (content != null) {
                 try {
-                    val content = playlistsFile.readText()
                     val jsonArray = JSONArray(content)
                     val loadedPlaylists = mutableListOf<Playlist>()
                     
@@ -77,7 +94,9 @@ class PlaylistRepository(private val context: Context) {
                     jsonArray.put(jsonObject)
                 }
                 
-                playlistsFile.writeText(jsonArray.toString())
+                val serialized = jsonArray.toString()
+                playlistsFile.writeText(serialized)
+                PlaylistBackupManager.saveBackup(context, "playlists.json", serialized)
             } catch (e: Exception) {
                 e.printStackTrace()
             }

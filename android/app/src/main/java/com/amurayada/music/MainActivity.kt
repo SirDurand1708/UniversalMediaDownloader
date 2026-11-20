@@ -1449,9 +1449,11 @@ fun MusicPlayerApp(
                 ) { backStackEntry ->
                     val path = backStackEntry.arguments?.getString("path") ?: ""
                     val title = backStackEntry.arguments?.getString("title") ?: ""
+                    val videoQueue by videosViewModel.playbackQueue.collectAsState()
                     VideoPlayerScreen(
                         videoPath = path,
                         videoTitle = title,
+                        queue = videoQueue,
                         onBackClick = { navController.popBackStack() },
                         onPlayInBackground = { videoPath, videoTitleArg, posMs ->
                             val bgSong = Song(

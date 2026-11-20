@@ -9,6 +9,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items as lazyItems
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -41,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.amurayada.music.ui.viewmodel.VideoPlaylist
 import com.amurayada.music.ui.viewmodel.VideosViewModel
 import com.omnivault.media.model.DownloadItem
@@ -69,7 +72,9 @@ fun VideosScreen(
     val onlyCamera by videosViewModel.onlyCamera.collectAsState()
 
     val prefs = remember { context.getSharedPreferences("omnivault_prefs", Context.MODE_PRIVATE) }
-    var isGridView by remember { mutableStateOf(prefs.getBoolean("video_grid_view", true)) }
+    var isGridView by remember { mutableStateOf(prefs.getBoolean("video_grid_view", false)) }
+    var showSearchBar by remember { mutableStateOf(false) }
+    var showHeaderMenu by remember { mutableStateOf(false) }
     val selectedVideoIds = remember { mutableStateListOf<String>() }
     var pendingBatchDeleteVideos by remember { mutableStateOf<List<DownloadItem>>(emptyList()) }
 
@@ -181,77 +186,60 @@ fun VideosScreen(
             .fillMaxSize()
             .statusBarsPadding()
     ) {
-        // Top Header
+        // Top Header (limpio, sin subtítulo truncado ni botones amontonados)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "VIDEOS",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Surface(
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            text = "${videos.size}",
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
                 Text(
-                    text = "Biblioteca de videos de tu dispositivo",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = "VIDEOS",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onBackground,
                     maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis
+                    softWrap = false
                 )
+                Spacer(Modifier.width(8.dp))
+                Surface(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(
+                        text = if (selectedSection == 0) "${videos.size}" else "${videoPlaylists.size}",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
             }
 
-            Row {
-                IconButton(
-                    onClick = {
-                        if (!isScanningStandardize) {
-                            isScanningStandardize = true
-                            scope.launch {
-                                val found = BulkMediaStandardizer.scanCandidates(
-                                    context = context,
-                                    includeAudio = false,
-                                    includeVideo = true
-                                )
-                                isScanningStandardize = false
-                                if (found.isEmpty()) {
-                                    Toast.makeText(context, "¡Tus videos ya están estandarizados!", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    videoStandardizeCandidates = found
-                                }
-                            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                if (selectedSection == 0) {
+                    IconButton(onClick = {
+                        if (showSearchBar && searchQuery.isNotEmpty()) {
+                            videosViewModel.searchQuery.value = ""
                         }
+                        showSearchBar = !showSearchBar
+                    }) {
+                        Icon(
+                            imageVector = if (showSearchBar || searchQuery.isNotEmpty()) Icons.Rounded.SearchOff else Icons.Rounded.Search,
+                            contentDescription = "Buscar videos",
+                            tint = if (showSearchBar || searchQuery.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
+                        )
                     }
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.AutoFixHigh,
-                        contentDescription = "Estandarizar nombres de videos",
-                        tint = MaterialTheme.colorScheme.onBackground
-                    )
                 }
                 IconButton(onClick = {
                     val next = !isGridView
@@ -264,19 +252,58 @@ fun VideosScreen(
                         tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
-                IconButton(onClick = { showSortDialog = true }) {
-                    Icon(
-                        imageVector = Icons.Rounded.Sort,
-                        contentDescription = "Ordenar",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-                IconButton(onClick = { videosViewModel.loadVideos() }) {
-                    Icon(
-                        imageVector = Icons.Rounded.Refresh,
-                        contentDescription = "Recargar",
-                        tint = MaterialTheme.colorScheme.onBackground
-                    )
+                Box {
+                    IconButton(onClick = { showHeaderMenu = true }) {
+                        Icon(
+                            imageVector = Icons.Rounded.MoreVert,
+                            contentDescription = "Más opciones",
+                            tint = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showHeaderMenu,
+                        onDismissRequest = { showHeaderMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Ordenar videos") },
+                            leadingIcon = { Icon(Icons.Rounded.Sort, contentDescription = null) },
+                            onClick = {
+                                showHeaderMenu = false
+                                showSortDialog = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Estandarizar nombres") },
+                            leadingIcon = { Icon(Icons.Rounded.AutoFixHigh, contentDescription = null) },
+                            onClick = {
+                                showHeaderMenu = false
+                                if (!isScanningStandardize) {
+                                    isScanningStandardize = true
+                                    scope.launch {
+                                        val found = BulkMediaStandardizer.scanCandidates(
+                                            context = context,
+                                            includeAudio = false,
+                                            includeVideo = true
+                                        )
+                                        isScanningStandardize = false
+                                        if (found.isEmpty()) {
+                                            Toast.makeText(context, "¡Tus videos ya están estandarizados!", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            videoStandardizeCandidates = found
+                                        }
+                                    }
+                                }
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Recargar biblioteca") },
+                            leadingIcon = { Icon(Icons.Rounded.Refresh, contentDescription = null) },
+                            onClick = {
+                                showHeaderMenu = false
+                                videosViewModel.loadVideos()
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -336,70 +363,71 @@ fun VideosScreen(
         }
 
         if (selectedSection == 0) {
-        // Search Bar
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { videosViewModel.searchQuery.value = it },
-            placeholder = { Text("Buscar videos por título...") },
-            leadingIcon = {
-                Icon(Icons.Rounded.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            },
-            trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { videosViewModel.searchQuery.value = "" }) {
-                        Icon(Icons.Rounded.Clear, contentDescription = "Limpiar")
+        // Buscador colapsable para dar mayor espacio a los videos
+        AnimatedVisibility(visible = showSearchBar || searchQuery.isNotEmpty()) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { videosViewModel.searchQuery.value = it },
+                placeholder = { Text("Buscar videos por título...") },
+                leadingIcon = {
+                    Icon(Icons.Rounded.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { videosViewModel.searchQuery.value = "" }) {
+                            Icon(Icons.Rounded.Clear, contentDescription = "Limpiar")
+                        }
                     }
-                }
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                )
             )
-        )
+        }
 
-        Spacer(Modifier.height(6.dp))
-
-        // Filtros rápidos: Todos / Descargados / Cámara / Sin WhatsApp / Ocultar < 5s
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
+        // Filtros rápidos con padding limpio y etiquetas claras (sin cortes en el borde)
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            FilterChip(
-                selected = !onlyDownloaded && !onlyCamera,
-                onClick = {
-                    videosViewModel.setOnlyDownloaded(false)
-                    videosViewModel.setOnlyCamera(false)
-                },
-                label = { Text("Todos", fontSize = 12.sp, maxLines = 1, softWrap = false) }
-            )
-            FilterChip(
-                selected = onlyDownloaded,
-                onClick = { videosViewModel.setOnlyDownloaded(true) },
-                label = { Text("Descargados", fontSize = 12.sp, maxLines = 1, softWrap = false) }
-            )
-            FilterChip(
-                selected = onlyCamera,
-                onClick = { videosViewModel.setOnlyCamera(!onlyCamera) },
-                label = { Text("Cámara", fontSize = 12.sp, maxLines = 1, softWrap = false) }
-            )
-            FilterChip(
-                selected = hideWhatsAppClips,
-                onClick = { videosViewModel.setHideWhatsAppClips(!hideWhatsAppClips) },
-                label = { Text("Sin WhatsApp", fontSize = 12.sp, maxLines = 1, softWrap = false) }
-            )
-            FilterChip(
-                selected = hideShortClips,
-                onClick = { videosViewModel.setHideShortClips(!hideShortClips) },
-                label = { Text("Ocultar < 5s", fontSize = 12.sp, maxLines = 1, softWrap = false) }
-            )
+            item {
+                FilterChip(
+                    selected = !onlyDownloaded && !onlyCamera,
+                    onClick = {
+                        videosViewModel.setOnlyDownloaded(false)
+                        videosViewModel.setOnlyCamera(false)
+                    },
+                    label = { Text("Todos", fontSize = 12.sp, maxLines = 1, softWrap = false) }
+                )
+            }
+            item {
+                FilterChip(
+                    selected = onlyDownloaded,
+                    onClick = { videosViewModel.setOnlyDownloaded(true) },
+                    label = { Text("Descargados", fontSize = 12.sp, maxLines = 1, softWrap = false) }
+                )
+            }
+            item {
+                FilterChip(
+                    selected = onlyCamera,
+                    onClick = { videosViewModel.setOnlyCamera(!onlyCamera) },
+                    label = { Text("Cámara", fontSize = 12.sp, maxLines = 1, softWrap = false) }
+                )
+            }
+            item {
+                FilterChip(
+                    selected = hideWhatsAppClips,
+                    onClick = { videosViewModel.setHideWhatsAppClips(!hideWhatsAppClips) },
+                    label = { Text("Sin WhatsApp", fontSize = 12.sp, maxLines = 1, softWrap = false) }
+                )
+            }
         }
 
         if (selectedVideoIds.isNotEmpty()) {
@@ -498,82 +526,64 @@ fun VideosScreen(
                 }
             }
         } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(if (isGridView) 2 else 1),
-                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 20.dp, top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(videos, key = { it.id }) { video ->
-                    val inSelectionMode = selectedVideoIds.isNotEmpty()
-                    val isSelected = selectedVideoIds.contains(video.id)
-                    VideoGridCard(
-                        video = video,
-                        inSelectionMode = inSelectionMode,
-                        isSelected = isSelected,
-                        onClick = {
-                            if (inSelectionMode) {
-                                if (isSelected) selectedVideoIds.remove(video.id) else selectedVideoIds.add(video.id)
-                            } else {
-                                onVideoClick(video)
-                            }
-                        },
-                        onLongClick = {
-                            if (isSelected) selectedVideoIds.remove(video.id) else selectedVideoIds.add(video.id)
-                        },
-                        onStandardize = {
-                            videosViewModel.standardizeVideo(video) { success ->
-                                Toast.makeText(
-                                    context,
-                                    if (success) "Nombre estandarizado con éxito" else "No se pudo renombrar el archivo",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        },
-                        onAddToPlaylist = {
-                            videoIdsPendingPlaylist = listOf(video.id)
-                        },
-                        onShare = {
-                            val path = video.localFilePath ?: return@VideoGridCard
-                            val file = File(path)
-                            if (file.exists()) {
-                                try {
-                                    val uri = FileProvider.getUriForFile(
-                                        context,
-                                        "${context.packageName}.fileprovider",
-                                        file
-                                    )
-                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "video/*"
-                                        putExtra(Intent.EXTRA_STREAM, uri)
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    }
-                                    context.startActivity(Intent.createChooser(shareIntent, "Compartir video"))
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "Error al compartir: ${e.message}", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        },
-                        onDelete = {
-                            videosViewModel.deleteVideo(
-                                item = video,
-                                onRequirePermission = { req ->
-                                    pendingDeleteVideo = video
-                                    deleteLauncher.launch(req)
-                                },
-                                onComplete = { success ->
-                                    if (success) {
-                                        Toast.makeText(context, "Video eliminado", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        Toast.makeText(context, "No se pudo eliminar el video", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
+            VideoMediaCollection(
+                items = videos,
+                isGridView = isGridView,
+                selectedVideoIds = selectedVideoIds,
+                onVideoClick = { video ->
+                    videosViewModel.setPlaybackQueue(emptyList())
+                    onVideoClick(video)
+                },
+                onStandardize = { video ->
+                    videosViewModel.standardizeVideo(video) { success ->
+                        Toast.makeText(
+                            context,
+                            if (success) "Nombre estandarizado con éxito" else "No se pudo renombrar el archivo",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                },
+                onAddToPlaylist = { video ->
+                    videoIdsPendingPlaylist = listOf(video.id)
+                },
+                onShare = { video ->
+                    val path = video.localFilePath ?: return@VideoMediaCollection
+                    val file = File(path)
+                    if (file.exists()) {
+                        try {
+                            val uri = FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.fileprovider",
+                                file
                             )
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "video/*"
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "Compartir video"))
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Error al compartir: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },
+                onDelete = { video ->
+                    videosViewModel.deleteVideo(
+                        item = video,
+                        onRequirePermission = { req ->
+                            pendingDeleteVideo = video
+                            deleteLauncher.launch(req)
+                        },
+                        onComplete = { success ->
+                            if (success) {
+                                Toast.makeText(context, "Video eliminado", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "No se pudo eliminar el video", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     )
                 }
-            }
+            )
         }
         } else {
             // Playlists virtuales de video (subcarpetas virtuales)
@@ -740,6 +750,20 @@ fun VideosScreen(
                     IconButton(onClick = { renameTargetPlaylist = openedPlaylist }) {
                         Icon(Icons.Rounded.Edit, contentDescription = "Renombrar playlist")
                     }
+                    if (plVideos.isNotEmpty()) {
+                        FilledTonalButton(
+                            onClick = {
+                                videosViewModel.setPlaybackQueue(plVideos)
+                                onVideoClick(plVideos.first())
+                            },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.height(36.dp)
+                        ) {
+                            Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Reproducir", fontSize = 12.sp, maxLines = 1)
+                        }
+                    }
                 }
                 if (plVideos.isEmpty()) {
                     Box(
@@ -765,73 +789,69 @@ fun VideosScreen(
                         }
                     }
                 } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(if (isGridView) 2 else 1),
-                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 20.dp, top = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(plVideos, key = { it.id }) { video ->
-                            VideoGridCard(
-                                video = video,
-                                onClick = { onVideoClick(video) },
-                                onStandardize = {
-                                    videosViewModel.standardizeVideo(video) { success ->
-                                        Toast.makeText(
-                                            context,
-                                            if (success) "Nombre estandarizado con éxito" else "No se pudo renombrar el archivo",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                },
-                                onAddToPlaylist = {
-                                    videoIdsPendingPlaylist = listOf(video.id)
-                                },
-                                onRemoveFromPlaylist = {
-                                    videosViewModel.removeVideoFromPlaylist(openedPlaylist.id, video.id)
-                                    Toast.makeText(context, "Quitado de ${openedPlaylist.name}", Toast.LENGTH_SHORT).show()
-                                },
-                                onShare = {
-                                    val path = video.localFilePath ?: return@VideoGridCard
-                                    val file = File(path)
-                                    if (file.exists()) {
-                                        try {
-                                            val uri = FileProvider.getUriForFile(
-                                                context,
-                                                "${context.packageName}.fileprovider",
-                                                file
-                                            )
-                                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                                type = "video/*"
-                                                putExtra(Intent.EXTRA_STREAM, uri)
-                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                            }
-                                            context.startActivity(Intent.createChooser(shareIntent, "Compartir video"))
-                                        } catch (e: Exception) {
-                                            Toast.makeText(context, "Error al compartir: ${e.message}", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                },
-                                onDelete = {
-                                    videosViewModel.deleteVideo(
-                                        item = video,
-                                        onRequirePermission = { req ->
-                                            pendingDeleteVideo = video
-                                            deleteLauncher.launch(req)
-                                        },
-                                        onComplete = { success ->
-                                            if (success) {
-                                                Toast.makeText(context, "Video eliminado", Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                Toast.makeText(context, "No se pudo eliminar el video", Toast.LENGTH_SHORT).show()
-                                            }
-                                        }
+                    VideoMediaCollection(
+                        items = plVideos,
+                        isGridView = isGridView,
+                        selectedVideoIds = null,
+                        allowSelection = false,
+                        onVideoClick = { video ->
+                            videosViewModel.setPlaybackQueue(plVideos)
+                            onVideoClick(video)
+                        },
+                        onStandardize = { video ->
+                            videosViewModel.standardizeVideo(video) { success ->
+                                Toast.makeText(
+                                    context,
+                                    if (success) "Nombre estandarizado con éxito" else "No se pudo renombrar el archivo",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        },
+                        onAddToPlaylist = { video ->
+                            videoIdsPendingPlaylist = listOf(video.id)
+                        },
+                        onRemoveFromPlaylist = { video ->
+                            videosViewModel.removeVideoFromPlaylist(openedPlaylist.id, video.id)
+                            Toast.makeText(context, "Quitado de ${openedPlaylist.name}", Toast.LENGTH_SHORT).show()
+                        },
+                        onShare = { video ->
+                            val path = video.localFilePath ?: return@VideoMediaCollection
+                            val file = File(path)
+                            if (file.exists()) {
+                                try {
+                                    val uri = FileProvider.getUriForFile(
+                                        context,
+                                        "${context.packageName}.fileprovider",
+                                        file
                                     )
+                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "video/*"
+                                        putExtra(Intent.EXTRA_STREAM, uri)
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(Intent.createChooser(shareIntent, "Compartir video"))
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Error al compartir: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        onDelete = { video ->
+                            videosViewModel.deleteVideo(
+                                item = video,
+                                onRequirePermission = { req ->
+                                    pendingDeleteVideo = video
+                                    deleteLauncher.launch(req)
+                                },
+                                onComplete = { success ->
+                                    if (success) {
+                                        Toast.makeText(context, "Video eliminado", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "No se pudo eliminar el video", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             )
                         }
-                    }
+                    )
                 }
             }
         }
@@ -1123,6 +1143,292 @@ private fun SortOptionRow(label: String, selected: Boolean, onSelect: () -> Unit
     }
 }
 
+private fun videoOriginLabel(video: DownloadItem): String {
+    val path = video.localFilePath ?: ""
+    return when {
+        video.id.startsWith("db_video_") || path.contains("/OmniVault", ignoreCase = true) -> "Descargado"
+        path.contains("/DCIM/Camera", ignoreCase = true) || path.contains("/Camera/", ignoreCase = true) -> "Cámara"
+        path.contains("WhatsApp", ignoreCase = true) -> "WhatsApp"
+        else -> "Local"
+    }
+}
+
+@Composable
+private fun VideoMediaCollection(
+    items: List<DownloadItem>,
+    isGridView: Boolean,
+    selectedVideoIds: MutableList<String>? = null,
+    allowSelection: Boolean = true,
+    onVideoClick: (DownloadItem) -> Unit,
+    onStandardize: (DownloadItem) -> Unit,
+    onAddToPlaylist: (DownloadItem) -> Unit,
+    onRemoveFromPlaylist: ((DownloadItem) -> Unit)? = null,
+    onShare: (DownloadItem) -> Unit,
+    onDelete: (DownloadItem) -> Unit
+) {
+    val inSelectionMode = allowSelection && !selectedVideoIds.isNullOrEmpty()
+    if (isGridView) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 24.dp, top = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            items(items, key = { it.id }) { video ->
+                val isSelected = allowSelection && (selectedVideoIds?.contains(video.id) == true)
+                VideoGridCard(
+                    video = video,
+                    inSelectionMode = inSelectionMode,
+                    isSelected = isSelected,
+                    onClick = {
+                        if (inSelectionMode && selectedVideoIds != null) {
+                            if (isSelected) selectedVideoIds.remove(video.id) else selectedVideoIds.add(video.id)
+                        } else {
+                            onVideoClick(video)
+                        }
+                    },
+                    onLongClick = {
+                        if (allowSelection && selectedVideoIds != null) {
+                            if (isSelected) selectedVideoIds.remove(video.id) else selectedVideoIds.add(video.id)
+                        }
+                    },
+                    onStandardize = { onStandardize(video) },
+                    onAddToPlaylist = { onAddToPlaylist(video) },
+                    onRemoveFromPlaylist = onRemoveFromPlaylist?.let { cb -> { cb(video) } },
+                    onShare = { onShare(video) },
+                    onDelete = { onDelete(video) }
+                )
+            }
+        }
+    } else {
+        LazyColumn(
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp, top = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            lazyItems(items, key = { it.id }) { video ->
+                val isSelected = allowSelection && (selectedVideoIds?.contains(video.id) == true)
+                VideoListRow(
+                    video = video,
+                    isSelected = isSelected,
+                    onClick = {
+                        if (inSelectionMode && selectedVideoIds != null) {
+                            if (isSelected) selectedVideoIds.remove(video.id) else selectedVideoIds.add(video.id)
+                        } else {
+                            onVideoClick(video)
+                        }
+                    },
+                    onLongClick = {
+                        if (allowSelection && selectedVideoIds != null) {
+                            if (isSelected) selectedVideoIds.remove(video.id) else selectedVideoIds.add(video.id)
+                        }
+                    },
+                    onStandardize = { onStandardize(video) },
+                    onAddToPlaylist = { onAddToPlaylist(video) },
+                    onRemoveFromPlaylist = onRemoveFromPlaylist?.let { cb -> { cb(video) } },
+                    onShare = { onShare(video) },
+                    onDelete = { onDelete(video) }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun VideoListRow(
+    video: DownloadItem,
+    isSelected: Boolean = false,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
+    onStandardize: () -> Unit,
+    onAddToPlaylist: (() -> Unit)? = null,
+    onRemoveFromPlaylist: (() -> Unit)? = null,
+    onShare: () -> Unit,
+    onDelete: () -> Unit
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val thumbData = video.thumbnailUrl ?: video.localFilePath ?: video.url
+    val imageRequest = remember(video.id, thumbData) {
+        ImageRequest.Builder(context)
+            .data(thumbData)
+            .size(320, 180)
+            .crossfade(true)
+            .build()
+    }
+    val origin = remember(video.id, video.localFilePath) { videoOriginLabel(video) }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        shape = RoundedCornerShape(12.dp),
+        border = if (isSelected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
+        }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(124.dp)
+                    .height(70.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.Black)
+            ) {
+                AsyncImage(
+                    model = imageRequest,
+                    contentDescription = video.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+                if (video.durationFormatted.isNotBlank()) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(4.dp),
+                        color = Color.Black.copy(alpha = 0.8f),
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            text = video.durationFormatted,
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.width(10.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = video.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 13.5.sp,
+                    lineHeight = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = video.fileSizeFormatted.ifBlank { "Video" },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            text = origin,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+            }
+
+            Box {
+                IconButton(
+                    onClick = { menuExpanded = true },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.MoreVert,
+                        contentDescription = "Opciones",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                VideoOptionsMenu(
+                    expanded = menuExpanded,
+                    onDismiss = { menuExpanded = false },
+                    onPlay = onClick,
+                    onStandardize = onStandardize,
+                    onAddToPlaylist = onAddToPlaylist,
+                    onRemoveFromPlaylist = onRemoveFromPlaylist,
+                    onShare = onShare,
+                    onDelete = onDelete
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun VideoOptionsMenu(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    onPlay: () -> Unit,
+    onStandardize: () -> Unit,
+    onAddToPlaylist: (() -> Unit)?,
+    onRemoveFromPlaylist: (() -> Unit)?,
+    onShare: () -> Unit,
+    onDelete: () -> Unit
+) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        DropdownMenuItem(
+            text = { Text("Reproducir") },
+            leadingIcon = { Icon(Icons.Rounded.PlayArrow, contentDescription = null) },
+            onClick = { onDismiss(); onPlay() }
+        )
+        DropdownMenuItem(
+            text = { Text("Estandarizar nombre") },
+            leadingIcon = { Icon(Icons.Rounded.AutoFixHigh, contentDescription = null) },
+            onClick = { onDismiss(); onStandardize() }
+        )
+        if (onAddToPlaylist != null) {
+            DropdownMenuItem(
+                text = { Text("Añadir a playlist") },
+                leadingIcon = { Icon(Icons.Rounded.PlaylistAdd, contentDescription = null) },
+                onClick = { onDismiss(); onAddToPlaylist() }
+            )
+        }
+        if (onRemoveFromPlaylist != null) {
+            DropdownMenuItem(
+                text = { Text("Quitar de esta playlist") },
+                leadingIcon = { Icon(Icons.Rounded.PlaylistRemove, contentDescription = null) },
+                onClick = { onDismiss(); onRemoveFromPlaylist() }
+            )
+        }
+        DropdownMenuItem(
+            text = { Text("Compartir") },
+            leadingIcon = { Icon(Icons.Rounded.Share, contentDescription = null) },
+            onClick = { onDismiss(); onShare() }
+        )
+        DropdownMenuItem(
+            text = { Text("Eliminar", color = Color(0xFFFF5252)) },
+            leadingIcon = { Icon(Icons.Rounded.Delete, contentDescription = null, tint = Color(0xFFFF5252)) },
+            onClick = { onDismiss(); onDelete() }
+        )
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun VideoGridCard(
@@ -1138,24 +1444,32 @@ fun VideoGridCard(
     onDelete: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val thumbData = video.thumbnailUrl ?: video.localFilePath ?: video.url
+    val imageRequest = remember(video.id, thumbData) {
+        ImageRequest.Builder(context)
+            .data(thumbData)
+            .size(360, 202)
+            .crossfade(true)
+            .build()
+    }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(12.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) {
                 MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
             } else {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
             }
         )
     ) {
         Column {
-            // Thumbnail container
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1163,36 +1477,19 @@ fun VideoGridCard(
                     .background(Color.Black)
             ) {
                 AsyncImage(
-                    model = video.thumbnailUrl ?: video.localFilePath ?: video.url,
+                    model = imageRequest,
                     contentDescription = video.title,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
 
-                // Play icon overlay
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .size(36.dp)
-                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Filled.PlayArrow,
-                        contentDescription = "Reproducir",
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                // Duration badge
                 if (video.durationFormatted.isNotBlank()) {
                     Surface(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(6.dp),
-                        color = Color.Black.copy(alpha = 0.75f),
-                        shape = RoundedCornerShape(6.dp)
+                        color = Color.Black.copy(alpha = 0.78f),
+                        shape = RoundedCornerShape(5.dp)
                     ) {
                         Text(
                             text = video.durationFormatted,
@@ -1205,11 +1502,10 @@ fun VideoGridCard(
                 }
             }
 
-            // Info & Menu
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                    .padding(horizontal = 8.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.Top,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -1223,12 +1519,12 @@ fun VideoGridCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(3.dp))
                     Text(
-                        text = video.fileSizeFormatted.ifBlank { "Video" },
+                        text = "${video.fileSizeFormatted.ifBlank { "Video" }} • ${videoOriginLabel(video)}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+                        fontSize = 10.5.sp,
                         maxLines = 1,
                         softWrap = false,
                         overflow = TextOverflow.Ellipsis
@@ -1248,63 +1544,16 @@ fun VideoGridCard(
                         )
                     }
 
-                    DropdownMenu(
+                    VideoOptionsMenu(
                         expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Reproducir") },
-                            leadingIcon = { Icon(Icons.Rounded.PlayArrow, contentDescription = null) },
-                            onClick = {
-                                menuExpanded = false
-                                onClick()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Estandarizar nombre") },
-                            leadingIcon = { Icon(Icons.Rounded.AutoFixHigh, contentDescription = null) },
-                            onClick = {
-                                menuExpanded = false
-                                onStandardize()
-                            }
-                        )
-                        if (onAddToPlaylist != null) {
-                            DropdownMenuItem(
-                                text = { Text("Añadir a playlist") },
-                                leadingIcon = { Icon(Icons.Rounded.PlaylistAdd, contentDescription = null) },
-                                onClick = {
-                                    menuExpanded = false
-                                    onAddToPlaylist()
-                                }
-                            )
-                        }
-                        if (onRemoveFromPlaylist != null) {
-                            DropdownMenuItem(
-                                text = { Text("Quitar de esta playlist") },
-                                leadingIcon = { Icon(Icons.Rounded.PlaylistRemove, contentDescription = null) },
-                                onClick = {
-                                    menuExpanded = false
-                                    onRemoveFromPlaylist()
-                                }
-                            )
-                        }
-                        DropdownMenuItem(
-                            text = { Text("Compartir") },
-                            leadingIcon = { Icon(Icons.Rounded.Share, contentDescription = null) },
-                            onClick = {
-                                menuExpanded = false
-                                onShare()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Eliminar", color = Color(0xFFFF5252)) },
-                            leadingIcon = { Icon(Icons.Rounded.Delete, contentDescription = null, tint = Color(0xFFFF5252)) },
-                            onClick = {
-                                menuExpanded = false
-                                onDelete()
-                            }
-                        )
-                    }
+                        onDismiss = { menuExpanded = false },
+                        onPlay = onClick,
+                        onStandardize = onStandardize,
+                        onAddToPlaylist = onAddToPlaylist,
+                        onRemoveFromPlaylist = onRemoveFromPlaylist,
+                        onShare = onShare,
+                        onDelete = onDelete
+                    )
                 }
             }
         }

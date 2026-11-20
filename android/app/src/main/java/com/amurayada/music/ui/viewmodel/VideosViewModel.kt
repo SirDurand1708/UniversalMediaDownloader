@@ -13,6 +13,7 @@ import com.omnivault.media.data.LocalMediaScanner
 import com.omnivault.media.model.DownloadItem
 import com.omnivault.media.model.SortOption
 import com.omnivault.media.utils.FilenameStandardizer
+import com.omnivault.media.utils.PlaylistBackupManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -35,7 +36,13 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
     val rawVideos: StateFlow<List<DownloadItem>> = _rawVideos.asStateFlow()
     private val _videoPlaylists = MutableStateFlow<List<VideoPlaylist>>(emptyList())
     val videoPlaylists: StateFlow<List<VideoPlaylist>> = _videoPlaylists.asStateFlow()
+    private val _playbackQueue = MutableStateFlow<List<DownloadItem>>(emptyList())
+    val playbackQueue: StateFlow<List<DownloadItem>> = _playbackQueue.asStateFlow()
     private val _isLoading = MutableStateFlow(false)
+
+    fun setPlaybackQueue(items: List<DownloadItem>) {
+        _playbackQueue.value = items
+    }
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     private val prefs = application.getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE)
@@ -78,6 +85,15 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
         val path = item.localFilePath ?: ""
         return path.contains("WhatsApp", ignoreCase = true) ||
             (item.title.startsWith("VID-", ignoreCase = true) && item.title.contains("-WA", ignoreCase = true))
+    }
+
+    private fun isGifItem(item: DownloadItem): Boolean {
+        val path = item.localFilePath ?: ""
+        return path.endsWith(".gif", ignoreCase = true) ||
+            item.url.endsWith(".gif", ignoreCase = true) ||
+            item.title.endsWith(".gif", ignoreCase = true) ||
+            path.contains("WhatsApp Animated Gifs", ignoreCase = true) ||
+            path.contains("Animated Gifs", ignoreCase = true)
     }
 
     private fun parseDurationSeconds(dur: String): Long {
@@ -202,6 +218,7 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
                 val seenTitleSizes = HashSet<String>()
                 val merged = ArrayList<DownloadItem>()
                 for (item in (dbVideos + scanned)) {
+                    if (isGifItem(item)) continue
                     val pathKey = (item.localFilePath ?: item.id).lowercase()
                     val normTitle = item.title.lowercase().replace(Regex("[^a-z0-9]"), "")
                     val sizeBucket = item.fileSizeBytes / 4096L
@@ -439,9 +456,26 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
     private fun loadVideoPlaylists() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                val ctx = getApplication<Application>()
                 val file = playlistsFile()
-                if (!file.exists()) return@launch
-                val arr = JSONArray(file.readText())
+                var content: String? = if (file.exists()) {
+                    file.readText().takeIf { it.isNotBlank() && it.trim() != "[]" }
+                } else null
+
+                if (content == null) {
+                    val backup = PlaylistBackupManager.readBackup(ctx, "video_playlists.json")
+                    if (!backup.isNullOrBlank() && backup.trim() != "[]") {
+                        content = backup
+                        try { file.writeText(backup) } catch (_: Exception) {}
+                    }
+                } else {
+                    if (PlaylistBackupManager.readBackup(ctx, "video_playlists.json").isNullOrBlank()) {
+                        PlaylistBackupManager.saveBackup(ctx, "video_playlists.json", content)
+                    }
+                }
+
+                if (content == null) return@launch
+                val arr = JSONArray(content)
                 val parsed = buildList {
                     for (i in 0 until arr.length()) {
                         val obj = arr.optJSONObject(i) ?: continue
@@ -484,7 +518,9 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
                     }
                     arr.put(obj)
                 }
-                playlistsFile().writeText(arr.toString())
+                val serialized = arr.toString()
+                playlistsFile().writeText(serialized)
+                PlaylistBackupManager.saveBackup(getApplication(), "video_playlists.json", serialized)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
