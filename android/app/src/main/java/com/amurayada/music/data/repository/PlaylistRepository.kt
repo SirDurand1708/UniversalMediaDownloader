@@ -310,4 +310,24 @@ class PlaylistRepository(private val context: Context) {
             imported
         }
     }
+
+    suspend fun pruneMissingSongs(validSongIds: Set<Long>) {
+        if (validSongIds.isEmpty()) return
+        val current = _playlists.value
+        if (current.isEmpty()) return
+        var changed = false
+        val updated = current.map { pl ->
+            val filtered = pl.songIds.filter { it in validSongIds }
+            if (filtered.size != pl.songIds.size) {
+                changed = true
+                pl.copy(songIds = filtered)
+            } else {
+                pl
+            }
+        }
+        if (changed) {
+            _playlists.value = updated
+            savePlaylists()
+        }
+    }
 }

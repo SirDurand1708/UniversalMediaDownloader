@@ -137,20 +137,51 @@ fun OmniVaultDownloaderScreen(
     val borderCol = Color(0xFF263248)
 
     var detectedClipboardUrl by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(urlInput, lastQueuedUrl) {
-        if (urlInput.isBlank()) {
+    var clipboardTick by remember { mutableIntStateOf(0) }
+
+    fun readClipboardUrl(): String {
+        return try {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            clipboard?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)
+                ?.coerceToText(context)?.toString()?.trim() ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        val clipListener = ClipboardManager.OnPrimaryClipChangedListener {
+            clipboardTick++
+        }
+        try {
+            clipboard?.addPrimaryClipChangedListener(clipListener)
+        } catch (_: Exception) {}
+
+        val lifecycleObserver = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                clipboardTick++
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
+
+        onDispose {
             try {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                val clipText = clipboard?.primaryClip?.getItemAt(0)?.text?.toString()?.trim() ?: ""
-                if ((clipText.startsWith("http://", ignoreCase = true) ||
-                        clipText.startsWith("https://", ignoreCase = true)) &&
-                    clipText != lastQueuedUrl
-                ) {
-                    detectedClipboardUrl = clipText
-                } else {
-                    detectedClipboardUrl = null
-                }
-            } catch (_: Exception) {
+                clipboard?.removePrimaryClipChangedListener(clipListener)
+            } catch (_: Exception) {}
+            lifecycleOwner.lifecycle.removeObserver(lifecycleObserver)
+        }
+    }
+
+    LaunchedEffect(urlInput, lastQueuedUrl, clipboardTick) {
+        if (urlInput.isBlank()) {
+            val clipText = readClipboardUrl()
+            if ((clipText.startsWith("http://", ignoreCase = true) ||
+                    clipText.startsWith("https://", ignoreCase = true)) &&
+                clipText != lastQueuedUrl
+            ) {
+                detectedClipboardUrl = clipText
+            } else {
                 detectedClipboardUrl = null
             }
         } else {
@@ -336,11 +367,14 @@ fun OmniVaultDownloaderScreen(
 
                         TextButton(
                             onClick = {
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                val clipText = clipboard.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
+                                val clipText = readClipboardUrl()
                                 if (clipText.isNotBlank()) {
+                                    if (downloadViewModel.urlInput.value != clipText) {
+                                        downloadViewModel.mediaPreview.value = null
+                                    }
                                     downloadViewModel.urlInput.value = clipText
                                     downloadViewModel.analyzeUrl(clipText)
+                                    detectedClipboardUrl = null
                                 } else {
                                     Toast.makeText(context, "El portapapeles está vacío", Toast.LENGTH_SHORT).show()
                                 }
@@ -399,8 +433,12 @@ fun OmniVaultDownloaderScreen(
                         Spacer(Modifier.height(8.dp))
                         Surface(
                             onClick = {
-                                downloadViewModel.urlInput.value = clipUrl
-                                downloadViewModel.analyzeUrl(clipUrl)
+                                val freshClip = readClipboardUrl().ifBlank { clipUrl }
+                                if (downloadViewModel.urlInput.value != freshClip) {
+                                    downloadViewModel.mediaPreview.value = null
+                                }
+                                downloadViewModel.urlInput.value = freshClip
+                                downloadViewModel.analyzeUrl(freshClip)
                                 detectedClipboardUrl = null
                             },
                             shape = RoundedCornerShape(10.dp),

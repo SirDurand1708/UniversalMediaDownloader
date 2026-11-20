@@ -15,6 +15,8 @@ import com.omnivault.media.model.SortOption
 import com.omnivault.media.utils.FilenameStandardizer
 import com.omnivault.media.utils.PlaylistBackupManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -166,9 +168,62 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private var videoRefreshDebounceJob: Job? = null
+
+    private val videoContentObserver = object : android.database.ContentObserver(
+        android.os.Handler(android.os.Looper.getMainLooper())
+    ) {
+        override fun onChange(selfChange: Boolean, uri: Uri?) {
+            super.onChange(selfChange, uri)
+            scheduleVideoRefresh()
+        }
+
+        override fun onChange(selfChange: Boolean) {
+            super.onChange(selfChange)
+            scheduleVideoRefresh()
+        }
+    }
+
+    private fun scheduleVideoRefresh() {
+        videoRefreshDebounceJob?.cancel()
+        videoRefreshDebounceJob = viewModelScope.launch {
+            delay(450)
+            loadVideos()
+        }
+    }
+
     init {
         loadVideoPlaylists()
         loadVideos()
+        try {
+            application.contentResolver.registerContentObserver(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                true,
+                videoContentObserver
+            )
+        } catch (_: Exception) {}
+
+        viewModelScope.launch {
+            try {
+                val dao = com.amurayada.music.data.database.DownloadDatabase
+                    .getDatabase(application)
+                    .downloadDao()
+                dao.getAllDownloads()
+                    .map { list -> list.count { it.isVideo } to list.filter { it.isVideo }.map { "${it.songId}:${it.localPath}:${it.title}" } }
+                    .distinctUntilChanged()
+                    .drop(1)
+                    .collect {
+                        scheduleVideoRefresh()
+                    }
+            } catch (_: Exception) {}
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        try {
+            getApplication<Application>().contentResolver.unregisterContentObserver(videoContentObserver)
+        } catch (_: Exception) {}
     }
 
     fun loadVideos() {
@@ -232,6 +287,9 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
                     merged.add(item)
                 }
                 _rawVideos.value = merged
+                if (merged.isNotEmpty()) {
+                    pruneMissingVideosFromPlaylists(merged.mapTo(HashSet()) { it.id })
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -289,6 +347,23 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
         }
         _videoPlaylists.value = updated
         persistVideoPlaylists(updated)
+    }
+
+    private fun pruneMissingVideosFromPlaylists(validVideoIds: Set<String>) {
+        val current = _videoPlaylists.value
+        if (current.isEmpty() || validVideoIds.isEmpty()) return
+        var changed = false
+        val updated = current.map { pl ->
+            val filtered = pl.videoIds.filter { it in validVideoIds }
+            if (filtered.size != pl.videoIds.size) {
+                changed = true
+                pl.copy(videoIds = filtered)
+            } else pl
+        }
+        if (changed) {
+            _videoPlaylists.value = updated
+            persistVideoPlaylists(updated)
+        }
     }
 
     fun confirmVideoDeleted(item: DownloadItem) {

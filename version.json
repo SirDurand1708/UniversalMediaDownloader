@@ -1,19 +1,19 @@
 {
-  "version": "2.5.42",
-  "version_code": 292,
+  "version": "2.5.43",
+  "version_code": 293,
   "release_date": "2026-11-20",
-  "title": "OmniVault v2.5.42 — Windows PC & Android",
-  "changelog": "✨ Android: Rediseño completo de la pestaña Videos (cabecera limpia, buscador colapsable, vista Lista compacta real + Cuadrícula fluida), exclusión total de GIFs, respaldo automático de playlists de música y video en Documents/OmniVault/Backups y reproducción continua en playlists de video",
+  "title": "OmniVault v2.5.43 — Windows PC & Android",
+  "changelog": "✨ Android en tiempo real: Pegado y detección instantánea del último enlace del portapapeles (ON_RESUME + OnPrimaryClipChangedListener), ContentObserver y Room Flow en VideosViewModel, debounce rápido (500ms) en Música, sincronización automática al volver del segundo plano y auto-limpieza de referencias huérfanas en playlists de audio y video",
   "android": {
-    "version": "2.5.42",
-    "version_code": 292,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.42/OmniVault-v2.5.42-Android.apk",
+    "version": "2.5.43",
+    "version_code": 293,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.43/OmniVault-v2.5.43-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.42",
-    "version_code": 292,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.42/OmniVault-v2.5.42-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.42/OmniVault-v2.5.42-Windows-x64-Portable.zip"
+    "version": "2.5.43",
+    "version_code": 293,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.43/OmniVault-v2.5.43-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.43/OmniVault-v2.5.43-Windows-x64-Portable.zip"
   }
 }

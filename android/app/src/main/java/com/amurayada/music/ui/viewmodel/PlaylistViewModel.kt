@@ -96,4 +96,10 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
             onResult(count)
         }
     }
+
+    fun pruneMissingSongs(validSongIds: Set<Long>) {
+        viewModelScope.launch {
+            repository.pruneMissingSongs(validSongIds)
+        }
+    }
 }

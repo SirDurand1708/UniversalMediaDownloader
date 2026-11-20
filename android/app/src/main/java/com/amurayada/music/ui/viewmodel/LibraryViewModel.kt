@@ -54,12 +54,8 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         android.util.Log.d("LibraryViewModel", "triggerLibraryUpdate called, debouncing...")
         debounceJob?.cancel()
         debounceJob = viewModelScope.launch {
-            // Debounce for 2 seconds to allow multiple file operations to complete
-            // and to let the system MediaScanner finish its work
-            kotlinx.coroutines.delay(2000) 
-            android.util.Log.d("LibraryViewModel", "Debounce completed, clearing image cache and calling loadLibrary()")
-            // Clear image cache so any changed album art reloads
-            com.amurayada.music.MusicApplication.getInstance()?.clearImageCache()
+            // Debounce corto de 500ms para agrupar operaciones rápidas sin perder respuesta en tiempo real
+            kotlinx.coroutines.delay(500)
             loadLibrary()
         }
     }

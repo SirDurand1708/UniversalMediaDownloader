@@ -260,9 +260,17 @@ class MainActivity : ComponentActivity() {
         }
     }
     
+    private var hasResumedOnce = false
+
     override fun onResume() {
         super.onResume()
         restoreFullScreenUI()
+        if (hasResumedOnce) {
+            libraryViewModel.loadLibrary()
+            videosViewModel.loadVideos()
+        } else {
+            hasResumedOnce = true
+        }
     }
     
     private fun restoreFullScreenUI() {
@@ -330,6 +338,13 @@ fun MusicPlayerApp(
         }
         libraryViewModel.deleteSong(song, context) {
             android.widget.Toast.makeText(context, "Canción eliminada", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val currentAudioPlaylists by playlistViewModel.playlists.collectAsState()
+    LaunchedEffect(libraryViewModel.songs, currentAudioPlaylists.isNotEmpty()) {
+        if (libraryViewModel.songs.isNotEmpty() && currentAudioPlaylists.isNotEmpty()) {
+            playlistViewModel.pruneMissingSongs(libraryViewModel.songs.mapTo(HashSet()) { it.id })
         }
     }
 

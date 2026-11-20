@@ -18,7 +18,7 @@ try:
 except ImportError:
     version = None
 
-def _load_local_version(fallback: str = "2.5.42") -> str:
+def _load_local_version(fallback: str = "2.5.43") -> str:
     """Lee la versión local desde version.json empaquetado junto al ejecutable o en la raíz del proyecto."""
     candidates = []
     if getattr(sys, 'frozen', False):
