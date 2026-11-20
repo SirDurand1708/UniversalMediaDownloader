@@ -1447,7 +1447,7 @@ private fun SongsListContent(
             }
         }
 
-        AnimatedVisibility(
+        androidx.compose.animation.AnimatedVisibility(
             visible = showScrollToTop,
             enter = fadeIn() + scaleIn(),
             exit = fadeOut() + scaleOut(),
