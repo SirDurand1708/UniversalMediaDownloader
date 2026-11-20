@@ -31,10 +31,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -249,7 +254,10 @@ fun LarkStyleMusicScreen(
                     )
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     IconButton(onClick = { isSearchActive = true }) {
                         Icon(
                             imageVector = Icons.Rounded.Search,
@@ -338,12 +346,45 @@ fun LarkStyleMusicScreen(
         }
 
         // 2. Chips de Categorías (Canciones, Playlists, Carpetas, Álbumes, Artistas)
+        val categoryListState = rememberLazyListState()
+        LaunchedEffect(selectedCategory) {
+            val targetIdx = LarkCategory.entries.indexOf(selectedCategory)
+            if (targetIdx >= 0) {
+                categoryListState.animateScrollToItem(targetIdx)
+            }
+        }
         LazyRow(
+            state = categoryListState,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp),
+                .padding(vertical = 4.dp)
+                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                .drawWithContent {
+                    drawContent()
+                    val fadePx = 20.dp.toPx()
+                    if (categoryListState.canScrollBackward && size.width > fadePx) {
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(Color.Transparent, Color.Black),
+                                startX = 0f,
+                                endX = fadePx
+                            ),
+                            blendMode = BlendMode.DstIn
+                        )
+                    }
+                    if (categoryListState.canScrollForward && size.width > fadePx) {
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(Color.Black, Color.Transparent),
+                                startX = size.width - fadePx,
+                                endX = size.width
+                            ),
+                            blendMode = BlendMode.DstIn
+                        )
+                    }
+                },
             contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(LarkCategory.entries) { category ->
                 val selected = selectedCategory == category
@@ -1067,7 +1108,7 @@ private fun SongsListContent(
         return
     }
 
-    val selectedIds = remember { mutableStateListOf<Long>() }
+    var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
     val inSelectionMode = selectedIds.isNotEmpty()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -1076,233 +1117,253 @@ private fun SongsListContent(
     val currentSongIndex = remember(songs, currentSong?.id) {
         if (currentSong == null) -1 else songs.indexOfFirst { it.id == currentSong.id }
     }
-
-    BackHandler(enabled = inSelectionMode) {
-        selectedIds.clear()
+    val alphabetIndexMap = remember(songs) {
+        val map = HashMap<Char, Int>(26)
+        songs.forEachIndexed { index, song ->
+            val first = song.title.trimStart().firstOrNull()?.uppercaseChar()
+            if (first != null && first in 'A'..'Z' && !map.containsKey(first)) {
+                map[first] = index
+            }
+        }
+        map
     }
 
-    PullToRefreshBox(
-        isRefreshing = isRefreshing,
-        onRefresh = onRefresh,
-        modifier = Modifier.fillMaxSize()
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.dp)
-        ) {
-            if (inSelectionMode) {
-                item {
-                    Surface(
-                        color = Color(0xFF141923),
-                        shape = RoundedCornerShape(14.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.5f)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 6.dp)
+    BackHandler(enabled = inSelectionMode) {
+        selectedIds = emptySet()
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Barra superior fija: modo selección o acciones rápidas ("Todo" / "Aleatorio")
+        if (inSelectionMode) {
+            Surface(
+                color = Color(0xFF141923),
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.5f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = { selectedIds = emptySet() },
+                        modifier = Modifier.size(34.dp)
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(
-                                onClick = { selectedIds.clear() },
-                                modifier = Modifier.size(34.dp)
-                            ) {
-                                Icon(Icons.Rounded.Close, contentDescription = "Cancelar selección", tint = Color.White, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Rounded.Close, contentDescription = "Cancelar selección", tint = Color.White, modifier = Modifier.size(18.dp))
+                    }
+                    Text(
+                        text = "${selectedIds.size}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF00E5FF)
+                    )
+                    Spacer(Modifier.weight(1f))
+                    IconButton(
+                        onClick = {
+                            val batch = songs.filter { selectedIds.contains(it.id) }
+                            onAddMultipleToPlaylist(batch)
+                            selectedIds = emptySet()
+                        },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.Rounded.PlaylistAdd, contentDescription = "Añadir a playlist", tint = Color.White, modifier = Modifier.size(20.dp))
+                    }
+                    IconButton(
+                        onClick = {
+                            val batch = songs.filter { selectedIds.contains(it.id) }
+                            onAddMultipleToQueue(batch)
+                            selectedIds = emptySet()
+                        },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.Rounded.QueueMusic, contentDescription = "Añadir a la cola", tint = Color.White, modifier = Modifier.size(20.dp))
+                    }
+                    IconButton(
+                        onClick = {
+                            val batch = songs.filter { selectedIds.contains(it.id) }
+                            onHideMultiple(batch)
+                            selectedIds = emptySet()
+                        },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.Rounded.VisibilityOff, contentDescription = "Ocultar", tint = Color.White, modifier = Modifier.size(20.dp))
+                    }
+                    IconButton(
+                        onClick = {
+                            val batch = songs.filter { selectedIds.contains(it.id) }
+                            onDeleteMultiple(batch)
+                            selectedIds = emptySet()
+                        },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.Rounded.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF5252), modifier = Modifier.size(20.dp))
+                    }
+                    IconButton(
+                        onClick = {
+                            selectedIds = if (selectedIds.size == songs.size) {
+                                emptySet()
+                            } else {
+                                songs.mapTo(HashSet(songs.size)) { it.id }
                             }
-                            Text(
-                                text = "${selectedIds.size}",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF00E5FF)
-                            )
-                            Spacer(Modifier.weight(1f))
-                            IconButton(
-                                onClick = {
-                                    val batch = songs.filter { selectedIds.contains(it.id) }
-                                    onAddMultipleToPlaylist(batch)
-                                    selectedIds.clear()
-                                },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(Icons.Rounded.PlaylistAdd, contentDescription = "Añadir a playlist", tint = Color.White, modifier = Modifier.size(20.dp))
-                            }
-                            IconButton(
-                                onClick = {
-                                    val batch = songs.filter { selectedIds.contains(it.id) }
-                                    onAddMultipleToQueue(batch)
-                                    selectedIds.clear()
-                                },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(Icons.Rounded.QueueMusic, contentDescription = "Añadir a la cola", tint = Color.White, modifier = Modifier.size(20.dp))
-                            }
-                            IconButton(
-                                onClick = {
-                                    val batch = songs.filter { selectedIds.contains(it.id) }
-                                    onHideMultiple(batch)
-                                    selectedIds.clear()
-                                },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(Icons.Rounded.VisibilityOff, contentDescription = "Ocultar", tint = Color.White, modifier = Modifier.size(20.dp))
-                            }
-                            IconButton(
-                                onClick = {
-                                    val batch = songs.filter { selectedIds.contains(it.id) }
-                                    onDeleteMultiple(batch)
-                                    selectedIds.clear()
-                                },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(Icons.Rounded.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF5252), modifier = Modifier.size(20.dp))
-                            }
-                            IconButton(
-                                onClick = {
-                                    if (selectedIds.size == songs.size) {
-                                        selectedIds.clear()
-                                    } else {
-                                        selectedIds.clear()
-                                        selectedIds.addAll(songs.map { it.id })
-                                    }
-                                },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(Icons.Rounded.SelectAll, contentDescription = "Seleccionar todo", tint = Color(0xFF00E5FF), modifier = Modifier.size(20.dp))
-                            }
-                        }
+                        },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.Rounded.SelectAll, contentDescription = "Seleccionar todo", tint = Color(0xFF00E5FF), modifier = Modifier.size(20.dp))
                     }
                 }
-            } else {
-                // Cabecera rápida: Total de pistas + acciones rápidas
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "${songs.size} canciones",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White.copy(alpha = 0.7f),
-                                maxLines = 1
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "${songs.size} canciones",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White.copy(alpha = 0.7f),
+                        maxLines = 1
+                    )
+                    if (hiddenSongsCount > 0) {
+                        Text(
+                            text = "Ocultas ($hiddenSongsCount)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF00E5FF),
+                            modifier = Modifier.clickable { onShowHiddenSongs() }
+                        )
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (currentSongIndex >= 0) {
+                        Surface(
+                            onClick = {
+                                scope.launch {
+                                    if (kotlin.math.abs(currentSongIndex - listState.firstVisibleItemIndex) > 30) {
+                                        listState.scrollToItem(currentSongIndex)
+                                    } else {
+                                        listState.animateScrollToItem(currentSongIndex)
+                                    }
+                                }
+                            },
+                            color = Color(0xFF141923),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF263248))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.MyLocation,
+                                contentDescription = "Ir a canción actual",
+                                tint = Color(0xFF00E5FF),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp).size(16.dp)
                             )
-                            if (hiddenSongsCount > 0) {
-                                Text(
-                                    text = "Ocultas ($hiddenSongsCount)",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF00E5FF),
-                                    modifier = Modifier.clickable { onShowHiddenSongs() }
-                                )
-                            }
                         }
+                    }
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            if (currentSongIndex >= 0) {
-                                Surface(
-                                    onClick = { scope.launch { listState.animateScrollToItem(currentSongIndex + 1) } },
-                                    color = Color(0xFF141923),
-                                    shape = RoundedCornerShape(12.dp),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF263248))
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.MyLocation,
-                                        contentDescription = "Ir a canción actual",
-                                        tint = Color(0xFF00E5FF),
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp).size(16.dp)
-                                    )
-                                }
-                            }
+                    Surface(
+                        onClick = onPlayAll,
+                        color = Color(0xFF141923),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF263248))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.PlayArrow,
+                                contentDescription = null,
+                                tint = Color(0xFF00E5FF),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = "Todo",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
 
-                            Surface(
-                                onClick = onPlayAll,
-                                color = Color(0xFF141923),
-                                shape = RoundedCornerShape(12.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF263248))
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.PlayArrow,
-                                        contentDescription = null,
-                                        tint = Color(0xFF00E5FF),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(
-                                        text = "Todo",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White,
-                                        maxLines = 1,
-                                        softWrap = false
-                                    )
-                                }
-                            }
-
-                            Surface(
-                                onClick = onShuffle,
-                                color = Color(0xFF141923),
-                                shape = RoundedCornerShape(12.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF263248))
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Shuffle,
-                                        contentDescription = null,
-                                        tint = Color(0xFF00E5FF),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(
-                                        text = "Aleatorio",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White,
-                                        maxLines = 1,
-                                        softWrap = false
-                                    )
-                                }
-                            }
+                    Surface(
+                        onClick = onShuffle,
+                        color = Color(0xFF141923),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF263248))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Shuffle,
+                                contentDescription = null,
+                                tint = Color(0xFF00E5FF),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = "Aleatorio",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                maxLines = 1,
+                                softWrap = false
+                            )
                         }
                     }
                 }
             }
+        }
 
-            items(songs, key = { it.id }) { song ->
-                val isCurrent = currentSong?.id == song.id
-                val isSelected = selectedIds.contains(song.id)
-                LarkSongRow(
-                    song = song,
-                    isCurrent = isCurrent,
-                    isPlaying = isCurrent && isPlaying,
-                    inSelectionMode = inSelectionMode,
-                    isSelected = isSelected,
-                    lrcKeys = lrcKeys,
-                    showAlphabetPadding = showAlphabetIndex,
-                    onClick = {
-                        if (inSelectionMode) {
-                            if (isSelected) selectedIds.remove(song.id) else selectedIds.add(song.id)
-                        } else {
-                            onSongClick(song)
-                        }
-                    },
-                    onLongClick = {
-                        if (isSelected) selectedIds.remove(song.id) else selectedIds.add(song.id)
-                    },
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 24.dp)
+            ) {
+                items(
+                    items = songs,
+                    key = { it.id },
+                    contentType = { "song_row" }
+                ) { song ->
+                    val isCurrent = currentSong?.id == song.id
+                    val isSelected = selectedIds.contains(song.id)
+                    LarkSongRow(
+                        song = song,
+                        isCurrent = isCurrent,
+                        isPlaying = isCurrent && isPlaying,
+                        inSelectionMode = inSelectionMode,
+                        isSelected = isSelected,
+                        lrcKeys = lrcKeys,
+                        showAlphabetPadding = showAlphabetIndex,
+                        onClick = {
+                            if (inSelectionMode) {
+                                selectedIds = if (isSelected) selectedIds - song.id else selectedIds + song.id
+                            } else {
+                                onSongClick(song)
+                            }
+                        },
+                        onLongClick = {
+                            selectedIds = if (isSelected) selectedIds - song.id else selectedIds + song.id
+                        },
                     onPlayNext = { onPlayNext(song) },
                     onAddToQueue = { onAddToQueue(song) },
                     onAddToPlaylist = { onAddToPlaylist(song) },
@@ -1325,10 +1386,12 @@ private fun SongsListContent(
             val jumpToLetter: (Float) -> Unit = { y ->
                 val idx = ((y / barHeightPx.toFloat()) * alphabet.size).toInt().coerceIn(0, alphabet.lastIndex)
                 val letter = alphabet[idx]
-                activeLetter = letter
-                val songIdx = songs.indexOfFirst { it.title.trimStart().startsWith(letter, ignoreCase = true) }
-                if (songIdx >= 0) {
-                    scope.launch { listState.scrollToItem(songIdx + 1) }
+                if (letter != activeLetter) {
+                    activeLetter = letter
+                    val songIdx = alphabetIndexMap[letter.first()]
+                    if (songIdx != null) {
+                        scope.launch { listState.scrollToItem(songIdx) }
+                    }
                 }
             }
 
@@ -1354,9 +1417,9 @@ private fun SongsListContent(
             Column(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .padding(end = 2.dp, top = 48.dp, bottom = 56.dp)
+                    .padding(end = 2.dp, top = 12.dp, bottom = 56.dp)
                     .onSizeChanged { barHeightPx = it.height.coerceAtLeast(1) }
-                    .pointerInput(songs) {
+                    .pointerInput(alphabetIndexMap) {
                         detectVerticalDragGestures(
                             onDragStart = { offset -> jumpToLetter(offset.y) },
                             onVerticalDrag = { change, _ -> jumpToLetter(change.position.y) },
@@ -1375,8 +1438,8 @@ private fun SongsListContent(
                         color = if (activeLetter == letter) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.5f),
                         modifier = Modifier
                             .clickable {
-                                val songIdx = songs.indexOfFirst { it.title.trimStart().startsWith(letter, ignoreCase = true) }
-                                if (songIdx >= 0) scope.launch { listState.scrollToItem(songIdx + 1) }
+                                val songIdx = alphabetIndexMap[letter.first()]
+                                if (songIdx != null) scope.launch { listState.scrollToItem(songIdx) }
                             }
                             .padding(horizontal = 4.dp)
                     )
@@ -1399,6 +1462,7 @@ private fun SongsListContent(
             ) {
                 Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "Ir arriba")
             }
+        }
         }
         }
     }
@@ -1459,8 +1523,22 @@ private fun LarkSongRow(
         }
     }
     val formatLabel = remember(song.mimeType, song.path) { resolveAudioFormatLabel(song) }
+    val showFormatBadge = formatLabel == "FLAC" || formatLabel == "WAV"
     val durationLabel = remember(song.duration) {
         if (song.duration > 0L) com.amurayada.music.ui.screens.nowplaying.formatDuration(song.duration) else ""
+    }
+    val cleanArtist = remember(song.artist) {
+        song.artist.replace(" - Topic", "", ignoreCase = true).trim().ifBlank { "Artista desconocido" }
+    }
+    val artSizePx = with(LocalDensity.current) { 48.dp.roundToPx() }
+    val imageRequest = remember(song.albumArtUri, artSizePx) {
+        ImageRequest.Builder(context)
+            .data(song.albumArtUri)
+            .size(artSizePx)
+            .memoryCachePolicy(CachePolicy.ENABLED)
+            .diskCachePolicy(CachePolicy.ENABLED)
+            .crossfade(false)
+            .build()
     }
 
     Row(
@@ -1476,7 +1554,7 @@ private fun LarkSongRow(
             )
             .padding(
                 start = 16.dp,
-                end = if (showAlphabetPadding) 26.dp else 12.dp,
+                end = if (showAlphabetPadding) 30.dp else 12.dp,
                 top = 8.dp,
                 bottom = 8.dp
             ),
@@ -1500,11 +1578,7 @@ private fun LarkSongRow(
         ) {
             if (song.albumArtUri != null) {
                 AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(song.albumArtUri)
-                        .crossfade(true)
-                        .diskCachePolicy(CachePolicy.ENABLED)
-                        .build(),
+                    model = imageRequest,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
@@ -1538,21 +1612,22 @@ private fun LarkSongRow(
 
         Spacer(Modifier.width(12.dp))
 
-        // Info de la Canción (Título y Subtítulo con insignia LETRAS)
+        // Info de la Canción (Título hasta 2 líneas + Artista limpio con insignia LETRAS)
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = song.title,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
+                lineHeight = 19.sp,
                 color = if (isCurrent) Color(0xFF00E5FF) else Color.White,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
 
             Spacer(Modifier.height(3.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Insignia LETRAS exactamente como en Lark Player
+                // Insignia LETRAS
                 if (hasLyrics) {
                     Box(
                         modifier = Modifier
@@ -1572,16 +1647,8 @@ private fun LarkSongRow(
                     Spacer(Modifier.width(6.dp))
                 }
 
-                val cleanArtist = song.artist.replace(" - Topic", "", ignoreCase = true).trim()
-                val cleanAlbum = song.album.replace(" - Topic", "", ignoreCase = true).trim()
-                val subtitleText = if (cleanAlbum.isBlank() || cleanAlbum.equals(cleanArtist, ignoreCase = true)) {
-                    cleanArtist
-                } else {
-                    "$cleanArtist • $cleanAlbum"
-                }
-
                 Text(
-                    text = subtitleText,
+                    text = cleanArtist,
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.55f),
                     maxLines = 1,
@@ -1593,36 +1660,43 @@ private fun LarkSongRow(
 
         Column(
             horizontalAlignment = Alignment.End,
-            modifier = Modifier.padding(horizontal = 6.dp)
+            modifier = Modifier
+                .widthIn(min = 42.dp)
+                .padding(horizontal = 6.dp)
         ) {
             if (durationLabel.isNotEmpty()) {
                 Text(
                     text = durationLabel,
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                    textAlign = TextAlign.End,
                     color = Color.White.copy(alpha = 0.65f),
                     fontSize = 10.sp
                 )
             }
-            Spacer(Modifier.height(2.dp))
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Color(0xFF00E5FF).copy(alpha = 0.14f))
-                    .padding(horizontal = 4.dp, vertical = 1.dp)
-            ) {
-                Text(
-                    text = formatLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF00E5FF),
-                    fontSize = 8.sp
-                )
+            if (showFormatBadge) {
+                if (durationLabel.isNotEmpty()) {
+                    Spacer(Modifier.height(2.dp))
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFF00E5FF).copy(alpha = 0.14f))
+                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                ) {
+                    Text(
+                        text = formatLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF00E5FF),
+                        fontSize = 8.sp
+                    )
+                }
             }
         }
 
         // Menú de 3 puntos
         Box {
-            IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(36.dp)) {
+            IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(40.dp)) {
                 Icon(
                     imageVector = Icons.Rounded.MoreVert,
                     contentDescription = "Opciones",
