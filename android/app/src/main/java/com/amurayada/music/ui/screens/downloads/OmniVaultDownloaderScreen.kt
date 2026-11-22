@@ -133,11 +133,12 @@ fun OmniVaultDownloaderScreen(
         }
     }
 
-    val accentColor = Color(0xFFB8D4E3)
-    val darkOnAccent = Color(0xFF0F1419)
-    val cardBg = Color(0xFF181E25)
-    val borderCol = Color(0xFF2D3540)
+    val accentColor = Color(0xFF00E5FF)
+    val darkOnAccent = Color.Black
+    val cardBg = Color(0xFF141923)
+    val borderCol = Color(0xFF263248)
     var selectedDownloadTab by remember { mutableIntStateOf(0) } // 0 = Nuevo, 1 = Completadas
+    var isAudioFormatTab by remember(selectedFormat) { mutableStateOf(selectedFormat.isAudio) }
 
     var detectedClipboardUrl by remember { mutableStateOf<String?>(null) }
     var clipboardTick by remember { mutableIntStateOf(0) }
@@ -209,14 +210,37 @@ fun OmniVaultDownloaderScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = "Descargas",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Normal,
-                        color = Color.White,
-                        maxLines = 1,
-                        softWrap = false
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(Color(0xFF00E676), Color(0xFF00E5FF), Color(0xFF7C4DFF))
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.CloudDownload,
+                                contentDescription = null,
+                                tint = Color.Black,
+                                modifier = Modifier.size(21.dp)
+                            )
+                        }
+                        Text(
+                            text = "Descargas",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
 
                     val isYtLoggedIn = remember {
                         try { com.amurayada.music.data.auth.YouTubeAuthManager.getInstance(context).isLoggedIn() } catch (_: Exception) { false }
@@ -225,58 +249,63 @@ fun OmniVaultDownloaderScreen(
                         Icon(
                             imageVector = Icons.Rounded.AccountCircle,
                             contentDescription = if (isYtLoggedIn) "YT conectado" else "Sesión YT",
-                            tint = if (isYtLoggedIn) accentColor else Color(0xFF9AA4AF),
+                            tint = if (isYtLoggedIn) accentColor else Color.White.copy(alpha = 0.72f),
                             modifier = Modifier.size(28.dp)
                         )
                     }
                 }
 
-                // Selector pill de 2 sub-pestañas: Nuevo | Completadas
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(Color(0xFF1B2128))
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                // Selector pill de 2 sub-pestañas con paleta de Música: Nuevo | Completadas
+                Surface(
+                    color = cardBg,
+                    shape = RoundedCornerShape(24.dp),
+                    border = BorderStroke(1.dp, borderCol),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    val isNewTab = selectedDownloadTab == 0
-                    val newLabel = if (activeDownloadList.isNotEmpty()) "Nuevo (${activeDownloadList.size})" else "Nuevo"
-                    Surface(
-                        onClick = { selectedDownloadTab = 0 },
-                        shape = RoundedCornerShape(20.dp),
-                        color = if (isNewTab) Color(0xFFDCE4EC) else Color.Transparent,
-                        modifier = Modifier.weight(1f)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text(
-                            text = newLabel,
-                            fontSize = 14.sp,
-                            fontWeight = if (isNewTab) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (isNewTab) darkOnAccent else Color(0xFF9AA4AF),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.padding(vertical = 9.dp, horizontal = 10.dp)
-                        )
-                    }
+                        val isNewTab = selectedDownloadTab == 0
+                        val newLabel = if (activeDownloadList.isNotEmpty()) "Nuevo (${activeDownloadList.size})" else "Nuevo"
+                        Surface(
+                            onClick = { selectedDownloadTab = 0 },
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (isNewTab) accentColor else Color.Transparent,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = newLabel,
+                                fontSize = 14.sp,
+                                fontWeight = if (isNewTab) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isNewTab) darkOnAccent else Color.White.copy(alpha = 0.68f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                modifier = Modifier.padding(vertical = 9.dp, horizontal = 10.dp)
+                            )
+                        }
 
-                    val isCompletedTab = selectedDownloadTab == 1
-                    Surface(
-                        onClick = { selectedDownloadTab = 1 },
-                        shape = RoundedCornerShape(20.dp),
-                        color = if (isCompletedTab) Color(0xFFDCE4EC) else Color.Transparent,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = "Completadas (${downloadedSongs.size})",
-                            fontSize = 14.sp,
-                            fontWeight = if (isCompletedTab) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (isCompletedTab) darkOnAccent else Color(0xFF9AA4AF),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.padding(vertical = 9.dp, horizontal = 10.dp)
-                        )
+                        val isCompletedTab = selectedDownloadTab == 1
+                        Surface(
+                            onClick = { selectedDownloadTab = 1 },
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (isCompletedTab) accentColor else Color.Transparent,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "Completadas (${downloadedSongs.size})",
+                                fontSize = 14.sp,
+                                fontWeight = if (isCompletedTab) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isCompletedTab) darkOnAccent else Color.White.copy(alpha = 0.68f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                modifier = Modifier.padding(vertical = 9.dp, horizontal = 10.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -629,43 +658,126 @@ fun OmniVaultDownloaderScreen(
                     }
                 }
 
-                // Fila horizontal limpia de formatos estilo Seal
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                // Switch Audio | Video estilo Fusión 3 con paleta de Música
+                Surface(
+                    color = cardBg,
+                    shape = RoundedCornerShape(24.dp),
+                    border = BorderStroke(1.dp, borderCol),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Surface(
+                            onClick = {
+                                isAudioFormatTab = true
+                                if (!selectedFormat.isAudio) {
+                                    downloadViewModel.selectedFormat.value = MediaFormat.M4A
+                                }
+                            },
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (isAudioFormatTab) accentColor else Color.Transparent,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(vertical = 9.dp, horizontal = 10.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Rounded.MusicNote,
+                                    contentDescription = null,
+                                    tint = if (isAudioFormatTab) darkOnAccent else Color.White.copy(alpha = 0.72f),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "Audio",
+                                    fontSize = 14.sp,
+                                    fontWeight = if (isAudioFormatTab) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isAudioFormatTab) darkOnAccent else Color.White.copy(alpha = 0.72f),
+                                    maxLines = 1
+                                )
+                            }
+                        }
+
+                        Surface(
+                            onClick = {
+                                isAudioFormatTab = false
+                                if (selectedFormat.isAudio) {
+                                    downloadViewModel.selectedFormat.value = MediaFormat.MP4_1080
+                                }
+                            },
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (!isAudioFormatTab) accentColor else Color.Transparent,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(vertical = 9.dp, horizontal = 10.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Rounded.Videocam,
+                                    contentDescription = null,
+                                    tint = if (!isAudioFormatTab) darkOnAccent else Color.White.copy(alpha = 0.72f),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "Video",
+                                    fontSize = 14.sp,
+                                    fontWeight = if (!isAudioFormatTab) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (!isAudioFormatTab) darkOnAccent else Color.White.copy(alpha = 0.72f),
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (isAudioFormatTab) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         FormatChip(
-                            label = "M4A Original",
+                            label = "MP3 • 320 kbps",
+                            selected = selectedFormat == MediaFormat.MP3_320,
+                            modifier = Modifier.weight(1f),
+                            onClick = { downloadViewModel.selectedFormat.value = MediaFormat.MP3_320 }
+                        )
+                        FormatChip(
+                            label = "M4A • Original HQ",
                             selected = selectedFormat == MediaFormat.M4A,
+                            modifier = Modifier.weight(1f),
                             onClick = { downloadViewModel.selectedFormat.value = MediaFormat.M4A }
                         )
                     }
-                    item {
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         FormatChip(
-                            label = "MP3 320",
-                            selected = selectedFormat == MediaFormat.MP3_320,
-                            onClick = { downloadViewModel.selectedFormat.value = MediaFormat.MP3_320 }
-                        )
-                    }
-                    item {
-                        FormatChip(
-                            label = "MP4 1080p",
+                            label = "MP4 • 1080p",
                             selected = selectedFormat == MediaFormat.MP4_1080,
+                            modifier = Modifier.weight(1f),
                             onClick = { downloadViewModel.selectedFormat.value = MediaFormat.MP4_1080 }
                         )
-                    }
-                    item {
                         FormatChip(
-                            label = "MP4 720p",
+                            label = "MP4 • 720p",
                             selected = selectedFormat == MediaFormat.MP4_720,
+                            modifier = Modifier.weight(1f),
                             onClick = { downloadViewModel.selectedFormat.value = MediaFormat.MP4_720 }
                         )
-                    }
-                    item {
                         FormatChip(
-                            label = "MP4 480p",
+                            label = "MP4 • 480p",
                             selected = selectedFormat == MediaFormat.MP4_480,
+                            modifier = Modifier.weight(1f),
                             onClick = { downloadViewModel.selectedFormat.value = MediaFormat.MP4_480 }
                         )
                     }
@@ -674,7 +786,13 @@ fun OmniVaultDownloaderScreen(
                 val btnLabel = if (batchUrls.size > 1) {
                     "Descargar lote (${batchUrls.size} enlaces)"
                 } else {
-                    "Iniciar descarga"
+                    when (selectedFormat) {
+                        MediaFormat.MP3_320 -> "Iniciar descarga (MP3 320K)"
+                        MediaFormat.M4A -> "Iniciar descarga (M4A HQ)"
+                        MediaFormat.MP4_1080 -> "Iniciar descarga (MP4 1080p)"
+                        MediaFormat.MP4_720 -> "Iniciar descarga (MP4 720p)"
+                        MediaFormat.MP4_480 -> "Iniciar descarga (MP4 480p)"
+                    }
                 }
 
                 Button(
@@ -1172,37 +1290,37 @@ fun FormatChip(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val selectedBg = Color(0xFFDCE4EC)
-    val selectedText = Color(0xFF0F1419)
+    val selectedBg = Color(0xFF00E5FF)
+    val selectedText = Color.Black
     Surface(
         onClick = onClick,
-        modifier = modifier.height(38.dp),
-        shape = RoundedCornerShape(10.dp),
-        color = if (selected) selectedBg else Color(0xFF13181E),
-        border = if (selected) null else BorderStroke(1.dp, Color(0xFF3A424D))
+        modifier = modifier.height(40.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = if (selected) selectedBg else Color(0xFF141923),
+        border = if (selected) null else BorderStroke(1.dp, Color(0xFF263248))
     ) {
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.padding(horizontal = 12.dp)
+            modifier = Modifier.padding(horizontal = 10.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelMedium,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (selected) selectedText else Color.White.copy(alpha = 0.88f),
-                    fontSize = 12.5.sp,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    color = if (selected) selectedText else Color.White.copy(alpha = 0.85f),
+                    fontSize = 12.sp,
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Ellipsis
                 )
                 if (selected) {
-                    Spacer(Modifier.width(5.dp))
+                    Spacer(Modifier.width(4.dp))
                     Icon(
                         Icons.Rounded.Check,
                         contentDescription = null,
                         tint = selectedText,
-                        modifier = Modifier.size(15.dp)
+                        modifier = Modifier.size(14.dp)
                     )
                 }
             }
