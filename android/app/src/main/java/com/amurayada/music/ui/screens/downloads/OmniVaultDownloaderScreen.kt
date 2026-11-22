@@ -132,9 +132,10 @@ fun OmniVaultDownloaderScreen(
         }
     }
 
-    val neonGreen = Color(0xFF00E676)
-    val cardBg = Color(0xFF141923).copy(alpha = 0.85f)
-    val borderCol = Color(0xFF263248)
+    val accentColor = Color(0xFF00E5FF)
+    val cardBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    val borderCol = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+    var selectedDownloadTab by remember { mutableIntStateOf(0) } // 0 = Nuevo, 1 = Completadas
 
     var detectedClipboardUrl by remember { mutableStateOf<String?>(null) }
     var clipboardTick by remember { mutableIntStateOf(0) }
@@ -196,83 +197,112 @@ fun OmniVaultDownloaderScreen(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Header
+        // 1. Header limpio estilo Material 3 (sin subtítulo cortado ni neón verde)
         item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(
-                    modifier = Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Brush.linearGradient(listOf(Color(0xFF00E676), Color(0xFF00B0FF)))),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Rounded.CloudDownload,
-                            contentDescription = null,
-                            tint = Color.Black,
-                            modifier = Modifier.size(28.dp)
-                        )
+                    Text(
+                        text = "Descargas",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+
+                    val isYtLoggedIn = remember {
+                        try { com.amurayada.music.data.auth.YouTubeAuthManager.getInstance(context).isLoggedIn() } catch (_: Exception) { false }
                     }
-                    Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "DESCARGAS",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White,
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis
+                    Surface(
+                        onClick = onOpenYouTubeLogin,
+                        color = if (isYtLoggedIn) accentColor.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                        shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isYtLoggedIn) accentColor.copy(alpha = 0.45f) else borderCol
                         )
-                        Text(
-                            text = "Motor Universal • Alta Velocidad",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = neonGreen,
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.AccountCircle,
+                                contentDescription = null,
+                                tint = if (isYtLoggedIn) accentColor else Color.White.copy(alpha = 0.75f),
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = if (isYtLoggedIn) "YT conectado" else "Sesión YT",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isYtLoggedIn) accentColor else Color.White.copy(alpha = 0.85f),
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
                     }
                 }
 
-                Spacer(Modifier.width(8.dp))
-
-                val isYtLoggedIn = remember {
-                    try { com.amurayada.music.data.auth.YouTubeAuthManager.getInstance(context).isLoggedIn() } catch (_: Exception) { false }
-                }
-                Surface(
-                    onClick = onOpenYouTubeLogin,
-                    modifier = Modifier.wrapContentWidth(),
-                    color = neonGreen.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(20.dp),
-                    border = BorderStroke(1.dp, neonGreen.copy(alpha = 0.4f))
+                // Selector de 2 sub-pestañas estilo Seal: Nuevo | Completadas
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    val isNewTab = selectedDownloadTab == 0
+                    val newLabel = if (activeDownloadList.isNotEmpty()) "Nuevo (${activeDownloadList.size})" else "Nuevo"
+                    Surface(
+                        onClick = { selectedDownloadTab = 0 },
+                        shape = RoundedCornerShape(9.dp),
+                        color = if (isNewTab) MaterialTheme.colorScheme.primary else Color.Transparent,
+                        modifier = Modifier.weight(1f)
                     ) {
                         Text(
-                            text = if (isYtLoggedIn) "⚡ YT Activo" else "⚡ Sesión YT",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = neonGreen,
-                            fontWeight = FontWeight.Bold,
+                            text = newLabel,
+                            fontSize = 13.sp,
+                            fontWeight = if (isNewTab) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isNewTab) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
-                            softWrap = false
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp)
+                        )
+                    }
+
+                    val isCompletedTab = selectedDownloadTab == 1
+                    Surface(
+                        onClick = { selectedDownloadTab = 1 },
+                        shape = RoundedCornerShape(9.dp),
+                        color = if (isCompletedTab) MaterialTheme.colorScheme.primary else Color.Transparent,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = "Completadas (${downloadedSongs.size})",
+                            fontSize = 13.sp,
+                            fontWeight = if (isCompletedTab) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isCompletedTab) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp)
                         )
                     }
                 }
             }
         }
+
+        if (selectedDownloadTab == 0) {
 
         // Escudo Anti-Doze (Optimización de batería)
         if (!isIgnoringBatteryOptimizations) {
@@ -358,11 +388,10 @@ fun OmniVaultDownloaderScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "ENLACE MULTIMEDIA",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = neonGreen,
-                            letterSpacing = 1.sp
+                            text = "Enlace multimedia",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
                         )
 
                         TextButton(
@@ -385,10 +414,10 @@ fun OmniVaultDownloaderScreen(
                                 Icons.Rounded.ContentPaste,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp),
-                                tint = neonGreen
+                                tint = accentColor
                             )
                             Spacer(Modifier.width(4.dp))
-                            Text("Pegar", color = neonGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("Pegar", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                     }
 
@@ -424,7 +453,7 @@ fun OmniVaultDownloaderScreen(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = neonGreen,
+                            focusedBorderColor = accentColor,
                             unfocusedBorderColor = borderCol
                         )
                     )
@@ -442,8 +471,8 @@ fun OmniVaultDownloaderScreen(
                                 detectedClipboardUrl = null
                             },
                             shape = RoundedCornerShape(10.dp),
-                            color = neonGreen.copy(alpha = 0.12f),
-                            border = BorderStroke(1.dp, neonGreen.copy(alpha = 0.45f))
+                            color = accentColor.copy(alpha = 0.12f),
+                            border = BorderStroke(1.dp, accentColor.copy(alpha = 0.45f))
                         ) {
                             Row(
                                 modifier = Modifier
@@ -454,7 +483,7 @@ fun OmniVaultDownloaderScreen(
                                 Icon(
                                     Icons.Rounded.ContentPaste,
                                     contentDescription = null,
-                                    tint = neonGreen,
+                                    tint = accentColor,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(Modifier.width(8.dp))
@@ -462,7 +491,7 @@ fun OmniVaultDownloaderScreen(
                                     text = "Enlace en portapapeles • Analizar",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = neonGreen,
+                                    color = accentColor,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f)
@@ -503,7 +532,7 @@ fun OmniVaultDownloaderScreen(
                         if (isAnalyzing) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(18.dp),
-                                color = neonGreen,
+                                color = accentColor,
                                 strokeWidth = 2.dp
                             )
                             Spacer(Modifier.width(8.dp))
@@ -516,7 +545,7 @@ fun OmniVaultDownloaderScreen(
                                 Icons.Rounded.Search,
                                 contentDescription = null,
                                 modifier = Modifier.size(18.dp),
-                                tint = neonGreen
+                                tint = accentColor
                             )
                             Spacer(Modifier.width(8.dp))
                             Text("Analizar Enlace", fontWeight = FontWeight.SemiBold)
@@ -554,7 +583,7 @@ fun OmniVaultDownloaderScreen(
                                         onClick = { downloadViewModel.analyzeUrl(urlInput) },
                                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                                     ) {
-                                        Text("Reintentar", fontSize = 12.sp, color = neonGreen, fontWeight = FontWeight.Bold)
+                                        Text("Reintentar", fontSize = 12.sp, color = accentColor, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -607,7 +636,7 @@ fun OmniVaultDownloaderScreen(
                                         Text(
                                             text = "${preview.platform.displayName} • ${preview.author}$durPart",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = neonGreen,
+                                            color = accentColor,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -619,22 +648,21 @@ fun OmniVaultDownloaderScreen(
                     }
 
                     Text(
-                        text = "FORMATO DE DESCARGA:",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = neonGreen,
-                        letterSpacing = 1.sp
+                        text = "Formato de descarga",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
                     )
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(10.dp))
 
                     Text(
                         text = "Opciones de Audio",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.72f),
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 11.sp
+                        color = Color.White.copy(alpha = 0.68f),
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 11.5.sp
                     )
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(6.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -692,14 +720,14 @@ fun OmniVaultDownloaderScreen(
                     Spacer(Modifier.height(14.dp))
 
                     val btnLabel = if (batchUrls.size > 1) {
-                        "⚡ DESCARGAR LOTE (${batchUrls.size} ENLACES)"
+                        "Descargar lote (${batchUrls.size} enlaces)"
                     } else {
                         when (selectedFormat) {
-                            MediaFormat.MP3_320 -> "⚡ DESCARGAR (MP3 320K)"
-                            MediaFormat.M4A -> "⚡ DESCARGAR (M4A HQ)"
-                            MediaFormat.MP4_1080 -> "⚡ DESCARGAR (MP4 1080P)"
-                            MediaFormat.MP4_720 -> "⚡ DESCARGAR (MP4 720P)"
-                            MediaFormat.MP4_480 -> "⚡ DESCARGAR (MP4 480P)"
+                            MediaFormat.MP3_320 -> "Iniciar descarga (MP3 320 kbps)"
+                            MediaFormat.M4A -> "Iniciar descarga (M4A HQ)"
+                            MediaFormat.MP4_1080 -> "Iniciar descarga (MP4 1080p)"
+                            MediaFormat.MP4_720 -> "Iniciar descarga (MP4 720p)"
+                            MediaFormat.MP4_480 -> "Iniciar descarga (MP4 480p)"
                         }
                     }
 
@@ -723,15 +751,16 @@ fun OmniVaultDownloaderScreen(
                             .height(50.dp),
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = neonGreen,
+                            containerColor = accentColor,
                             contentColor = Color.Black
                         )
                     ) {
+                        Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
                         Text(
                             text = btnLabel,
                             style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 0.5.sp,
+                            fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             softWrap = false,
                             overflow = TextOverflow.Ellipsis
@@ -752,8 +781,8 @@ fun OmniVaultDownloaderScreen(
                         OutlinedButton(
                             onClick = { downloadViewModel.retryFailedAndPaused() },
                             modifier = Modifier.weight(1f),
-                            border = BorderStroke(1.dp, neonGreen.copy(alpha = 0.6f)),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = neonGreen)
+                            border = BorderStroke(1.dp, accentColor.copy(alpha = 0.6f)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = accentColor)
                         ) {
                             Text("Reanudar / Reintentar todas", maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
@@ -776,7 +805,7 @@ fun OmniVaultDownloaderScreen(
                     text = "DESCARGAS ACTIVAS (${activeDownloadList.size})",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
-                    color = neonGreen,
+                    color = accentColor,
                     letterSpacing = 1.sp
                 )
             }
@@ -832,7 +861,7 @@ fun OmniVaultDownloaderScreen(
                                 downloadViewModel.startUniversalDownload(state.url, state.format, forceDuplicate = true)
                             }
                         ) {
-                            Text("Reanudar", color = neonGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("Reanudar", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                     }
                 }
@@ -885,7 +914,7 @@ fun OmniVaultDownloaderScreen(
                                 downloadViewModel.startUniversalDownload(state.url, state.format)
                             }
                         ) {
-                            Text("Reintentar", color = neonGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("Reintentar", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                         IconButton(
                             onClick = { downloadViewModel.cancelOmniDownload(state.processId) },
@@ -898,7 +927,8 @@ fun OmniVaultDownloaderScreen(
             }
         }
 
-        // 5. Sección de Descargas Completadas (downloadedSongs)
+        } else {
+        // 5. Sección de Descargas Completadas (sub-pestaña Completadas)
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(
@@ -907,11 +937,10 @@ fun OmniVaultDownloaderScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "DESCARGAS COMPLETADAS (${filteredCompletedSongs.size})",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = neonGreen,
-                        letterSpacing = 1.sp,
+                        text = "Historial (${filteredCompletedSongs.size})",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
                         maxLines = 1,
                         softWrap = false,
                         overflow = TextOverflow.Ellipsis
@@ -948,8 +977,8 @@ fun OmniVaultDownloaderScreen(
                                 )
                             },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = neonGreen.copy(alpha = 0.2f),
-                                selectedLabelColor = neonGreen
+                                selectedContainerColor = accentColor.copy(alpha = 0.2f),
+                                selectedLabelColor = accentColor
                             )
                         )
                     }
@@ -971,7 +1000,7 @@ fun OmniVaultDownloaderScreen(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = neonGreen,
+                        focusedBorderColor = accentColor,
                         unfocusedBorderColor = borderCol
                     )
                 )
@@ -1048,6 +1077,7 @@ fun OmniVaultDownloaderScreen(
                 )
             }
         }
+        }
     }
 
     // Diálogo URL híbrida (video + playlist)
@@ -1120,7 +1150,7 @@ fun OmniVaultDownloaderScreen(
                         Text(
                             text = "${selectedIndices.size} seleccionados",
                             style = MaterialTheme.typography.labelMedium,
-                            color = neonGreen
+                            color = accentColor
                         )
                         TextButton(
                             onClick = {
@@ -1196,27 +1226,33 @@ fun FormatChip(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val neonGreen = Color(0xFF00E676)
+    val accentColor = Color(0xFF00E5FF)
     Surface(
         onClick = onClick,
-        modifier = modifier.height(42.dp),
+        modifier = modifier.height(40.dp),
         shape = RoundedCornerShape(10.dp),
-        color = if (selected) neonGreen.copy(alpha = 0.2f) else Color(0xFF141923),
+        color = if (selected) accentColor.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
         border = BorderStroke(
-            1.2.dp,
-            if (selected) neonGreen else Color(0xFF263248)
+            width = if (selected) 1.2.dp else 1.dp,
+            color = if (selected) accentColor else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
         )
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                 if (selected) {
-                    Text("✓ ", color = neonGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, softWrap = false)
+                    Icon(
+                        Icons.Rounded.Check,
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
                 }
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                    color = if (selected) Color.White else Color.White.copy(alpha = 0.7f),
+                    color = if (selected) Color.White else Color.White.copy(alpha = 0.78f),
                     fontSize = 11.sp,
                     maxLines = 1,
                     softWrap = false,
@@ -1225,7 +1261,6 @@ fun FormatChip(
             }
         }
     }
-
 }
 
 @Composable
@@ -1233,7 +1268,7 @@ fun UniversalActiveDownloadCard(
     state: UniversalDownloadState,
     onCancel: () -> Unit
 ) {
-    val neonGreen = Color(0xFF00E676)
+    val accentColor = Color(0xFF00E5FF)
     val percent = (state.progress.coerceIn(0f, 1f) * 100f).toInt()
 
     Surface(
@@ -1284,7 +1319,7 @@ fun UniversalActiveDownloadCard(
                     .fillMaxWidth()
                     .height(6.dp)
                     .clip(RoundedCornerShape(3.dp)),
-                color = neonGreen,
+                color = accentColor,
                 trackColor = Color(0xFF263248)
             )
 
@@ -1298,7 +1333,7 @@ fun UniversalActiveDownloadCard(
                 Text(
                     text = "$percent% • ${state.speedText}$etaSuffix",
                     style = MaterialTheme.typography.labelSmall,
-                    color = neonGreen
+                    color = accentColor
                 )
                 Text(
                     text = state.format.label,
@@ -1320,23 +1355,24 @@ fun CompletedDownloadSongCard(
     onPlay: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val neonGreen = Color(0xFF00E676)
+    val accentColor = Color(0xFF00E5FF)
+    var menuExpanded by remember { mutableStateOf(false) }
+    val shareContext = LocalContext.current
 
     Surface(
         onClick = onPlay,
-        color = Color(0xFF141923).copy(alpha = 0.75f),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, Color(0xFF202838))
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
+        shape = RoundedCornerShape(12.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp),
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(50.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color.Black),
                 contentAlignment = Alignment.Center
@@ -1352,7 +1388,7 @@ fun CompletedDownloadSongCard(
                     Icon(
                         imageVector = if (isVideo) Icons.Rounded.Movie else Icons.Rounded.MusicNote,
                         contentDescription = null,
-                        tint = neonGreen,
+                        tint = accentColor,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -1363,18 +1399,19 @@ fun CompletedDownloadSongCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = song.title,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 13.5.sp,
+                    lineHeight = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White,
-                    maxLines = 1,
-                    softWrap = false,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(3.dp))
                 Text(
                     text = "${song.artist} • ${if (isVideo) "Video MP4" else "Audio HQ"}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.65f),
+                    color = Color.White.copy(alpha = 0.62f),
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Ellipsis,
@@ -1382,57 +1419,66 @@ fun CompletedDownloadSongCard(
                 )
             }
 
-            val shareContext = LocalContext.current
-            IconButton(
-                onClick = {
-                    try {
-                        val shareUri = if (song.path.startsWith("content://")) {
-                            android.net.Uri.parse(song.path)
-                        } else {
-                            androidx.core.content.FileProvider.getUriForFile(
-                                shareContext,
-                                "${shareContext.packageName}.fileprovider",
-                                java.io.File(song.path)
-                            )
+            Box {
+                IconButton(
+                    onClick = { menuExpanded = true },
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.MoreVert,
+                        contentDescription = "Opciones",
+                        tint = Color.White.copy(alpha = 0.72f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Reproducir") },
+                        leadingIcon = { Icon(Icons.Rounded.PlayArrow, contentDescription = null) },
+                        onClick = {
+                            menuExpanded = false
+                            onPlay()
                         }
-                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                            type = if (isVideo) "video/*" else "audio/*"
-                            putExtra(Intent.EXTRA_STREAM, shareUri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Compartir") },
+                        leadingIcon = { Icon(Icons.Rounded.Share, contentDescription = null) },
+                        onClick = {
+                            menuExpanded = false
+                            try {
+                                val shareUri = if (song.path.startsWith("content://")) {
+                                    android.net.Uri.parse(song.path)
+                                } else {
+                                    androidx.core.content.FileProvider.getUriForFile(
+                                        shareContext,
+                                        "${shareContext.packageName}.fileprovider",
+                                        java.io.File(song.path)
+                                    )
+                                }
+                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = if (isVideo) "video/*" else "audio/*"
+                                    putExtra(Intent.EXTRA_STREAM, shareUri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                shareContext.startActivity(Intent.createChooser(shareIntent, "Compartir ${song.title}"))
+                            } catch (_: Exception) {
+                                Toast.makeText(shareContext, "No se pudo compartir este archivo", Toast.LENGTH_SHORT).show()
+                            }
                         }
-                        shareContext.startActivity(Intent.createChooser(shareIntent, "Compartir ${song.title}"))
-                    } catch (_: Exception) {
-                        Toast.makeText(shareContext, "No se pudo compartir este archivo", Toast.LENGTH_SHORT).show()
-                    }
-                },
-                modifier = Modifier.size(34.dp)
-            ) {
-                Icon(
-                    Icons.Rounded.Share,
-                    contentDescription = "Compartir",
-                    tint = Color.White.copy(alpha = 0.75f),
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-
-            IconButton(onClick = onPlay, modifier = Modifier.size(34.dp)) {
-                Icon(
-                    Icons.Rounded.PlayArrow,
-                    contentDescription = "Reproducir",
-                    tint = neonGreen,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-
-            IconButton(onClick = onDelete, modifier = Modifier.size(34.dp)) {
-                Icon(
-                    Icons.Rounded.DeleteOutline,
-                    contentDescription = "Eliminar descarga",
-                    tint = Color(0xFFFF5252),
-                    modifier = Modifier.size(20.dp)
-                )
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Eliminar", color = Color(0xFFFF5252)) },
+                        leadingIcon = { Icon(Icons.Rounded.DeleteOutline, contentDescription = null, tint = Color(0xFFFF5252)) },
+                        onClick = {
+                            menuExpanded = false
+                            onDelete()
+                        }
+                    )
+                }
             }
         }
     }
-
 }
