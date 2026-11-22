@@ -189,19 +189,22 @@ object BulkMediaStandardizer {
 
             // Fallback directo si es archivo accesible directamente en File API
             val oldFile = File(candidate.currentPath)
-            val newFile = File(oldFile.parentFile, newDisplayName)
-            if (!updated && oldFile.exists() && (!newFile.exists() || newFile.absolutePath == oldFile.absolutePath)) {
-                try {
-                    if (oldFile.renameTo(newFile)) {
-                        updated = true
-                        MediaScannerConnection.scanFile(
-                            context,
-                            arrayOf(oldFile.absolutePath, newFile.absolutePath),
-                            null,
-                            null
-                        )
-                    }
-                } catch (_: Exception) {}
+            val parentDir = oldFile.parentFile
+            if (!updated && parentDir != null && oldFile.exists()) {
+                val newFile = File(parentDir, newDisplayName)
+                if (!newFile.exists() || newFile.absolutePath == oldFile.absolutePath) {
+                    try {
+                        if (oldFile.renameTo(newFile)) {
+                            updated = true
+                            MediaScannerConnection.scanFile(
+                                context,
+                                arrayOf(oldFile.absolutePath, newFile.absolutePath),
+                                null,
+                                null
+                            )
+                        }
+                    } catch (_: Exception) {}
+                }
             }
 
             if (updated) {

@@ -233,52 +233,49 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     }
     
     private fun loadPersistedData() {
-        // Load favorites
-        val favoritesJson = prefs.getString("favorites", null)
-        if (favoritesJson != null) {
-            try {
-                val jsonArray = JSONArray(favoritesJson)
-                for (i in 0 until jsonArray.length()) {
-                    val songJson = jsonArray.getJSONObject(i)
-                    _favorites.add(songFromJson(songJson))
-                }
-            } catch (e: Exception) {
-                // Ignore parsing errors
+        userWantsVideo = false
+        viewModelScope.launch(Dispatchers.IO) {
+            val loadedFavorites = mutableListOf<com.amurayada.music.data.model.Song>()
+            val favoritesJson = prefs.getString("favorites", null)
+            if (favoritesJson != null) {
+                try {
+                    val jsonArray = JSONArray(favoritesJson)
+                    for (i in 0 until jsonArray.length()) {
+                        loadedFavorites.add(songFromJson(jsonArray.getJSONObject(i)))
+                    }
+                } catch (_: Exception) {}
+            }
+
+            val loadedHistory = mutableListOf<com.amurayada.music.data.model.Song>()
+            val historyJson = prefs.getString("history", null)
+            if (historyJson != null) {
+                try {
+                    val jsonArray = JSONArray(historyJson)
+                    for (i in 0 until jsonArray.length()) {
+                        loadedHistory.add(songFromJson(jsonArray.getJSONObject(i)))
+                    }
+                } catch (_: Exception) {}
+            }
+
+            val loadedCounts = mutableMapOf<Long, Int>()
+            val playCountsJson = prefs.getString("play_counts", null)
+            if (playCountsJson != null) {
+                try {
+                    val jsonObject = JSONObject(playCountsJson)
+                    val keys = jsonObject.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next()
+                        key.toLongOrNull()?.let { loadedCounts[it] = jsonObject.getInt(key) }
+                    }
+                } catch (_: Exception) {}
+            }
+
+            withContext(Dispatchers.Main) {
+                if (_favorites.isEmpty() && loadedFavorites.isNotEmpty()) _favorites.addAll(loadedFavorites)
+                if (_recentlyPlayed.isEmpty() && loadedHistory.isNotEmpty()) _recentlyPlayed.addAll(loadedHistory)
+                loadedCounts.forEach { (k, v) -> if (k !in playCountMap) playCountMap[k] = v }
             }
         }
-        
-        // Load history
-        val historyJson = prefs.getString("history", null)
-        if (historyJson != null) {
-            try {
-                val jsonArray = JSONArray(historyJson)
-                for (i in 0 until jsonArray.length()) {
-                    val songJson = jsonArray.getJSONObject(i)
-                    _recentlyPlayed.add(songFromJson(songJson))
-                }
-            } catch (e: Exception) {
-                // Ignore parsing errors
-            }
-        }
-        
-        // Load play counts
-        val playCountsJson = prefs.getString("play_counts", null)
-        if (playCountsJson != null) {
-            try {
-                val jsonObject = JSONObject(playCountsJson)
-                val keys = jsonObject.keys()
-                while (keys.hasNext()) {
-                    val key = keys.next()
-                    playCountMap[key.toLong()] = jsonObject.getInt(key)
-                }
-            } catch (e: Exception) {
-                // Ignore parsing errors
-            }
-        }
-        
-        // Load video preference
-        userWantsVideo = false // Mode is strictly in-memory and volatile
-        Log.d("PlaybackViewModel", "Loaded video preference: $userWantsVideo")
     }
     
     private fun saveFavorites() {
@@ -400,10 +397,15 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         
         mediaControllerFuture = MediaController.Builder(getApplication(), sessionToken).buildAsync()
         mediaControllerFuture?.addListener({
-            mediaController = mediaControllerFuture?.get()
-            setupPlayerListener()
-            syncWithController()
-
+            try {
+                val future = mediaControllerFuture ?: return@addListener
+                if (future.isCancelled) return@addListener
+                mediaController = future.get()
+                setupPlayerListener()
+                syncWithController()
+            } catch (e: Exception) {
+                Log.e("PlaybackViewModel", "Failed to initialize MediaController", e)
+            }
         }, MoreExecutors.directExecutor())
     }
 

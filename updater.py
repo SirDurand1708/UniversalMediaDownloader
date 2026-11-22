@@ -10,6 +10,7 @@ import json
 import re
 import urllib.request
 import urllib.error
+import urllib.parse
 import threading
 import subprocess
 
@@ -18,7 +19,7 @@ try:
 except ImportError:
     version = None
 
-def _load_local_version(fallback: str = "2.5.46") -> str:
+def _load_local_version(fallback: str = "2.5.47") -> str:
     """Lee la versión local desde version.json empaquetado junto al ejecutable o en la raíz del proyecto."""
     candidates = []
     if getattr(sys, 'frozen', False):
@@ -135,13 +136,27 @@ def evaluate_update_availability(data: dict, current_version: str = CURRENT_VERS
 
     return True, effective_data
 
+_TRUSTED_RELEASE_HOSTS = {
+    "github.com",
+    "objects.githubusercontent.com",
+    "release-assets.githubusercontent.com",
+    "github-releases.githubusercontent.com",
+}
+
+def _is_trusted_release_url(url: str) -> bool:
+    try:
+        parsed = urllib.parse.urlparse((url or "").strip())
+        return parsed.scheme == "https" and (parsed.hostname or "").lower() in _TRUSTED_RELEASE_HOSTS
+    except Exception:
+        return False
+
 def find_release_asset_url(version_tag: str, is_installer: bool, direct_url: str = "") -> tuple[bool, str]:
     """
     Comprueba si existe un binario real (.exe o .zip) para Windows en el release de GitHub.
     Retorna (found: bool, url: str).
     """
-    # 1. Probar URL directa por HEAD
-    if direct_url:
+    # 1. Probar URL directa por HEAD solo si pertenece a GitHub HTTPS
+    if direct_url and _is_trusted_release_url(direct_url):
         try:
             req = urllib.request.Request(direct_url, headers={"User-Agent": "Mozilla/5.0 OmniVault"}, method="HEAD")
             with urllib.request.urlopen(req, timeout=8) as resp:
@@ -379,8 +394,10 @@ def download_and_install_update(
     def _download():
         dest_file = None
         try:
-            # Resolución dinámica a prueba de 404
+            # Resolución dinámica a prueba de 404 + validación de origen HTTPS confiable
             target_url = resolve_download_url(download_url, is_installer, remote_version)
+            if not _is_trusted_release_url(target_url):
+                raise ValueError(f"URL de actualización no confiable: {target_url}")
 
             target_dir = os.path.join(os.environ.get("TEMP", os.path.expanduser("~")), "OmniVault_Update")
             os.makedirs(target_dir, exist_ok=True)

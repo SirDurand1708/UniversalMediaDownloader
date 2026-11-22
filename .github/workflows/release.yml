@@ -78,7 +78,15 @@ jobs:
 
       - name: 📦 Generar paquetes portátiles e instalador
         run: |
-          python package_release.py --version "${{ github.ref_name }}"
+          $tagVal = "${{ github.ref_name }}"
+          if ([string]::IsNullOrWhiteSpace($tagVal) -or $tagVal -eq "main" -or $tagVal -eq "refs/heads/main") {
+            $tagVal = "${{ inputs.tag_name }}"
+          }
+          if ([string]::IsNullOrWhiteSpace($tagVal)) {
+            $v = (Get-Content -Raw version.json | ConvertFrom-Json).version
+            $tagVal = "v$v"
+          }
+          python package_release.py --version "$tagVal"
 
       - name: 📤 Subir artefactos de Windows
         uses: actions/upload-artifact@v4
@@ -112,7 +120,7 @@ jobs:
           ./gradlew assembleRelease --stacktrace
           mkdir -p ../dist/Releases
           TAG_VAL="${{ github.ref_name }}"
-          if [ -z "$TAG_VAL" ] || [ "$TAG_VAL" = "refs/heads/main" ]; then
+          if [ -z "$TAG_VAL" ] || [ "$TAG_VAL" = "main" ] || [ "$TAG_VAL" = "refs/heads/main" ]; then
             TAG_VAL="${{ inputs.tag_name }}"
           fi
           if [ -z "$TAG_VAL" ]; then

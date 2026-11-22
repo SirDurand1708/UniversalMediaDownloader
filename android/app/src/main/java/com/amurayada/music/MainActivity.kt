@@ -331,11 +331,7 @@ fun MusicPlayerApp(
                 playbackViewModel.pause()
             }
         }
-        playlistViewModel.playlists.value.forEach { playlist ->
-            if (playlist.songIds.contains(song.id)) {
-                playlistViewModel.removeSongFromPlaylist(playlist.id, song.id)
-            }
-        }
+        playlistViewModel.removeSongFromAllPlaylists(song.id)
         libraryViewModel.deleteSong(song, context) {
             android.widget.Toast.makeText(context, "Canción eliminada", android.widget.Toast.LENGTH_SHORT).show()
         }

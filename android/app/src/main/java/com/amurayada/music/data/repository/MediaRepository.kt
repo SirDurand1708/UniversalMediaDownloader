@@ -391,14 +391,18 @@ class MediaRepository(private val context: Context) {
                 null
             )
             
+            val trackTargets = mutableListOf<Pair<Long, String>>()
             cursor?.use { c ->
                 val idCol = c.getColumnIndex(MediaStore.Audio.Media._ID)
                 val dataCol = c.getColumnIndex(MediaStore.Audio.Media.DATA)
                 if (idCol != -1) {
                     while (c.moveToNext()) {
-                        songIds.add(c.getLong(idCol))
-                        if (dataCol != -1) {
-                            c.getString(dataCol)?.let { pathsToScan.add(it) }
+                        val sid = c.getLong(idCol)
+                        songIds.add(sid)
+                        val p = if (dataCol != -1) c.getString(dataCol) else null
+                        if (!p.isNullOrBlank()) {
+                            pathsToScan.add(p)
+                            trackTargets.add(sid to p)
                         }
                     }
                 }
@@ -427,63 +431,63 @@ class MediaRepository(private val context: Context) {
                 }
             }
 
-            for (i in pathsToScan.indices) {
-                val path = pathsToScan[i]
-                val id = songIds[i]
+            for ((id, path) in trackTargets) {
                 val uri = android.content.ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
-                
+                val extension = path.substringAfterLast('.', "mp3")
+                val tempFile = java.io.File(context.cacheDir, "temp_audio_${System.currentTimeMillis()}_$id.$extension")
+
                 try {
-                    val pfd = context.contentResolver.openFileDescriptor(uri, "rw")
-                    if (pfd == null) {
+                    val readPfd = context.contentResolver.openFileDescriptor(uri, "r")
+                    if (readPfd == null) {
                         urisNeedingPermission.add(uri)
                         continue
                     }
-                    
-                    pfd.use { descriptor ->
-                        val extension = path.substringAfterLast('.', "mp3")
-                        val tempFile = java.io.File(context.cacheDir, "temp_audio_${System.currentTimeMillis()}.$extension")
-                        try {
-                            java.io.FileInputStream(descriptor.fileDescriptor).use { input ->
-                                java.io.FileOutputStream(tempFile).use { output ->
-                                    input.copyTo(output)
-                                }
+                    readPfd.use { descriptor ->
+                        java.io.FileInputStream(descriptor.fileDescriptor).use { input ->
+                            java.io.FileOutputStream(tempFile).use { output ->
+                                input.copyTo(output)
                             }
-                            
-                            val audioFile = org.jaudiotagger.audio.AudioFileIO.read(tempFile)
-                            val tag = audioFile.tagOrCreateAndSetDefault
-                            
-                            tag.setField(org.jaudiotagger.tag.FieldKey.ALBUM, newTitle)
-                            tag.setField(org.jaudiotagger.tag.FieldKey.ARTIST, newArtist)
-                            
-                            if (newGenre.isNotBlank()) {
-                                tag.setField(org.jaudiotagger.tag.FieldKey.GENRE, newGenre)
-                            }
-                            
-                            if (artwork != null) {
-                                tag.deleteArtworkField()
-                                tag.setField(artwork)
-                            }
-                            
-                            audioFile.commit()
-                            
-                            context.contentResolver.openFileDescriptor(uri, "wt")?.use { writePfd ->
-                                java.io.FileInputStream(tempFile).use { input ->
-                                    java.io.FileOutputStream(writePfd.fileDescriptor).use { output ->
-                                        input.copyTo(output)
-                                    }
-                                }
-                            }
-                            
-                            totalUpdated++
-                        } finally {
-                            tempFile.delete()
                         }
                     }
+
+                    val audioFile = org.jaudiotagger.audio.AudioFileIO.read(tempFile)
+                    val tag = audioFile.tagOrCreateAndSetDefault
+
+                    tag.setField(org.jaudiotagger.tag.FieldKey.ALBUM, newTitle)
+                    tag.setField(org.jaudiotagger.tag.FieldKey.ARTIST, newArtist)
+
+                    if (newGenre.isNotBlank()) {
+                        tag.setField(org.jaudiotagger.tag.FieldKey.GENRE, newGenre)
+                    }
+
+                    if (artwork != null) {
+                        tag.deleteArtworkField()
+                        tag.setField(artwork)
+                    }
+
+                    audioFile.commit()
+
+                    val writePfd = context.contentResolver.openFileDescriptor(uri, "wt")
+                    if (writePfd == null) {
+                        urisNeedingPermission.add(uri)
+                        continue
+                    }
+                    writePfd.use { wp ->
+                        java.io.FileInputStream(tempFile).use { input ->
+                            java.io.FileOutputStream(wp.fileDescriptor).use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                    }
+
+                    totalUpdated++
                 } catch (e: SecurityException) {
                     urisNeedingPermission.add(uri)
                 } catch (e: Exception) {
                     android.util.Log.e("MediaRepository", "Error updating tags for $uri: ${e.message}", e)
                     urisNeedingPermission.add(uri)
+                } finally {
+                    tempFile.delete()
                 }
             }
 

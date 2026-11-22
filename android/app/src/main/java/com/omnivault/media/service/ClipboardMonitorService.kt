@@ -77,6 +77,7 @@ class ClipboardMonitorService : Service(), ClipboardManager.OnPrimaryClipChanged
             }
         } catch (e: Exception) {
             android.util.Log.e("ClipboardMonitor", "startForeground error", e)
+            stopSelf()
         }
     }
 

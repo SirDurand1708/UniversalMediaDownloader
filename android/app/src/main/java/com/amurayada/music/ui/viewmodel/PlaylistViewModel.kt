@@ -54,6 +54,12 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun removeSongFromAllPlaylists(songId: Long) {
+        viewModelScope.launch {
+            repository.removeSongFromAllPlaylists(songId)
+        }
+    }
+
     fun moveSongToBoundary(playlistId: Long, songId: Long, toTop: Boolean) {
         viewModelScope.launch {
             repository.moveSongToBoundary(playlistId, songId, toTop)

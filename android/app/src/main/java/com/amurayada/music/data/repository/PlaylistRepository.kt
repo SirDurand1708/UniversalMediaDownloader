@@ -7,6 +7,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -14,6 +16,7 @@ import java.io.File
 
 class PlaylistRepository(private val context: Context) {
     private val playlistsFile = File(context.filesDir, "playlists.json")
+    private val writeMutex = Mutex()
 
     private val _playlists = MutableStateFlow<List<Playlist>>(emptyList())
     val playlists: StateFlow<List<Playlist>> = _playlists.asStateFlow()
@@ -74,33 +77,49 @@ class PlaylistRepository(private val context: Context) {
 
     private suspend fun savePlaylists() {
         withContext(Dispatchers.IO) {
-            try {
-                val jsonArray = JSONArray()
-                _playlists.value.forEach { playlist ->
-                    val jsonObject = JSONObject()
-                    jsonObject.put("id", playlist.id)
-                    jsonObject.put("name", playlist.name)
-                    jsonObject.put("dateCreated", playlist.dateCreated)
-                    if (!playlist.artworkUri.isNullOrBlank()) {
-                        jsonObject.put("artworkUri", playlist.artworkUri)
+            writeMutex.withLock {
+                try {
+                    val jsonArray = JSONArray()
+                    _playlists.value.forEach { playlist ->
+                        val jsonObject = JSONObject()
+                        jsonObject.put("id", playlist.id)
+                        jsonObject.put("name", playlist.name)
+                        jsonObject.put("dateCreated", playlist.dateCreated)
+                        if (!playlist.artworkUri.isNullOrBlank()) {
+                            jsonObject.put("artworkUri", playlist.artworkUri)
+                        }
+
+                        val songIdsJsonArray = JSONArray()
+                        playlist.songIds.forEach { songId ->
+                            songIdsJsonArray.put(songId)
+                        }
+                        jsonObject.put("songIds", songIdsJsonArray)
+
+                        jsonArray.put(jsonObject)
                     }
-                    
-                    val songIdsJsonArray = JSONArray()
-                    playlist.songIds.forEach { songId ->
-                        songIdsJsonArray.put(songId)
+
+                    val serialized = jsonArray.toString()
+                    val tmpFile = File(context.filesDir, "playlists.json.tmp")
+                    tmpFile.writeText(serialized)
+                    if (!tmpFile.renameTo(playlistsFile)) {
+                        playlistsFile.writeText(serialized)
+                        tmpFile.delete()
                     }
-                    jsonObject.put("songIds", songIdsJsonArray)
-                    
-                    jsonArray.put(jsonObject)
+                    PlaylistBackupManager.saveBackup(context, "playlists.json", serialized)
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
-                
-                val serialized = jsonArray.toString()
-                playlistsFile.writeText(serialized)
-                PlaylistBackupManager.saveBackup(context, "playlists.json", serialized)
-            } catch (e: Exception) {
-                e.printStackTrace()
             }
         }
+    }
+
+    suspend fun removeSongFromAllPlaylists(songId: Long) {
+        val current = _playlists.value
+        if (current.none { songId in it.songIds }) return
+        _playlists.value = current.map { pl ->
+            if (songId in pl.songIds) pl.copy(songIds = pl.songIds.filterNot { it == songId }) else pl
+        }
+        savePlaylists()
     }
 
     suspend fun createPlaylist(name: String) {

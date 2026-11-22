@@ -48,6 +48,7 @@ abstract class DownloadDatabase : RoomDatabase() {
                     "download_database"
                 )
                     .addMigrations(MIGRATION_3_4)
+                    .fallbackToDestructiveMigrationFrom(1, 2)
                     .build()
                 INSTANCE = instance
                 instance

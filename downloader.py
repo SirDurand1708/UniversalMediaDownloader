@@ -1444,14 +1444,19 @@ class DownloaderEngine:
             }
 
         finally:
+            was_cancelled = self.is_cancelled(task_id)
             with self._lock:
                 self._cancel_flags.pop(task_id, None)
 
-            if self.is_cancelled(task_id):
+            if was_cancelled:
                 try:
-                    for part in glob.glob(os.path.join(output_dir, "*.part")):
-                        if os.path.isfile(part): os.remove(part)
-                    for ytdl in glob.glob(os.path.join(output_dir, "*.ytdl")):
-                        if os.path.isfile(ytdl): os.remove(ytdl)
+                    safe_token = re.sub(r'[^a-zA-Z0-9]+', '', (title or ''))[:16].lower()
+                    for ext in ("*.part", "*.ytdl"):
+                        for tmp_file in glob.glob(os.path.join(output_dir, ext)):
+                            if not os.path.isfile(tmp_file):
+                                continue
+                            bname = re.sub(r'[^a-zA-Z0-9]+', '', os.path.basename(tmp_file)).lower()
+                            if safe_token and safe_token in bname:
+                                os.remove(tmp_file)
                 except Exception:
                     pass

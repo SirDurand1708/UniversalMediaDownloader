@@ -182,26 +182,29 @@ class SubscriptionsManager:
                         "uploader": channel_title
                     })
 
-        # Actualizar datos de la suscripción
+        # Actualizar datos de la suscripción fusionando seen_ids de forma atómica bajo lock
         now_str = time.strftime("%Y-%m-%d %H:%M")
+        truly_new_items = []
         with self._lock:
             for s in self.subscriptions:
                 if s.get("id") == sub.get("id"):
-                    s["seen_ids"] = list(seen_ids)
+                    existing_seen = set(s.get("seen_ids", []))
+                    truly_new_items = [it for it in new_items if it["id"] not in existing_seen]
+                    s["seen_ids"] = list(existing_seen | seen_ids)
                     s["last_checked"] = time.time()
                     s["last_checked_str"] = now_str
                     if channel_title and s.get("name") == s.get("url"):
                         s["name"] = channel_title
-                    if new_items:
-                        s["downloaded_count"] = s.get("downloaded_count", 0) + len(new_items)
+                    if truly_new_items:
+                        s["downloaded_count"] = s.get("downloaded_count", 0) + len(truly_new_items)
                     self._save()
                     break
 
         # Si hay elementos nuevos y auto_download está habilitado, encolar en el gestor de descargas
-        if new_items and sub.get("auto_download", True) and queue_manager:
+        if truly_new_items and sub.get("auto_download", True) and queue_manager:
             fmt = sub.get("format_type", "mp3_320")
 
-            for it in new_items:
+            for it in truly_new_items:
                 try:
                     target_dir = None
                     if get_target_dir_func:
@@ -251,28 +254,37 @@ class SubscriptionsManager:
         queue_manager=None,
         get_target_dir_func=None
     ):
-        """Inicia el hilo de sincronización en segundo plano."""
+        """Inicia el hilo de sincronización en segundo plano sin duplicados."""
         if self._running:
             return
+        prev = getattr(self, "_timer_thread", None)
+        if prev is not None and prev.is_alive():
+            self._running = False
+            if getattr(self, "_stop_event", None) is not None:
+                self._stop_event.set()
+            prev.join(timeout=1.5)
+
+        stop_event = threading.Event()
+        self._stop_event = stop_event
         self._running = True
 
         def loop():
-            # Espera inicial de 15 segundos tras iniciar la app antes del primer escaneo
-            time.sleep(15)
+            # Espera inicial interrumpible de 15 segundos tras iniciar la app
+            if stop_event.wait(15) or not self._running:
+                return
             while self._running:
                 try:
                     self.check_all(queue_manager=queue_manager, get_target_dir_func=get_target_dir_func)
                 except Exception as e:
                     print(f"Error en bucle de auto-sync de canales: {e}")
 
-                # Esperar intervalo verificando _running periódicamente
-                elapsed = 0
-                while self._running and elapsed < interval_seconds:
-                    time.sleep(2)
-                    elapsed += 2
+                if stop_event.wait(interval_seconds):
+                    break
 
         self._timer_thread = threading.Thread(target=loop, daemon=True, name="OmniVault-ChannelSync")
         self._timer_thread.start()
 
     def stop_background_sync(self):
         self._running = False
+        if getattr(self, "_stop_event", None) is not None:
+            self._stop_event.set()

@@ -15,6 +15,13 @@ def get_app_dir() -> str:
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
 
+def is_portable_mode() -> bool:
+    try:
+        import updater
+        return updater.get_installation_type() != "installed"
+    except Exception:
+        return True
+
 def get_data_dir() -> str:
     """
     Devuelve el directorio donde se almacenan los datos mutables de la aplicación.
@@ -153,27 +160,26 @@ class ConfigManager:
         except Exception:
             return defaults
 
-    def get_audio_dir(self) -> str:
-        with self._lock:
-            d = self.settings.get("audio_download_dir")
+    def _resolve_dir(self, d: Optional[str], default_key: str) -> str:
         if not d or not isinstance(d, str):
-            d = self._default_settings()["audio_download_dir"]
+            d = self._default_settings()[default_key]
+        if is_portable_mode() and not os.path.isabs(d):
+            d = os.path.normpath(os.path.join(get_app_dir(), d))
         try:
             os.makedirs(d, exist_ok=True)
         except Exception:
             pass
         return d
 
+    def get_audio_dir(self) -> str:
+        with self._lock:
+            d = self.settings.get("audio_download_dir")
+        return self._resolve_dir(d, "audio_download_dir")
+
     def get_video_dir(self) -> str:
         with self._lock:
             d = self.settings.get("video_download_dir")
-        if not d or not isinstance(d, str):
-            d = self._default_settings()["video_download_dir"]
-        try:
-            os.makedirs(d, exist_ok=True)
-        except Exception:
-            pass
-        return d
+        return self._resolve_dir(d, "video_download_dir")
 
     def save(self):
         """Guarda la configuración de forma atómica y segura entre hilos."""

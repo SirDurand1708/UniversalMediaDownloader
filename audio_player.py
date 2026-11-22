@@ -11,7 +11,7 @@ from typing import Optional
 
 class AudioPlayer:
     def __init__(self):
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._alias = "omnivault_audio_device"
         self._loaded_path: Optional[str] = None
         self._duration_ms: int = 0

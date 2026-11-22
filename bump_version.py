@@ -102,16 +102,16 @@ def update_version_json(new_version: str, version_code: int, platform: str = "al
 
 
 def update_build_gradle(new_version: str, version_code: int):
-    path = os.path.join(ROOT, "android", "app", "build.gradle")
+    path = os.path.join(ROOT, "android", "app", "build.gradle.kts")
     with open(path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    content = re.sub(r'versionCode\s+\d+', f'versionCode {version_code}', content)
-    content = re.sub(r'versionName\s+"[^"]*"', f'versionName "{new_version}"', content)
+    content = re.sub(r'versionCode\s*=\s*\d+', f'versionCode = {version_code}', content)
+    content = re.sub(r'versionName\s*=\s*"[^"]*"', f'versionName = "{new_version}"', content)
 
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
-    print(f"  [OK] android/app/build.gradle actualizado -> {new_version} ({version_code})")
+    print(f"  [OK] android/app/build.gradle.kts actualizado -> {new_version} ({version_code})")
 
 
 def update_manager_kt(new_version: str, version_code: int):
@@ -145,8 +145,8 @@ def update_updater_py(new_version: str):
         content = f.read()
 
     content = re.sub(
-        r'CURRENT_VERSION = "[^"]*"',
-        f'CURRENT_VERSION = "{new_version}"',
+        r'def _load_local_version\(fallback:\s*str\s*=\s*"[^"]*"\)',
+        f'def _load_local_version(fallback: str = "{new_version}")',
         content
     )
 

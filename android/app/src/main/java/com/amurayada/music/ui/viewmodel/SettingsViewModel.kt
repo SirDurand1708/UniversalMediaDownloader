@@ -193,21 +193,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
      * Lanza el instalador del sistema usando FileProvider para el APK descargado.
      */
     fun installApk(context: Context, apkFile: File) {
-        try {
-            val uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                apkFile
-            )
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(intent)
-        } catch (e: Exception) {
-            _updateStatus.value = UpdateStatus.Error("No se pudo abrir el instalador: ${e.localizedMessage}")
-        }
+        com.omnivault.media.utils.UpdateManager.installApk(context, apkFile)
     }
 
     /**

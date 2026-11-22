@@ -25,8 +25,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -62,7 +64,8 @@ class MusicPlaybackService : MediaSessionService() {
     private var wasPlayingBeforeFocusLoss = false // Bandera de estado previo
     
     // GUARDIA DE TIMEOUT DE REPRODUCCIÓN: Previene bucles infinitos de "Buffering"
-    private val serviceScope = CoroutineScope(Dispatchers.Main)
+    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var widgetUpdateJob: Job? = null
     private var playbackTimeoutJob: Job? = null
     private var currentFailedMediaId: String? = null
     private var idleRetryCount = 0
@@ -317,7 +320,6 @@ class MusicPlaybackService : MediaSessionService() {
         // Envolvemos el player real para MENTIR a la MediaSession sobre estados de buffering/idle.
         // Esto evita que el sistema vea una aplicación "pausada/estancada" y cierre el servicio.
         val forwardingPlayer = object : androidx.media3.common.ForwardingPlayer(player) {
-            private val notificationScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
             private var lastArtworkUri: String? = null
             private var artworkData: ByteArray? = null
 
@@ -329,7 +331,7 @@ class MusicPlaybackService : MediaSessionService() {
                 if (artworkUri != null && artworkUri.startsWith("http")) {
                     if (artworkUri != lastArtworkUri) {
                         lastArtworkUri = artworkUri
-                        notificationScope.launch {
+                        serviceScope.launch(Dispatchers.IO) {
                             try {
                                 val bitmap = downloadBitmap(artworkUri)
                                 if (bitmap != null) {
@@ -339,8 +341,10 @@ class MusicPlaybackService : MediaSessionService() {
                                     
                                     android.util.Log.d("MusicPlaybackService", "Artwork capturado como ByteArray para notificación: ${artworkData?.size} bytes")
                                     
-                                    // Forzamos actualización de metadatos para que Media3 refresque la notificación
-                                    mediaSession?.setCustomLayout(emptyList())
+                                    // Forzamos actualización de metadatos en Main Thread para Media3
+                                    withContext(Dispatchers.Main) {
+                                        mediaSession?.setCustomLayout(emptyList())
+                                    }
                                 }
                             } catch (e: Exception) {
                                 android.util.Log.e("MusicPlaybackService", "Fallo al capturar datos de artwork", e)
@@ -496,7 +500,25 @@ class MusicPlaybackService : MediaSessionService() {
     private var isLoading = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+        super.onStartCommand(intent, flags, startId)
+        val action = intent?.action
+        if (player.currentMediaItem == null && action in listOf("ACTION_PLAY_PAUSE", "ACTION_SKIP_NEXT", "ACTION_TOGGLE_FAVORITE")) {
+            // Si el widget arrancó el servicio en frío sin pista cargada, cumplimos startForeground antes de detenernos
+            try {
+                val placeholder = androidx.core.app.NotificationCompat.Builder(this, CHANNEL_ID)
+                    .setSmallIcon(com.amurayada.music.R.mipmap.ic_launcher)
+                    .setContentTitle("Aura Player")
+                    .setContentText("Sin pista activa")
+                    .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
+                    .build()
+                startForeground(1, placeholder)
+            } catch (_: Exception) {}
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return android.app.Service.START_NOT_STICKY
+        }
+
+        when (action) {
             "ACTION_PLAY_PAUSE" -> {
                 if (player.isPlaying) player.pause() else player.play()
             }
@@ -521,30 +543,10 @@ class MusicPlaybackService : MediaSessionService() {
             }
         }
         
-        // REINFORCEMENT: If just paused, try to keep foreground
-        // (Media3 handles this mostly, but we ensure we don't call stopSelf here)
-        
-        // MediaSessionService handles foreground internally with the provider
         return android.app.Service.START_STICKY
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        try {
-            val restartServiceIntent = Intent(applicationContext, this.javaClass)
-            restartServiceIntent.setPackage(packageName)
-            val restartServicePendingIntent = PendingIntent.getService(
-                applicationContext, 1, restartServiceIntent,
-                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
-            )
-            val alarmService = applicationContext.getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
-            alarmService?.set(
-                android.app.AlarmManager.ELAPSED_REALTIME,
-                android.os.SystemClock.elapsedRealtime() + 1000,
-                restartServicePendingIntent
-            )
-        } catch (e: Exception) {
-            android.util.Log.w("MusicPlaybackService", "Could not schedule service restart onTaskRemoved: ${e.message}")
-        }
         super.onTaskRemoved(rootIntent)
     }
 
@@ -601,8 +603,8 @@ class MusicPlaybackService : MediaSessionService() {
         val mediaItem = player.currentMediaItem ?: return
         val songId = mediaItem.mediaId.toLongOrNull() ?: return
         
-        // Move to IO thread to prevent ANR
-        CoroutineScope(Dispatchers.IO).launch {
+        // Move to IO thread using lifecycle-bound serviceScope
+        serviceScope.launch(Dispatchers.IO) {
             val prefs = getSharedPreferences("playback_data", Context.MODE_PRIVATE)
             val favoritesJson = prefs.getString("favorites", null)
             val favoritesList = mutableListOf<JSONObject>()
@@ -679,7 +681,8 @@ class MusicPlaybackService : MediaSessionService() {
         }
         android.util.Log.d("WidgetUpdate", "Updating widget for song: $title ($songId) | Playing: $isPlaying")
 
-        CoroutineScope(Dispatchers.IO).launch {
+        widgetUpdateJob?.cancel()
+        widgetUpdateJob = serviceScope.launch(Dispatchers.IO) {
             // Move Heavy Calculation (JSON Parsing) to IO Thread
             val isFavorite = isSongFavorite(songId)
             
@@ -689,14 +692,14 @@ class MusicPlaybackService : MediaSessionService() {
                 try {
                     val bitmap = downloadBitmap(artworkUri)
                     if (bitmap != null) {
-                        // Widget Cache Busting Cleanup
-                        cacheDir.listFiles { _, name -> name.startsWith("widget_cover_") }?.forEach { it.delete() }
-                        
                         val fileName = "widget_cover_${System.currentTimeMillis()}.png"
                         val file = java.io.File(cacheDir, fileName)
                         java.io.FileOutputStream(file).use { out ->
-                            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 90, out)
                         }
+                        cacheDir.listFiles { _, name ->
+                            name.startsWith("widget_cover_") && name != fileName
+                        }?.forEach { it.delete() }
                         finalArtworkUri = android.net.Uri.fromFile(file).toString()
                     }
                 } catch (e: Exception) {
@@ -733,15 +736,28 @@ class MusicPlaybackService : MediaSessionService() {
     }
 
     private fun downloadBitmap(url: String): android.graphics.Bitmap? {
+        var connection: java.net.HttpURLConnection? = null
         return try {
-            val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-            connection.doInput = true
-            connection.connect()
-            val input = connection.inputStream
-            android.graphics.BitmapFactory.decodeStream(input)
+            connection = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                connectTimeout = 8000
+                readTimeout = 8000
+                doInput = true
+                connect()
+            }
+            val bytes = connection.inputStream.use { it.readBytes() }
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            var sampleSize = 1
+            while (bounds.outWidth / sampleSize > 512 || bounds.outHeight / sampleSize > 512) {
+                sampleSize *= 2
+            }
+            val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sampleSize }
+            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
         } catch (e: Exception) {
             e.printStackTrace()
             null
+        } finally {
+            try { connection?.disconnect() } catch (_: Exception) {}
         }
     }
 
@@ -760,6 +776,7 @@ class MusicPlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         if (instance == this) instance = null
+        serviceScope.cancel()
         wakeLock?.let {
             if (it.isHeld) {
                 it.release()

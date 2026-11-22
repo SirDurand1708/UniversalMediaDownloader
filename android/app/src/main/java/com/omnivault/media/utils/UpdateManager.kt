@@ -32,8 +32,8 @@ data class UpdateInfo(
 
 object UpdateManager {
     private const val TAG = "UpdateManager"
-    const val CURRENT_VERSION_NAME = "2.5.46"
-    const val CURRENT_VERSION_CODE = 296
+    const val CURRENT_VERSION_NAME = "2.5.47"
+    const val CURRENT_VERSION_CODE = 297
     private const val UPDATE_URL = "https://raw.githubusercontent.com/SirDurand1708/UniversalMediaDownloader/main/version.json"
 
     private val client = OkHttpClient.Builder()
@@ -202,6 +202,33 @@ object UpdateManager {
      */
     fun installApk(context: Context, apkFile: File) {
         try {
+            if (!apkFile.exists() || apkFile.length() == 0L) {
+                Log.e(TAG, "APK descargado inválido o vacío")
+                return
+            }
+            val pkgInfo = context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
+            if (pkgInfo != null && pkgInfo.packageName != context.packageName) {
+                Log.e(TAG, "El APK descargado no coincide con el packageName esperado: ${pkgInfo.packageName}")
+                return
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
+                !context.packageManager.canRequestPackageInstalls()
+            ) {
+                android.widget.Toast.makeText(
+                    context,
+                    "Activa 'Instalar aplicaciones desconocidas' para OmniVault y vuelve a intentar",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+                val permIntent = Intent(
+                    android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:${context.packageName}")
+                ).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(permIntent)
+                return
+            }
+
             val contentUri: Uri = FileProvider.getUriForFile(
                 context,
                 "${context.packageName}.fileprovider",

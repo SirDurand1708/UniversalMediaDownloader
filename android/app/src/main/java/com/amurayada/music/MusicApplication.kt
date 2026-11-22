@@ -42,7 +42,11 @@ class MusicApplication : Application(), ImageLoaderFactory {
         android.util.Log.d("MusicApplication", "Clearing image cache...")
         val loader = coil.Coil.imageLoader(this)
         loader.memoryCache?.clear()
-        loader.diskCache?.clear()
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                loader.diskCache?.clear()
+            } catch (_: Exception) {}
+        }
         android.util.Log.d("MusicApplication", "Image cache cleared!")
     }
     

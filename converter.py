@@ -60,7 +60,7 @@ def get_media_info(file_path: str) -> Dict[str, Any]:
             return info
         try:
             flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0) if sys.platform == "win32" else 0
-            p = subprocess.run([ffmpeg, "-i", file_path], capture_output=True, text=True, errors="replace", creationflags=flags)
+            p = subprocess.run([ffmpeg, "-i", file_path], capture_output=True, text=True, errors="replace", creationflags=flags, timeout=15)
             err = p.stderr
             dur_match = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.?\d*)", err)
             if dur_match:
@@ -231,7 +231,7 @@ class LocalConverter:
 
         proc = subprocess.Popen(
             cmd,
-            stdout=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             text=True,
             errors="replace",
@@ -249,6 +249,10 @@ class LocalConverter:
             while True:
                 if self.is_cancelled():
                     proc.terminate()
+                    try:
+                        proc.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
                     raise Exception("Conversión cancelada por el usuario.")
 
                 line = proc.stderr.readline()
@@ -280,6 +284,11 @@ class LocalConverter:
                     if progress_callback:
                         progress_callback(pct, speed_str, eta_str)
         finally:
+            try:
+                if proc.stderr:
+                    proc.stderr.close()
+            except Exception:
+                pass
             with self._lock:
                 self._proc = None
 
@@ -297,7 +306,7 @@ class LocalConverter:
                     status_callback("GPU no disponible para este códec. Reintentando con CPU (libx264)...")
                 cpu_args = ["-c:v", "libx264", "-preset", "fast", "-crf", "23", "-c:a", "aac", "-b:a", "192k"]
                 cmd_cpu = [ffmpeg, "-y", "-i", input_path] + cpu_args + [output_file]
-                res_cpu = subprocess.run(cmd_cpu, capture_output=True, text=True, errors="replace", creationflags=flags)
+                res_cpu = subprocess.run(cmd_cpu, capture_output=True, text=True, errors="replace", creationflags=flags, timeout=1800)
                 if res_cpu.returncode == 0 and os.path.isfile(output_file):
                     gpu = "CPU (Fallback de GPU)"
                 else:

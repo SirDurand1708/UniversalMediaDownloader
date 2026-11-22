@@ -32,22 +32,34 @@ class YouTubeAuthManager(context: Context) {
     }
     
     private val prefs: SharedPreferences by lazy {
-        try {
+        fun createEncrypted(): SharedPreferences {
             val masterKey = MasterKey.Builder(context)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                 .build()
-            
-            EncryptedSharedPreferences.create(
+            return EncryptedSharedPreferences.create(
                 context,
                 PREFS_NAME,
                 masterKey,
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
+        }
+        try {
+            createEncrypted()
         } catch (e: Exception) {
-            // Fallback to regular prefs if encryption fails
             e.printStackTrace()
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            // Si la MasterKey quedó corrupta (p. ej. tras restauración de backup), regeneramos sin caer a texto plano
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                    context.deleteSharedPreferences(PREFS_NAME)
+                }
+                createEncrypted()
+            } catch (e2: Exception) {
+                e2.printStackTrace()
+                context.getSharedPreferences("${PREFS_NAME}_fallback", Context.MODE_PRIVATE).also {
+                    it.edit().clear().apply()
+                }
+            }
         }
     }
     

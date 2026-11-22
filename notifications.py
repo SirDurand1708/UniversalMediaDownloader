@@ -5,12 +5,26 @@ Módulo de notificaciones nativas de Windows y avisos sonoros para OmniVault Des
 import sys
 import threading
 import subprocess
+from typing import Callable, Optional
+
+_notifications_enabled_provider: Optional[Callable[[], bool]] = None
+
+def set_notifications_enabled_provider(provider: Callable[[], bool]):
+    global _notifications_enabled_provider
+    _notifications_enabled_provider = provider
 
 def send_notification(title: str, message: str):
     """
     Emite una notificación nativa en Windows y un sonido sutil de finalización.
     Se ejecuta en un hilo secundario para no retrasar la interfaz principal.
     """
+    if _notifications_enabled_provider is not None:
+        try:
+            if not _notifications_enabled_provider():
+                return
+        except Exception:
+            pass
+
     def _worker():
         # 1. Sonido sutil nativo del sistema
         if sys.platform == "win32":
@@ -23,9 +37,9 @@ def send_notification(title: str, message: str):
         # 2. Notificación Toast nativa en Windows 10/11
         if sys.platform == "win32":
             try:
-                # Saneamiento de comillas
-                safe_title = title.replace('"', '`"').replace("'", "''")
-                safe_msg = message.replace('"', '`"').replace("'", "''")
+                # En cadenas PowerShell entre comillas simples ('...') solo se duplican las comillas simples
+                safe_title = title.replace("'", "''")
+                safe_msg = message.replace("'", "''")
 
                 ps_script = f"""
                 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null

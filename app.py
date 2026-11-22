@@ -122,6 +122,11 @@ class OmniVaultApp(ctk.CTk):
 
         # Configuración persistente y tema de color de acento
         self.config = ConfigManager()
+        try:
+            from notifications import set_notifications_enabled_provider
+            set_notifications_enabled_provider(lambda: bool(self.config.get("notifications_enabled", True)))
+        except Exception:
+            pass
         self.theme_accent = themes.get_theme(self.config.get("accent_theme", "violet"))
 
         # Servicios y Motores
@@ -1619,7 +1624,15 @@ class OmniVaultApp(ctk.CTk):
             text_color=theme.TEXT_PRIMARY
         )
         self.library_search_entry.pack(side="left", fill="x", expand=True, padx=8, pady=4)
-        self.library_search_entry.bind("<KeyRelease>", lambda e: self._refresh_library_list())
+        self._lib_search_after_id = None
+        def _on_lib_key(_e):
+            if self._lib_search_after_id is not None:
+                try:
+                    self.after_cancel(self._lib_search_after_id)
+                except Exception:
+                    pass
+            self._lib_search_after_id = self.after(220, self._refresh_library_list)
+        self.library_search_entry.bind("<KeyRelease>", _on_lib_key)
 
         self.library_filter_var = ctk.StringVar(value="Todos")
         ctk.CTkSegmentedButton(
@@ -2021,6 +2034,7 @@ class OmniVaultApp(ctk.CTk):
         self.conv_status_lbl.configure(text="Iniciando FFmpeg...", text_color=theme.ACCENT_CYAN)
 
         total = len(files)
+        norm_audio = bool(self.conv_norm_var.get())
 
         def run():
             last_res = None
@@ -2046,7 +2060,7 @@ class OmniVaultApp(ctk.CTk):
                         output_dir=out_dir,
                         progress_callback=prog,
                         status_callback=stat,
-                        normalize_audio=self.conv_norm_var.get()
+                        normalize_audio=norm_audio
                     )
                     success_count += 1
                 except Exception as e:
@@ -3218,17 +3232,41 @@ class OmniVaultApp(ctk.CTk):
                 raise ValueError("El archivo JSON no contiene un objeto de respaldo válido.")
             expected_types = {
                 "config.json": dict,
-                "library.json": (list, dict),
-                "subscriptions.json": (list, dict),
+                "library.json": list,
+                "subscriptions.json": list,
+            }
+            locks = {
+                "config.json": getattr(self.config, "_lock", None),
+                "library.json": getattr(self.history, "_lock", None),
+                "subscriptions.json": getattr(self.subscriptions_manager, "_lock", None),
             }
             data_dir = get_data_dir()
             os.makedirs(data_dir, exist_ok=True)
             restored = 0
             for name, allowed_type in expected_types.items():
                 if name in bundle and isinstance(bundle[name], allowed_type):
-                    with open(os.path.join(data_dir, name), "w", encoding="utf-8") as out:
-                        json.dump(bundle[name], out, indent=2, ensure_ascii=False)
+                    dest_path = os.path.join(data_dir, name)
+                    tmp_path = f"{dest_path}.tmp"
+                    lock = locks.get(name)
+                    if lock is not None:
+                        with lock:
+                            with open(tmp_path, "w", encoding="utf-8") as out:
+                                json.dump(bundle[name], out, indent=2, ensure_ascii=False)
+                            os.replace(tmp_path, dest_path)
+                    else:
+                        with open(tmp_path, "w", encoding="utf-8") as out:
+                            json.dump(bundle[name], out, indent=2, ensure_ascii=False)
+                        os.replace(tmp_path, dest_path)
                     restored += 1
+
+            if restored > 0:
+                self.config.settings = self.config._load()
+                with self.history._lock:
+                    self.history.items = self.history._load()
+                with self.subscriptions_manager._lock:
+                    self.subscriptions_manager.subscriptions = self.subscriptions_manager._load()
+                self._refresh_library_list()
+                self._refresh_subscriptions_list()
             if restored == 0:
                 messagebox.showwarning("Sin datos válidos", "El respaldo no contiene secciones válidas para restaurar.")
             else:
@@ -3720,17 +3758,24 @@ class OmniVaultApp(ctk.CTk):
             progress_lbl.pack(pady=(0, 6))
 
             def _progress(pct, downloaded, total):
-                self.after(0, lambda: progress_bar.set(pct / 100.0))
                 mb_down = downloaded // (1024 * 1024)
                 mb_tot = total // (1024 * 1024) if total > 0 else 0
-                self.after(0, lambda: progress_lbl.configure(text=f"Descargando: {pct}% ({mb_down} MB / {mb_tot} MB)"))
+                def _ui():
+                    if dialog.winfo_exists():
+                        progress_bar.set(pct / 100.0)
+                        progress_lbl.configure(text=f"Descargando: {pct}% ({mb_down} MB / {mb_tot} MB)")
+                self.after(0, _ui)
 
             def _finish(dest):
-                self.after(0, lambda: progress_lbl.configure(text="¡Descarga completada! Iniciando actualización..."))
+                def _ui():
+                    if dialog.winfo_exists():
+                        progress_lbl.configure(text="¡Descarga completada! Iniciando actualización...")
+                self.after(0, _ui)
 
             def _error(err):
                 def _show_err():
-                    btn_up.configure(state="normal", text="Reintentar")
+                    if dialog.winfo_exists():
+                        btn_up.configure(state="normal", text="Reintentar")
                     resp = messagebox.askyesno(
                         "Error de actualización",
                         f"No se pudo descargar automáticamente el archivo:\n{err}\n\n"
@@ -3748,7 +3793,7 @@ class OmniVaultApp(ctk.CTk):
                 finished_callback=_finish,
                 error_callback=_error,
                 remote_version=remote_version,
-                on_install_started=lambda: self.after(0, self.destroy)
+                on_install_started=lambda: self.after(0, lambda: self._on_close(force=True))
             )
 
         btn_up = ctk.CTkButton(

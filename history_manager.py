@@ -71,10 +71,21 @@ class HistoryManager:
             except OSError:
                 file_size = 0
 
+        raw_path = str(file_path or "")
+        try:
+            from config_manager import get_app_dir, is_portable_mode
+            if raw_path and is_portable_mode():
+                app_dir = os.path.normcase(os.path.abspath(get_app_dir()))
+                abs_p = os.path.normcase(os.path.abspath(raw_path))
+                if abs_p.startswith(app_dir + os.sep):
+                    raw_path = os.path.relpath(raw_path, get_app_dir())
+        except Exception:
+            pass
+
         entry = {
             "id": datetime.now().strftime("%Y%m%d%H%M%S%f"),
             "title": str(title or "Sin título"),
-            "file_path": str(file_path or ""),
+            "file_path": raw_path,
             "format_label": str(format_label or ""),
             "media_type": str(media_type or "audio"),
             "url": str(url or ""),
@@ -90,12 +101,24 @@ class HistoryManager:
 
     def get_all(self) -> List[Dict[str, Any]]:
         """Devuelve todos los elementos, verificando si el archivo aún existe en disco."""
+        try:
+            from config_manager import get_app_dir, is_portable_mode
+            portable = is_portable_mode()
+            app_dir = get_app_dir() if portable else ""
+        except Exception:
+            portable = False
+            app_dir = ""
+
         with self._lock:
             valid_items = []
             for item in self.items:
-                path = item.get("file_path", "")
-                item["exists_on_disk"] = bool(path and os.path.exists(path))
-                valid_items.append(dict(item))
+                copy_item = dict(item)
+                path = copy_item.get("file_path", "")
+                if path and portable and not os.path.isabs(path):
+                    path = os.path.normpath(os.path.join(app_dir, path))
+                    copy_item["file_path"] = path
+                copy_item["exists_on_disk"] = bool(path and os.path.exists(path))
+                valid_items.append(copy_item)
             return valid_items
 
     def delete_item(self, item_id: str, delete_file: bool = False):

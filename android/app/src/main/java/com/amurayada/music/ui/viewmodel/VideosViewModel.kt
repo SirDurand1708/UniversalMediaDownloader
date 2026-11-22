@@ -226,8 +226,12 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
         } catch (_: Exception) {}
     }
 
+    private var loadVideosJob: Job? = null
+    private val playlistLock = Any()
+
     fun loadVideos() {
-        viewModelScope.launch {
+        loadVideosJob?.cancel()
+        loadVideosJob = viewModelScope.launch {
             _isLoading.value = true
             try {
                 val app = getApplication<Application>()
@@ -582,23 +586,40 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun persistVideoPlaylists(list: List<VideoPlaylist>) {
         viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val arr = JSONArray()
-                list.forEach { pl ->
-                    val obj = JSONObject().apply {
-                        put("id", pl.id)
-                        put("name", pl.name)
-                        put("createdAt", pl.createdAt)
-                        put("videoIds", JSONArray(pl.videoIds))
+            synchronized(playlistLock) {
+                try {
+                    val arr = JSONArray()
+                    list.forEach { pl ->
+                        val obj = JSONObject().apply {
+                            put("id", pl.id)
+                            put("name", pl.name)
+                            put("createdAt", pl.createdAt)
+                            put("videoIds", JSONArray(pl.videoIds))
+                        }
+                        arr.put(obj)
                     }
-                    arr.put(obj)
+                    val serialized = arr.toString()
+                    val dest = playlistsFile()
+                    val tmp = File(dest.parentFile, "video_playlists.json.tmp")
+                    tmp.writeText(serialized)
+                    if (!tmp.renameTo(dest)) {
+                        dest.writeText(serialized)
+                        tmp.delete()
+                    }
+                    PlaylistBackupManager.saveBackup(getApplication(), "video_playlists.json", serialized)
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
-                val serialized = arr.toString()
-                playlistsFile().writeText(serialized)
-                PlaylistBackupManager.saveBackup(getApplication(), "video_playlists.json", serialized)
-            } catch (e: Exception) {
-                e.printStackTrace()
             }
+        }
+    }
+
+    private inline fun mutateVideoPlaylists(transform: (List<VideoPlaylist>) -> List<VideoPlaylist>): List<VideoPlaylist> {
+        return synchronized(playlistLock) {
+            val updated = transform(_videoPlaylists.value)
+            _videoPlaylists.value = updated
+            persistVideoPlaylists(updated)
+            updated
         }
     }
 
@@ -610,50 +631,36 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
             name = clean,
             videoIds = initialVideoIds.distinct()
         )
-        val updated = listOf(created) + _videoPlaylists.value
-        _videoPlaylists.value = updated
-        persistVideoPlaylists(updated)
+        mutateVideoPlaylists { listOf(created) + it }
         return created
     }
 
     fun renameVideoPlaylist(playlistId: String, newName: String) {
         val clean = newName.trim()
         if (clean.isEmpty()) return
-        val updated = _videoPlaylists.value.map {
-            if (it.id == playlistId) it.copy(name = clean) else it
+        mutateVideoPlaylists { list ->
+            list.map { if (it.id == playlistId) it.copy(name = clean) else it }
         }
-        _videoPlaylists.value = updated
-        persistVideoPlaylists(updated)
     }
 
     fun deleteVideoPlaylist(playlistId: String) {
-        val updated = _videoPlaylists.value.filterNot { it.id == playlistId }
-        _videoPlaylists.value = updated
-        persistVideoPlaylists(updated)
+        mutateVideoPlaylists { list -> list.filterNot { it.id == playlistId } }
     }
 
     fun addVideosToPlaylist(playlistId: String, videoIds: List<String>) {
         if (videoIds.isEmpty()) return
-        val updated = _videoPlaylists.value.map { pl ->
-            if (pl.id == playlistId) {
-                pl.copy(videoIds = (pl.videoIds + videoIds).distinct())
-            } else {
-                pl
+        mutateVideoPlaylists { list ->
+            list.map { pl ->
+                if (pl.id == playlistId) pl.copy(videoIds = (pl.videoIds + videoIds).distinct()) else pl
             }
         }
-        _videoPlaylists.value = updated
-        persistVideoPlaylists(updated)
     }
 
     fun removeVideoFromPlaylist(playlistId: String, videoId: String) {
-        val updated = _videoPlaylists.value.map { pl ->
-            if (pl.id == playlistId) {
-                pl.copy(videoIds = pl.videoIds.filterNot { it == videoId })
-            } else {
-                pl
+        mutateVideoPlaylists { list ->
+            list.map { pl ->
+                if (pl.id == playlistId) pl.copy(videoIds = pl.videoIds.filterNot { it == videoId }) else pl
             }
         }
-        _videoPlaylists.value = updated
-        persistVideoPlaylists(updated)
     }
 }

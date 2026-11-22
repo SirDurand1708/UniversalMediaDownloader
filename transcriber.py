@@ -95,7 +95,7 @@ class MediaTranscriber:
                 "-ar", "16000",
                 temp_wav
             ]
-            res = subprocess.run(cmd, capture_output=True, creationflags=flags)
+            res = subprocess.run(cmd, capture_output=True, creationflags=flags, timeout=120)
             if res.returncode != 0 or not os.path.isfile(temp_wav):
                 raise RuntimeError("No se pudo extraer el audio del archivo para transcribirlo.")
 
@@ -137,7 +137,7 @@ class MediaTranscriber:
                     "-c", "copy",
                     chunk_file
                 ]
-                subprocess.run(cmd_cut, capture_output=True, creationflags=flags)
+                subprocess.run(cmd_cut, capture_output=True, creationflags=flags, timeout=60)
 
                 text = ""
                 if os.path.isfile(chunk_file) and os.path.getsize(chunk_file) > 1024:

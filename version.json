@@ -1,19 +1,19 @@
 {
-  "version": "2.5.46",
-  "version_code": 296,
+  "version": "2.5.47",
+  "version_code": 297,
   "release_date": "2026-11-21",
-  "title": "OmniVault v2.5.46 — Windows PC & Android",
-  "changelog": "✨ Android Canciones: Restaura el diseño clásico original (Aura Player / Lark) corrigiendo PullToRefresh en estado vacío, limpieza automática de selección múltiple ante cambios en tiempo real y decodificación ligera de carátulas (size 144px) para scroll fluido",
+  "title": "OmniVault v2.5.47 — Windows PC & Android",
+  "changelog": "🛡️ Corrección masiva de estabilidad, seguridad y concurrencia (P0/P1/P2) en Windows y Android: elimina deadlock en AudioPlayer, valida URLs HTTPS oficiales en Updater, corrige crashes en BootReceiver/Widget/Room, protege credenciales y sincroniza playlists/MediaStore con Mutex y escritura atómica",
   "android": {
-    "version": "2.5.46",
-    "version_code": 296,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.46/OmniVault-v2.5.46-Android.apk",
+    "version": "2.5.47",
+    "version_code": 297,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.47/OmniVault-v2.5.47-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.46",
-    "version_code": 296,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.46/OmniVault-v2.5.46-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.46/OmniVault-v2.5.46-Windows-x64-Portable.zip"
+    "version": "2.5.47",
+    "version_code": 297,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.47/OmniVault-v2.5.47-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.47/OmniVault-v2.5.47-Windows-x64-Portable.zip"
   }
 }

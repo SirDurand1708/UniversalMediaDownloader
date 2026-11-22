@@ -38,7 +38,7 @@ class DownloadManager private constructor(private val context: Context) {
 
     private val activeTasks = ConcurrentHashMap<String, DownloadItem>()
     private val activeJobs = ConcurrentHashMap<String, Job>()
-    private val historyList = mutableListOf<DownloadItem>()
+    private val historyList = java.util.concurrent.CopyOnWriteArrayList<DownloadItem>()
 
     private val downloadListeners = java.util.concurrent.CopyOnWriteArraySet<(DownloadItem) -> Unit>()
     var onDownloadUpdatedListener: ((DownloadItem) -> Unit)? = null

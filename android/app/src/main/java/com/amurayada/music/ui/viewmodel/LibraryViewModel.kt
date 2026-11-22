@@ -14,6 +14,7 @@ import com.amurayada.music.data.model.SongSort
 import com.amurayada.music.data.repository.MediaRepository
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.withContext
 
 class LibraryViewModel(application: Application) : AndroidViewModel(application) {
@@ -63,12 +64,12 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     init {
         // Observe downloads database changes to auto-refresh library
         viewModelScope.launch {
-            downloadRepository.observeDownloadedSongs().collect { songs ->
-                android.util.Log.d("LibraryViewModel", "Downloads changed (size: ${songs.size}), refreshing library...")
-                // We use loadLibrary directly here as the DB change is already "debounced" by flow emission usually
-                // and we want immediate feedback when download finishes
-                loadLibrary()
-            }
+            downloadRepository.observeDownloadedSongs()
+                .drop(1)
+                .collect { songs ->
+                    android.util.Log.d("LibraryViewModel", "Downloads changed (size: ${songs.size}), refreshing library...")
+                    loadLibrary()
+                }
         }
     }
 

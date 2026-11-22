@@ -183,9 +183,10 @@ class QueueManager:
     def cancel_download(self, task_id: str):
         with self._lock:
             task = self.tasks.get(task_id)
+            if task:
+                task.status = "cancelled"
+                task.status_text = "Descarga cancelada"
         if task:
-            task.status = "cancelled"
-            task.status_text = "Descarga cancelada"
             self.downloader.cancel_task(task_id)
             self._notify_update(task)
 
@@ -347,6 +348,15 @@ class QueueManager:
 
             finally:
                 self.task_queue.task_done()
-                # Si ya no quedan tareas pendientes ni activas, notificar finalización de cola
-                if self.task_queue.empty() and not self.get_active_tasks():
+                # Si ya no quedan tareas pendientes ni activas, notificar finalización de cola una sola vez de forma atómica
+                should_notify_done = False
+                with self._lock:
+                    has_active = any(t.status in ("queued", "downloading", "converting") for t in self.tasks.values())
+                    if self.task_queue.empty() and not has_active:
+                        if not getattr(self, "_queue_completion_notified", False):
+                            self._queue_completion_notified = True
+                            should_notify_done = True
+                    else:
+                        self._queue_completion_notified = False
+                if should_notify_done:
                     self._notify_queue_completed()
