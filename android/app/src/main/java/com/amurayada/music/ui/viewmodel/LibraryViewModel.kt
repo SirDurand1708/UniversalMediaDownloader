@@ -1,6 +1,9 @@
 package com.amurayada.music.ui.viewmodel
 
 import android.app.Application
+import android.content.ContentUris
+import android.net.Uri
+import android.provider.MediaStore
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -71,6 +74,99 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                     loadLibrary()
                 }
         }
+    }
+
+    private fun mergeSongsDeduplicated(
+        localSongs: List<Song>,
+        downloadedSongs: List<Song>
+    ): List<Song> {
+        val result = ArrayList<Song>(localSongs.size + downloadedSongs.size)
+        val seenPaths = HashSet<String>(localSongs.size * 2)
+        val seenMediaStoreUris = HashSet<String>(localSongs.size * 2)
+        val seenNameAndSize = HashSet<Pair<String, Long>>(localSongs.size * 2)
+
+        for (song in localSongs) {
+            val normPath = song.path.trim().lowercase()
+            if (normPath.isNotEmpty() && !seenPaths.add(normPath)) continue
+
+            if (song.id > 0L) {
+                val msUri = ContentUris.withAppendedId(
+                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                    song.id
+                ).toString()
+                seenMediaStoreUris.add(msUri)
+            }
+            if (song.fileSize > 0L && song.path.startsWith("/")) {
+                val fileName = java.io.File(song.path).name.lowercase()
+                if (fileName.isNotEmpty()) {
+                    seenNameAndSize.add(fileName to song.fileSize)
+                }
+            }
+            result.add(song)
+        }
+
+        val resolver = getApplication<Application>().contentResolver
+        for (song in downloadedSongs) {
+            val rawPath = song.path.trim()
+            val normPath = rawPath.lowercase()
+            if (normPath.isNotEmpty() && seenPaths.contains(normPath)) continue
+            if (rawPath.isNotEmpty() && seenMediaStoreUris.contains(rawPath)) continue
+
+            var isDuplicate = false
+            var resolvedDataPath: String? = null
+            var resolvedDisplayName: String? = null
+
+            if (rawPath.startsWith("content://")) {
+                try {
+                    resolver.query(
+                        Uri.parse(rawPath),
+                        arrayOf(MediaStore.Audio.Media.DATA, MediaStore.MediaColumns.DISPLAY_NAME),
+                        null,
+                        null,
+                        null
+                    )?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val dataIdx = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
+                            if (dataIdx != -1) {
+                                resolvedDataPath = cursor.getString(dataIdx)?.trim()
+                            }
+                            val nameIdx = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
+                            if (nameIdx != -1) {
+                                resolvedDisplayName = cursor.getString(nameIdx)?.trim()
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                val normResolved = resolvedDataPath?.lowercase()
+                if (!normResolved.isNullOrEmpty() && seenPaths.contains(normResolved)) {
+                    isDuplicate = true
+                }
+                if (!isDuplicate && song.fileSize > 0L && !resolvedDisplayName.isNullOrEmpty()) {
+                    if (seenNameAndSize.contains(resolvedDisplayName!!.lowercase() to song.fileSize)) {
+                        isDuplicate = true
+                    }
+                }
+            } else if (song.fileSize > 0L && rawPath.startsWith("/")) {
+                val fileName = java.io.File(rawPath).name.lowercase()
+                if (fileName.isNotEmpty() && seenNameAndSize.contains(fileName to song.fileSize)) {
+                    isDuplicate = true
+                }
+            }
+
+            if (isDuplicate) continue
+
+            if (normPath.isNotEmpty()) seenPaths.add(normPath)
+            if (rawPath.startsWith("content://")) seenMediaStoreUris.add(rawPath)
+            resolvedDataPath?.lowercase()?.takeIf { it.isNotEmpty() }?.let { seenPaths.add(it) }
+            val nameForKey = resolvedDisplayName ?: if (rawPath.startsWith("/")) java.io.File(rawPath).name else null
+            if (song.fileSize > 0L && !nameForKey.isNullOrBlank()) {
+                seenNameAndSize.add(nameForKey.lowercase() to song.fileSize)
+            }
+            result.add(song)
+        }
+
+        return result
     }
 
     override fun onCleared() {
@@ -499,11 +595,10 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                     val downloadedSongs = downloadRepository.getDownloadedSongs()
                     android.util.Log.d("LibraryViewModel", "Found ${downloadedSongs.size} downloaded songs")
                     
-                    // Combine and deduplicate by title and artist (case-insensitive)
-                    // Combine and deduplicate by path (to avoid duplicates if MediaStore indexed the downloaded file)
+                    // Combine and deduplicate by physical file / MediaStore URI (avoids content:// vs /storage/... duplicates)
                     val excludedIds = hiddenSongIds
                     val excludedPaths = deletedSongPaths
-                    val mergedAll = (localSongs + downloadedSongs).distinctBy { it.path }
+                    val mergedAll = mergeSongsDeduplicated(localSongs, downloadedSongs)
                     val hiddenFound = mergedAll.filter {
                         excludedIds.contains(it.id) && (it.path.isBlank() || !excludedPaths.contains(it.path))
                     }
