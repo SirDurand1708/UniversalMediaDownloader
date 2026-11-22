@@ -16,6 +16,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -132,9 +133,10 @@ fun OmniVaultDownloaderScreen(
         }
     }
 
-    val accentColor = Color(0xFF00E5FF)
-    val cardBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-    val borderCol = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+    val accentColor = Color(0xFFB8D4E3)
+    val darkOnAccent = Color(0xFF0F1419)
+    val cardBg = Color(0xFF181E25)
+    val borderCol = Color(0xFF2D3540)
     var selectedDownloadTab by remember { mutableIntStateOf(0) } // 0 = Nuevo, 1 = Completadas
 
     var detectedClipboardUrl by remember { mutableStateOf<String?>(null) }
@@ -197,7 +199,7 @@ fun OmniVaultDownloaderScreen(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Header limpio estilo Material 3 (sin subtítulo cortado ni neón verde)
+        // 1. Header estilo Seal / Material You + 2 Sub-pestañas pill
         item {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(
@@ -209,8 +211,8 @@ fun OmniVaultDownloaderScreen(
                 ) {
                     Text(
                         text = "Descargas",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.ExtraBold,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Normal,
                         color = Color.White,
                         maxLines = 1,
                         softWrap = false
@@ -219,44 +221,22 @@ fun OmniVaultDownloaderScreen(
                     val isYtLoggedIn = remember {
                         try { com.amurayada.music.data.auth.YouTubeAuthManager.getInstance(context).isLoggedIn() } catch (_: Exception) { false }
                     }
-                    Surface(
-                        onClick = onOpenYouTubeLogin,
-                        color = if (isYtLoggedIn) accentColor.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                        shape = RoundedCornerShape(20.dp),
-                        border = BorderStroke(
-                            1.dp,
-                            if (isYtLoggedIn) accentColor.copy(alpha = 0.45f) else borderCol
+                    IconButton(onClick = onOpenYouTubeLogin) {
+                        Icon(
+                            imageVector = Icons.Rounded.AccountCircle,
+                            contentDescription = if (isYtLoggedIn) "YT conectado" else "Sesión YT",
+                            tint = if (isYtLoggedIn) accentColor else Color(0xFF9AA4AF),
+                            modifier = Modifier.size(28.dp)
                         )
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.AccountCircle,
-                                contentDescription = null,
-                                tint = if (isYtLoggedIn) accentColor else Color.White.copy(alpha = 0.75f),
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Text(
-                                text = if (isYtLoggedIn) "YT conectado" else "Sesión YT",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isYtLoggedIn) accentColor else Color.White.copy(alpha = 0.85f),
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
                     }
                 }
 
-                // Selector de 2 sub-pestañas estilo Seal: Nuevo | Completadas
+                // Selector pill de 2 sub-pestañas: Nuevo | Completadas
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f))
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Color(0xFF1B2128))
                         .padding(4.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
@@ -264,38 +244,38 @@ fun OmniVaultDownloaderScreen(
                     val newLabel = if (activeDownloadList.isNotEmpty()) "Nuevo (${activeDownloadList.size})" else "Nuevo"
                     Surface(
                         onClick = { selectedDownloadTab = 0 },
-                        shape = RoundedCornerShape(9.dp),
-                        color = if (isNewTab) MaterialTheme.colorScheme.primary else Color.Transparent,
+                        shape = RoundedCornerShape(20.dp),
+                        color = if (isNewTab) Color(0xFFDCE4EC) else Color.Transparent,
                         modifier = Modifier.weight(1f)
                     ) {
                         Text(
                             text = newLabel,
-                            fontSize = 13.sp,
-                            fontWeight = if (isNewTab) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isNewTab) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 14.sp,
+                            fontWeight = if (isNewTab) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (isNewTab) darkOnAccent else Color(0xFF9AA4AF),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp)
+                            modifier = Modifier.padding(vertical = 9.dp, horizontal = 10.dp)
                         )
                     }
 
                     val isCompletedTab = selectedDownloadTab == 1
                     Surface(
                         onClick = { selectedDownloadTab = 1 },
-                        shape = RoundedCornerShape(9.dp),
-                        color = if (isCompletedTab) MaterialTheme.colorScheme.primary else Color.Transparent,
+                        shape = RoundedCornerShape(20.dp),
+                        color = if (isCompletedTab) Color(0xFFDCE4EC) else Color.Transparent,
                         modifier = Modifier.weight(1f)
                     ) {
                         Text(
                             text = "Completadas (${downloadedSongs.size})",
-                            fontSize = 13.sp,
-                            fontWeight = if (isCompletedTab) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isCompletedTab) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 14.sp,
+                            fontWeight = if (isCompletedTab) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (isCompletedTab) darkOnAccent else Color(0xFF9AA4AF),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp)
+                            modifier = Modifier.padding(vertical = 9.dp, horizontal = 10.dp)
                         )
                     }
                 }
@@ -374,55 +354,14 @@ fun OmniVaultDownloaderScreen(
             }
         }
 
-        // 2. Tarjeta de Entrada de Enlace (URL + Pegar + Analizar)
+        // 2. Barra compacta de enlace + botón Analizar en la misma fila
         item {
-            Surface(
-                color = cardBg,
-                shape = RoundedCornerShape(18.dp),
-                border = BorderStroke(1.dp, borderCol)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Enlace multimedia",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White
-                        )
-
-                        TextButton(
-                            onClick = {
-                                val clipText = readClipboardUrl()
-                                if (clipText.isNotBlank()) {
-                                    if (downloadViewModel.urlInput.value != clipText) {
-                                        downloadViewModel.mediaPreview.value = null
-                                    }
-                                    downloadViewModel.urlInput.value = clipText
-                                    downloadViewModel.analyzeUrl(clipText)
-                                    detectedClipboardUrl = null
-                                } else {
-                                    Toast.makeText(context, "El portapapeles está vacío", Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Icon(
-                                Icons.Rounded.ContentPaste,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = accentColor
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text("Pegar", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        }
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     OutlinedTextField(
                         value = urlInput,
                         onValueChange = {
@@ -434,84 +373,60 @@ fun OmniVaultDownloaderScreen(
                                 downloadViewModel.batchUrls.value = emptyList()
                             }
                         },
-                        placeholder = { Text("Pega uno o varios enlaces (YouTube, TikTok, IG, Playlist)...", fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        leadingIcon = { Icon(Icons.Rounded.Link, contentDescription = null, tint = Color.Gray) },
+                        placeholder = {
+                            Text(
+                                "Pega un enlace...",
+                                fontSize = 13.5.sp,
+                                color = Color(0xFF9AA4AF),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
                         trailingIcon = {
-                            if (urlInput.isNotEmpty()) {
-                                IconButton(onClick = {
-                                    downloadViewModel.abortAnalysis()
-                                    downloadViewModel.urlInput.value = ""
-                                    downloadViewModel.mediaPreview.value = null
-                                    downloadViewModel.batchUrls.value = emptyList()
-                                }) {
-                                    Icon(Icons.Rounded.Clear, contentDescription = "Limpiar", tint = Color.Gray)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (urlInput.isNotEmpty()) {
+                                    IconButton(
+                                        onClick = {
+                                            downloadViewModel.abortAnalysis()
+                                            downloadViewModel.urlInput.value = ""
+                                            downloadViewModel.mediaPreview.value = null
+                                            downloadViewModel.batchUrls.value = emptyList()
+                                        },
+                                        modifier = Modifier.size(34.dp)
+                                    ) {
+                                        Icon(Icons.Rounded.Clear, contentDescription = "Limpiar", tint = Color(0xFF9AA4AF), modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                                IconButton(
+                                    onClick = {
+                                        val clipText = readClipboardUrl()
+                                        if (clipText.isNotBlank()) {
+                                            if (downloadViewModel.urlInput.value != clipText) {
+                                                downloadViewModel.mediaPreview.value = null
+                                            }
+                                            downloadViewModel.urlInput.value = clipText
+                                            downloadViewModel.analyzeUrl(clipText)
+                                            detectedClipboardUrl = null
+                                        } else {
+                                            Toast.makeText(context, "El portapapeles está vacío", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(Icons.Rounded.ContentPaste, contentDescription = "Pegar", tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(19.dp))
                                 }
                             }
                         },
-                        singleLine = false,
-                        maxLines = 4,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(26.dp),
+                        modifier = Modifier.weight(1f),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = accentColor,
-                            unfocusedBorderColor = borderCol
+                            unfocusedBorderColor = borderCol,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
                         )
                     )
-
-                    detectedClipboardUrl?.let { clipUrl ->
-                        Spacer(Modifier.height(8.dp))
-                        Surface(
-                            onClick = {
-                                val freshClip = readClipboardUrl().ifBlank { clipUrl }
-                                if (downloadViewModel.urlInput.value != freshClip) {
-                                    downloadViewModel.mediaPreview.value = null
-                                }
-                                downloadViewModel.urlInput.value = freshClip
-                                downloadViewModel.analyzeUrl(freshClip)
-                                detectedClipboardUrl = null
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            color = accentColor.copy(alpha = 0.12f),
-                            border = BorderStroke(1.dp, accentColor.copy(alpha = 0.45f))
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Rounded.ContentPaste,
-                                    contentDescription = null,
-                                    tint = accentColor,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    text = "Enlace en portapapeles • Analizar",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = accentColor,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                IconButton(
-                                    onClick = { detectedClipboardUrl = null },
-                                    modifier = Modifier.size(22.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Rounded.Clear,
-                                        contentDescription = "Descartar",
-                                        tint = Color.Gray,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(10.dp))
 
                     Button(
                         onClick = {
@@ -522,69 +437,114 @@ fun OmniVaultDownloaderScreen(
                             }
                         },
                         enabled = urlInput.isNotBlank() || isAnalyzing,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(26.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                        modifier = Modifier.height(52.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF1E2838),
-                            contentColor = Color.White
+                            containerColor = accentColor,
+                            contentColor = darkOnAccent,
+                            disabledContainerColor = accentColor.copy(alpha = 0.35f),
+                            disabledContentColor = darkOnAccent.copy(alpha = 0.6f)
                         )
                     ) {
                         if (isAnalyzing) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                color = accentColor,
+                                modifier = Modifier.size(16.dp),
+                                color = darkOnAccent,
                                 strokeWidth = 2.dp
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text("Parar", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        } else {
+                            Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Analizar", fontWeight = FontWeight.SemiBold, fontSize = 13.5.sp)
+                        }
+                    }
+                }
+
+                detectedClipboardUrl?.let { clipUrl ->
+                    Surface(
+                        onClick = {
+                            val freshClip = readClipboardUrl().ifBlank { clipUrl }
+                            if (downloadViewModel.urlInput.value != freshClip) {
+                                downloadViewModel.mediaPreview.value = null
+                            }
+                            downloadViewModel.urlInput.value = freshClip
+                            downloadViewModel.analyzeUrl(freshClip)
+                            detectedClipboardUrl = null
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        color = accentColor.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Rounded.ContentPaste,
+                                contentDescription = null,
+                                tint = accentColor,
+                                modifier = Modifier.size(16.dp)
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                text = if (isExtractingPlaylist) "Extrayendo playlist… (Toca para abortar)" else "Analizando… (Toca para abortar)",
-                                fontSize = 13.sp
+                                text = "Enlace en portapapeles • Analizar",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = accentColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
                             )
-                        } else {
-                            Icon(
-                                Icons.Rounded.Search,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                                tint = accentColor
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("Analizar Enlace", fontWeight = FontWeight.SemiBold)
+                            IconButton(
+                                onClick = { detectedClipboardUrl = null },
+                                modifier = Modifier.size(22.dp)
+                            ) {
+                                Icon(
+                                    Icons.Rounded.Clear,
+                                    contentDescription = "Descartar",
+                                    tint = Color(0xFF9AA4AF),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
                         }
                     }
+                }
 
-                    AnimatedVisibility(visible = analyzeTimeoutMessage != null) {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF2B2214)),
-                            border = BorderStroke(1.dp, Color(0xFFFFB300).copy(alpha = 0.5f))
-                        ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
-                                Text(
-                                    text = analyzeTimeoutMessage ?: "",
-                                    fontSize = 12.sp,
-                                    color = Color(0xFFFFE082)
-                                )
-                                Spacer(Modifier.height(6.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.End
+                AnimatedVisibility(visible = analyzeTimeoutMessage != null) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF2B2214)),
+                        border = BorderStroke(1.dp, Color(0xFFFFB300).copy(alpha = 0.5f))
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                text = analyzeTimeoutMessage ?: "",
+                                fontSize = 12.sp,
+                                color = Color(0xFFFFE082)
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                TextButton(
+                                    onClick = { downloadViewModel.abortAnalysis() },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                                 ) {
-                                    TextButton(
-                                        onClick = { downloadViewModel.abortAnalysis() },
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                    ) {
-                                        Text("Abortar", fontSize = 12.sp, color = Color.LightGray)
-                                    }
-                                    Spacer(Modifier.width(6.dp))
-                                    TextButton(
-                                        onClick = { downloadViewModel.analyzeUrl(urlInput) },
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                    ) {
-                                        Text("Reintentar", fontSize = 12.sp, color = accentColor, fontWeight = FontWeight.Bold)
-                                    }
+                                    Text("Abortar", fontSize = 12.sp, color = Color.LightGray)
+                                }
+                                Spacer(Modifier.width(6.dp))
+                                TextButton(
+                                    onClick = { downloadViewModel.analyzeUrl(urlInput) },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text("Reintentar", fontSize = 12.sp, color = accentColor, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -593,179 +553,165 @@ fun OmniVaultDownloaderScreen(
             }
         }
 
-        // 3. Tarjeta de Previsualización, Selector de Formato y Botón Descargar Ahora
+        // 3. Tarjeta 16:9 de Previsualización + Chips de formato + Botón pill Iniciar descarga
         item {
-            Surface(
-                color = cardBg,
-                shape = RoundedCornerShape(18.dp),
-                border = BorderStroke(1.dp, borderCol)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    AnimatedVisibility(visible = mediaPreview != null) {
-                        mediaPreview?.let { preview ->
-                            Column {
-                                Row(
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                AnimatedVisibility(visible = mediaPreview != null) {
+                    mediaPreview?.let { preview ->
+                        Surface(
+                            color = cardBg,
+                            shape = RoundedCornerShape(18.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .aspectRatio(16f / 9f)
                                         .clip(RoundedCornerShape(12.dp))
-                                        .background(Color.Black.copy(alpha = 0.45f))
-                                        .padding(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .background(Color.Black)
                                 ) {
                                     AsyncImage(
                                         model = preview.thumbnailUrl,
                                         contentDescription = preview.title,
-                                        modifier = Modifier
-                                            .size(64.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(Color(0xFF1E2838)),
+                                        modifier = Modifier.fillMaxSize(),
                                         contentScale = ContentScale.Crop
                                     )
-                                    Spacer(Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = preview.title,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color.White,
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Spacer(Modifier.height(4.dp))
-                                        val durPart = if (preview.durationText.isNotBlank()) " • ${preview.durationText}" else ""
-                                        Text(
-                                            text = "${preview.platform.displayName} • ${preview.author}$durPart",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = accentColor,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
+                                    if (preview.durationText.isNotBlank()) {
+                                        Surface(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomEnd)
+                                                .padding(8.dp),
+                                            color = Color.Black.copy(alpha = 0.78f),
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Text(
+                                                text = preview.durationText,
+                                                color = Color.White,
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
                                     }
                                 }
-                                Spacer(Modifier.height(14.dp))
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    text = preview.title,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.White,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = preview.author,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF9AA4AF),
+                                    fontSize = 13.5.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                val durPart = if (preview.durationText.isNotBlank()) "${preview.durationText} • " else ""
+                                Text(
+                                    text = "${durPart}${preview.platform.displayName}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF9AA4AF),
+                                    fontSize = 13.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
                         }
                     }
+                }
 
-                    Text(
-                        text = "Formato de descarga",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White
-                    )
-                    Spacer(Modifier.height(10.dp))
-
-                    Text(
-                        text = "Opciones de Audio",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.68f),
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 11.5.sp
-                    )
-                    Spacer(Modifier.height(6.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                // Fila horizontal limpia de formatos estilo Seal
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    item {
                         FormatChip(
-                            label = "MP3 • 320 kbps",
-                            selected = selectedFormat == MediaFormat.MP3_320,
-                            modifier = Modifier.weight(1f),
-                            onClick = { downloadViewModel.selectedFormat.value = MediaFormat.MP3_320 }
-                        )
-                        FormatChip(
-                            label = "M4A • Original HQ",
+                            label = "M4A Original",
                             selected = selectedFormat == MediaFormat.M4A,
-                            modifier = Modifier.weight(1f),
                             onClick = { downloadViewModel.selectedFormat.value = MediaFormat.M4A }
                         )
                     }
-
-                    Spacer(Modifier.height(10.dp))
-
-                    Text(
-                        text = "Opciones de Video",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.72f),
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 11.sp
-                    )
-                    Spacer(Modifier.height(4.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                    item {
                         FormatChip(
-                            label = "MP4 • 1080p",
+                            label = "MP3 320",
+                            selected = selectedFormat == MediaFormat.MP3_320,
+                            onClick = { downloadViewModel.selectedFormat.value = MediaFormat.MP3_320 }
+                        )
+                    }
+                    item {
+                        FormatChip(
+                            label = "MP4 1080p",
                             selected = selectedFormat == MediaFormat.MP4_1080,
-                            modifier = Modifier.weight(1f),
                             onClick = { downloadViewModel.selectedFormat.value = MediaFormat.MP4_1080 }
                         )
+                    }
+                    item {
                         FormatChip(
-                            label = "MP4 • 720p",
+                            label = "MP4 720p",
                             selected = selectedFormat == MediaFormat.MP4_720,
-                            modifier = Modifier.weight(1f),
                             onClick = { downloadViewModel.selectedFormat.value = MediaFormat.MP4_720 }
                         )
+                    }
+                    item {
                         FormatChip(
-                            label = "MP4 • 480p",
+                            label = "MP4 480p",
                             selected = selectedFormat == MediaFormat.MP4_480,
-                            modifier = Modifier.weight(1f),
                             onClick = { downloadViewModel.selectedFormat.value = MediaFormat.MP4_480 }
                         )
                     }
+                }
 
-                    Spacer(Modifier.height(14.dp))
+                val btnLabel = if (batchUrls.size > 1) {
+                    "Descargar lote (${batchUrls.size} enlaces)"
+                } else {
+                    "Iniciar descarga"
+                }
 
-                    val btnLabel = if (batchUrls.size > 1) {
-                        "Descargar lote (${batchUrls.size} enlaces)"
-                    } else {
-                        when (selectedFormat) {
-                            MediaFormat.MP3_320 -> "Iniciar descarga (MP3 320 kbps)"
-                            MediaFormat.M4A -> "Iniciar descarga (M4A HQ)"
-                            MediaFormat.MP4_1080 -> "Iniciar descarga (MP4 1080p)"
-                            MediaFormat.MP4_720 -> "Iniciar descarga (MP4 720p)"
-                            MediaFormat.MP4_480 -> "Iniciar descarga (MP4 480p)"
-                        }
-                    }
-
-                    Button(
-                        onClick = {
-                            if (batchUrls.size > 1) {
-                                downloadViewModel.enqueueBatch(batchUrls, selectedFormat)
+                Button(
+                    onClick = {
+                        if (batchUrls.size > 1) {
+                            downloadViewModel.enqueueBatch(batchUrls, selectedFormat)
+                        } else {
+                            val targetUrl = mediaPreview?.originalUrl?.takeIf { it.isNotBlank() } ?: urlInput
+                            if (targetUrl.isBlank()) {
+                                Toast.makeText(context, "Por favor pega un enlace multimedia", Toast.LENGTH_SHORT).show()
+                            } else if (com.omnivault.media.utils.UrlUtils.isDirectPlaylistUrl(targetUrl)) {
+                                downloadViewModel.analyzeUrl(targetUrl, forcePlaylist = true)
                             } else {
-                                val targetUrl = mediaPreview?.originalUrl?.takeIf { it.isNotBlank() } ?: urlInput
-                                if (targetUrl.isBlank()) {
-                                    Toast.makeText(context, "Por favor pega un enlace multimedia", Toast.LENGTH_SHORT).show()
-                                } else if (com.omnivault.media.utils.UrlUtils.isDirectPlaylistUrl(targetUrl)) {
-                                    downloadViewModel.analyzeUrl(targetUrl, forcePlaylist = true)
-                                } else {
-                                    downloadViewModel.startUniversalDownload(targetUrl, selectedFormat)
-                                }
+                                downloadViewModel.startUniversalDownload(targetUrl, selectedFormat)
                             }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = accentColor,
-                            contentColor = Color.Black
-                        )
-                    ) {
-                        Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = btnLabel,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    shape = RoundedCornerShape(28.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = accentColor,
+                        contentColor = darkOnAccent
+                    )
+                ) {
+                    Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = btnLabel,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
@@ -1226,38 +1172,39 @@ fun FormatChip(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val accentColor = Color(0xFF00E5FF)
+    val selectedBg = Color(0xFFDCE4EC)
+    val selectedText = Color(0xFF0F1419)
     Surface(
         onClick = onClick,
-        modifier = modifier.height(40.dp),
+        modifier = modifier.height(38.dp),
         shape = RoundedCornerShape(10.dp),
-        color = if (selected) accentColor.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-        border = BorderStroke(
-            width = if (selected) 1.2.dp else 1.dp,
-            color = if (selected) accentColor else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-        )
+        color = if (selected) selectedBg else Color(0xFF13181E),
+        border = if (selected) null else BorderStroke(1.dp, Color(0xFF3A424D))
     ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp)) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.padding(horizontal = 12.dp)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                if (selected) {
-                    Icon(
-                        Icons.Rounded.Check,
-                        contentDescription = null,
-                        tint = accentColor,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                }
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                    color = if (selected) Color.White else Color.White.copy(alpha = 0.78f),
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (selected) selectedText else Color.White.copy(alpha = 0.88f),
+                    fontSize = 12.5.sp,
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Ellipsis
                 )
+                if (selected) {
+                    Spacer(Modifier.width(5.dp))
+                    Icon(
+                        Icons.Rounded.Check,
+                        contentDescription = null,
+                        tint = selectedText,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
             }
         }
     }
