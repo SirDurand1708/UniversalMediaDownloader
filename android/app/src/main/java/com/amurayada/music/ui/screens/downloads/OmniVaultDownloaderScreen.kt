@@ -708,7 +708,7 @@ fun OmniVaultDownloaderScreen(
                             onClick = {
                                 isAudioFormatTab = false
                                 if (selectedFormat.isAudio) {
-                                    downloadViewModel.selectedFormat.value = MediaFormat.MP4_1080
+                                    downloadViewModel.selectedFormat.value = MediaFormat.MP4_MAX
                                 }
                             },
                             shape = RoundedCornerShape(20.dp),
@@ -763,6 +763,12 @@ fun OmniVaultDownloaderScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         FormatChip(
+                            label = "Máxima • 4K/HD",
+                            selected = selectedFormat == MediaFormat.MP4_MAX,
+                            modifier = Modifier.weight(1f),
+                            onClick = { downloadViewModel.selectedFormat.value = MediaFormat.MP4_MAX }
+                        )
+                        FormatChip(
                             label = "MP4 • 1080p",
                             selected = selectedFormat == MediaFormat.MP4_1080,
                             modifier = Modifier.weight(1f),
@@ -774,12 +780,6 @@ fun OmniVaultDownloaderScreen(
                             modifier = Modifier.weight(1f),
                             onClick = { downloadViewModel.selectedFormat.value = MediaFormat.MP4_720 }
                         )
-                        FormatChip(
-                            label = "MP4 • 480p",
-                            selected = selectedFormat == MediaFormat.MP4_480,
-                            modifier = Modifier.weight(1f),
-                            onClick = { downloadViewModel.selectedFormat.value = MediaFormat.MP4_480 }
-                        )
                     }
                 }
 
@@ -789,6 +789,7 @@ fun OmniVaultDownloaderScreen(
                     when (selectedFormat) {
                         MediaFormat.MP3_320 -> "Iniciar descarga (MP3 320K)"
                         MediaFormat.M4A -> "Iniciar descarga (M4A HQ)"
+                        MediaFormat.MP4_MAX -> "Iniciar descarga (Máxima)"
                         MediaFormat.MP4_1080 -> "Iniciar descarga (MP4 1080p)"
                         MediaFormat.MP4_720 -> "Iniciar descarga (MP4 720p)"
                         MediaFormat.MP4_480 -> "Iniciar descarga (MP4 480p)"

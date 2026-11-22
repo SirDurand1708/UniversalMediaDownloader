@@ -54,6 +54,13 @@ import com.omnivault.media.utils.StandardizeCandidate
 import kotlinx.coroutines.launch
 import java.io.File
 
+private val VideoNeonCyan = Color(0xFF00E5FF)
+private val VideoNeonGreen = Color(0xFF00E676)
+private val VideoTitaniumCard = Color(0xFF141923)
+private val VideoBorderSlate = Color(0xFF263248)
+private val VideoTextSecondary = Color(0xFF9AA4AF)
+private val VideoDangerRed = Color(0xFFFF5252)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VideosScreen(
@@ -205,7 +212,7 @@ fun VideosScreen(
                         .clip(RoundedCornerShape(10.dp))
                         .background(
                             Brush.linearGradient(
-                                listOf(Color(0xFF00E676), Color(0xFF00E5FF), Color(0xFF7C4DFF))
+                                listOf(VideoNeonGreen, VideoNeonCyan, Color(0xFF7C4DFF))
                             )
                         ),
                     contentAlignment = Alignment.Center
@@ -222,13 +229,13 @@ fun VideosScreen(
                     text = "VIDEOS",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onBackground,
+                    color = Color.White,
                     maxLines = 1,
                     softWrap = false
                 )
                 Spacer(Modifier.width(8.dp))
                 Surface(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                    color = VideoNeonCyan.copy(alpha = 0.16f),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text(
@@ -236,7 +243,7 @@ fun VideosScreen(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = VideoNeonCyan,
                         maxLines = 1,
                         softWrap = false
                     )
@@ -257,7 +264,7 @@ fun VideosScreen(
                         Icon(
                             imageVector = if (showSearchBar || searchQuery.isNotEmpty()) Icons.Rounded.SearchOff else Icons.Rounded.Search,
                             contentDescription = "Buscar videos",
-                            tint = if (showSearchBar || searchQuery.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
+                            tint = if (showSearchBar || searchQuery.isNotEmpty()) VideoNeonCyan else Color.White
                         )
                     }
                 }
@@ -269,7 +276,7 @@ fun VideosScreen(
                     Icon(
                         imageVector = if (isGridView) Icons.Rounded.ViewList else Icons.Rounded.GridView,
                         contentDescription = if (isGridView) "Vista en lista" else "Vista en cuadrícula",
-                        tint = MaterialTheme.colorScheme.onBackground
+                        tint = Color.White
                     )
                 }
                 Box {
@@ -277,7 +284,7 @@ fun VideosScreen(
                         Icon(
                             imageVector = Icons.Rounded.MoreVert,
                             contentDescription = "Más opciones",
-                            tint = MaterialTheme.colorScheme.onBackground
+                            tint = Color.White
                         )
                     }
                     DropdownMenu(
@@ -334,7 +341,7 @@ fun VideosScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 4.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                .background(VideoTitaniumCard)
                 .padding(4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -345,14 +352,14 @@ fun VideosScreen(
                     openedPlaylistId = null
                 },
                 shape = RoundedCornerShape(10.dp),
-                color = if (allSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                color = if (allSelected) VideoNeonCyan else Color.Transparent,
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
                     text = "Todos los videos",
                     fontSize = 13.sp,
                     fontWeight = if (allSelected) FontWeight.Bold else FontWeight.Medium,
-                    color = if (allSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (allSelected) Color.Black else VideoTextSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
@@ -366,14 +373,14 @@ fun VideosScreen(
                     selectedVideoIds.clear()
                 },
                 shape = RoundedCornerShape(10.dp),
-                color = if (playlistsSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                color = if (playlistsSelected) VideoNeonCyan else Color.Transparent,
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
                     text = "Playlists (${videoPlaylists.size})",
                     fontSize = 13.sp,
                     fontWeight = if (playlistsSelected) FontWeight.Bold else FontWeight.Medium,
-                    color = if (playlistsSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (playlistsSelected) Color.Black else VideoTextSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
@@ -388,14 +395,14 @@ fun VideosScreen(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { videosViewModel.searchQuery.value = it },
-                placeholder = { Text("Buscar videos por título...") },
+                placeholder = { Text("Buscar videos por título...", color = VideoTextSecondary) },
                 leadingIcon = {
-                    Icon(Icons.Rounded.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Rounded.Search, contentDescription = null, tint = VideoNeonCyan)
                 },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { videosViewModel.searchQuery.value = "" }) {
-                            Icon(Icons.Rounded.Clear, contentDescription = "Limpiar")
+                            Icon(Icons.Rounded.Clear, contentDescription = "Limpiar", tint = VideoTextSecondary)
                         }
                     }
                 },
@@ -405,13 +412,24 @@ fun VideosScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                    focusedBorderColor = VideoNeonCyan,
+                    unfocusedBorderColor = VideoBorderSlate,
+                    focusedContainerColor = VideoTitaniumCard,
+                    unfocusedContainerColor = VideoTitaniumCard,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    cursorColor = VideoNeonCyan
                 )
             )
         }
 
         // Filtros rápidos con padding limpio y etiquetas claras (sin cortes en el borde)
+        val filterChipColors = FilterChipDefaults.filterChipColors(
+            containerColor = VideoTitaniumCard,
+            labelColor = VideoTextSecondary,
+            selectedContainerColor = VideoNeonCyan.copy(alpha = 0.2f),
+            selectedLabelColor = VideoNeonCyan
+        )
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
@@ -424,28 +442,32 @@ fun VideosScreen(
                         videosViewModel.setOnlyDownloaded(false)
                         videosViewModel.setOnlyCamera(false)
                     },
-                    label = { Text("Todos", fontSize = 12.sp, maxLines = 1, softWrap = false) }
+                    label = { Text("Todos", fontSize = 12.sp, maxLines = 1, softWrap = false) },
+                    colors = filterChipColors
                 )
             }
             item {
                 FilterChip(
                     selected = onlyDownloaded,
                     onClick = { videosViewModel.setOnlyDownloaded(true) },
-                    label = { Text("Descargados", fontSize = 12.sp, maxLines = 1, softWrap = false) }
+                    label = { Text("Descargados", fontSize = 12.sp, maxLines = 1, softWrap = false) },
+                    colors = filterChipColors
                 )
             }
             item {
                 FilterChip(
                     selected = onlyCamera,
                     onClick = { videosViewModel.setOnlyCamera(!onlyCamera) },
-                    label = { Text("Cámara", fontSize = 12.sp, maxLines = 1, softWrap = false) }
+                    label = { Text("Cámara", fontSize = 12.sp, maxLines = 1, softWrap = false) },
+                    colors = filterChipColors
                 )
             }
             item {
                 FilterChip(
                     selected = hideWhatsAppClips,
                     onClick = { videosViewModel.setHideWhatsAppClips(!hideWhatsAppClips) },
-                    label = { Text("Sin WhatsApp", fontSize = 12.sp, maxLines = 1, softWrap = false) }
+                    label = { Text("Sin WhatsApp", fontSize = 12.sp, maxLines = 1, softWrap = false) },
+                    colors = filterChipColors
                 )
             }
         }
@@ -453,7 +475,8 @@ fun VideosScreen(
         if (selectedVideoIds.isNotEmpty()) {
             Spacer(Modifier.height(6.dp))
             Surface(
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
+                color = VideoTitaniumCard,
+                border = BorderStroke(1.dp, VideoNeonCyan.copy(alpha = 0.5f)),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -464,12 +487,13 @@ fun VideosScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = { selectedVideoIds.clear() }, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Rounded.Close, contentDescription = "Cancelar selección", modifier = Modifier.size(18.dp))
+                        Icon(Icons.Rounded.Close, contentDescription = "Cancelar selección", tint = Color.White, modifier = Modifier.size(18.dp))
                     }
                     Text(
                         text = "${selectedVideoIds.size} seleccionados",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
+                        color = VideoNeonCyan,
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(
@@ -479,7 +503,7 @@ fun VideosScreen(
                         },
                         modifier = Modifier.size(34.dp)
                     ) {
-                        Icon(Icons.Rounded.PlaylistAdd, contentDescription = "Añadir a playlist", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Rounded.PlaylistAdd, contentDescription = "Añadir a playlist", tint = VideoNeonCyan)
                     }
                     IconButton(
                         onClick = {
@@ -497,7 +521,7 @@ fun VideosScreen(
                         },
                         modifier = Modifier.size(34.dp)
                     ) {
-                        Icon(Icons.Rounded.Delete, contentDescription = "Eliminar seleccionados", tint = MaterialTheme.colorScheme.error)
+                        Icon(Icons.Rounded.Delete, contentDescription = "Eliminar seleccionados", tint = VideoDangerRed)
                     }
                     IconButton(
                         onClick = {
@@ -510,7 +534,7 @@ fun VideosScreen(
                         },
                         modifier = Modifier.size(34.dp)
                     ) {
-                        Icon(Icons.Rounded.SelectAll, contentDescription = "Seleccionar todo")
+                        Icon(Icons.Rounded.SelectAll, contentDescription = "Seleccionar todo", tint = VideoNeonCyan)
                     }
                 }
             }
@@ -521,7 +545,7 @@ fun VideosScreen(
         // Content
         if (isLoading && videos.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                CircularProgressIndicator(color = VideoNeonCyan)
             }
         } else if (videos.isEmpty()) {
             Box(
@@ -535,13 +559,13 @@ fun VideosScreen(
                         Icons.Rounded.VideoLibrary,
                         contentDescription = null,
                         modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        tint = VideoTextSecondary.copy(alpha = 0.45f)
                     )
                     Spacer(Modifier.height(16.dp))
                     Text(
                         text = if (searchQuery.isNotEmpty()) "No se encontraron videos" else "No hay videos registrados",
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = VideoTextSecondary
                     )
                 }
             }
@@ -620,9 +644,9 @@ fun VideosScreen(
                                 pendingPlaylistInitialVideos = emptyList()
                                 showCreatePlaylistDialog = true
                             },
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                            color = VideoTitaniumCard,
                             shape = RoundedCornerShape(14.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+                            border = BorderStroke(1.dp, VideoNeonCyan.copy(alpha = 0.45f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
@@ -633,15 +657,15 @@ fun VideosScreen(
                                     modifier = Modifier
                                         .size(44.dp)
                                         .clip(RoundedCornerShape(10.dp))
-                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)),
+                                        .background(VideoNeonCyan.copy(alpha = 0.16f)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(Icons.Rounded.CreateNewFolder, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                    Icon(Icons.Rounded.CreateNewFolder, contentDescription = null, tint = VideoNeonCyan)
                                 }
                                 Spacer(Modifier.width(12.dp))
                                 Column {
-                                    Text("Nueva playlist de videos", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
-                                    Text("Organiza tus videos en carpetas virtuales", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("Nueva playlist de videos", fontWeight = FontWeight.Bold, color = Color.White)
+                                    Text("Organiza tus videos en carpetas virtuales", style = MaterialTheme.typography.bodySmall, color = VideoTextSecondary)
                                 }
                             }
                         }
@@ -660,13 +684,13 @@ fun VideosScreen(
                                         Icons.Rounded.FolderOpen,
                                         contentDescription = null,
                                         modifier = Modifier.size(56.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                        tint = VideoTextSecondary.copy(alpha = 0.45f)
                                     )
                                     Spacer(Modifier.height(10.dp))
                                     Text(
                                         "No tienes playlists de videos todavía",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = VideoTextSecondary
                                     )
                                 }
                             }
@@ -680,7 +704,8 @@ fun VideosScreen(
 
                         Surface(
                             onClick = { openedPlaylistId = pl.id },
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                            color = VideoTitaniumCard,
+                            border = BorderStroke(1.dp, VideoBorderSlate),
                             shape = RoundedCornerShape(14.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -703,24 +728,24 @@ fun VideosScreen(
                                         modifier = Modifier
                                             .size(52.dp)
                                             .clip(RoundedCornerShape(10.dp))
-                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
+                                            .background(VideoNeonCyan.copy(alpha = 0.16f)),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(Icons.Rounded.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                        Icon(Icons.Rounded.Folder, contentDescription = null, tint = VideoNeonCyan)
                                     }
                                 }
                                 Spacer(Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(pl.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(pl.name, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Text(
                                         "${plVideos.size} ${if (plVideos.size == 1) "video" else "videos"}",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = VideoTextSecondary
                                     )
                                 }
                                 Box {
                                     IconButton(onClick = { plMenuExpanded = true }) {
-                                        Icon(Icons.Rounded.MoreVert, contentDescription = "Opciones")
+                                        Icon(Icons.Rounded.MoreVert, contentDescription = "Opciones", tint = VideoTextSecondary)
                                     }
                                     DropdownMenu(
                                         expanded = plMenuExpanded,
@@ -757,18 +782,18 @@ fun VideosScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = { openedPlaylistId = null }) {
-                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Volver a playlists")
+                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Volver a playlists", tint = Color.White)
                     }
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(openedPlaylist.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(openedPlaylist.name, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(
                             "${plVideos.size} ${if (plVideos.size == 1) "video" else "videos"}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = VideoTextSecondary
                         )
                     }
                     IconButton(onClick = { renameTargetPlaylist = openedPlaylist }) {
-                        Icon(Icons.Rounded.Edit, contentDescription = "Renombrar playlist")
+                        Icon(Icons.Rounded.Edit, contentDescription = "Renombrar playlist", tint = Color.White)
                     }
                     if (plVideos.isNotEmpty()) {
                         FilledTonalButton(
@@ -776,12 +801,16 @@ fun VideosScreen(
                                 videosViewModel.setPlaybackQueue(plVideos)
                                 onVideoClick(plVideos.first())
                             },
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = VideoNeonCyan,
+                                contentColor = Color.Black
+                            ),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                             modifier = Modifier.height(36.dp)
                         ) {
                             Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Reproducir", fontSize = 12.sp, maxLines = 1)
+                            Text("Reproducir", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                         }
                     }
                 }
@@ -797,13 +826,13 @@ fun VideosScreen(
                                 Icons.Rounded.VideoLibrary,
                                 contentDescription = null,
                                 modifier = Modifier.size(56.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                tint = VideoTextSecondary.copy(alpha = 0.45f)
                             )
                             Spacer(Modifier.height(10.dp))
                             Text(
                                 "Esta playlist está vacía.\nAñade videos desde el menú (⋮) o selección múltiple.",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = VideoTextSecondary,
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                         }
@@ -881,6 +910,9 @@ fun VideosScreen(
     if (showSortDialog) {
         AlertDialog(
             onDismissRequest = { showSortDialog = false },
+            containerColor = VideoTitaniumCard,
+            titleContentColor = Color.White,
+            textContentColor = Color.White,
             title = { Text("Ordenar videos por", fontWeight = FontWeight.Bold) },
             text = {
                 Column {
@@ -911,7 +943,10 @@ fun VideosScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showSortDialog = false }) {
+                TextButton(
+                    onClick = { showSortDialog = false },
+                    colors = ButtonDefaults.textButtonColors(contentColor = VideoNeonCyan)
+                ) {
                     Text("Cerrar")
                 }
             }
@@ -922,7 +957,10 @@ fun VideosScreen(
         val examples = candidates.take(3)
         AlertDialog(
             onDismissRequest = { videoStandardizeCandidates = null },
-            icon = { Icon(Icons.Rounded.AutoFixHigh, contentDescription = null) },
+            containerColor = VideoTitaniumCard,
+            titleContentColor = Color.White,
+            textContentColor = Color.White,
+            icon = { Icon(Icons.Rounded.AutoFixHigh, contentDescription = null, tint = VideoNeonCyan) },
             title = { Text("Estandarizar videos", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -934,7 +972,7 @@ fun VideosScreen(
                         Text(
                             text = "• ${ex.currentBaseName} → ${ex.targetBaseName}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = VideoTextSecondary,
                             maxLines = 2
                         )
                     }
@@ -956,13 +994,17 @@ fun VideosScreen(
                                 Toast.makeText(context, "$totalVideosRenamed videos estandarizados", Toast.LENGTH_LONG).show()
                             }
                         }
-                    }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = VideoNeonCyan, contentColor = Color.Black)
                 ) {
-                    Text("Estandarizar (${candidates.size})")
+                    Text("Estandarizar (${candidates.size})", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { videoStandardizeCandidates = null }) {
+                TextButton(
+                    onClick = { videoStandardizeCandidates = null },
+                    colors = ButtonDefaults.textButtonColors(contentColor = VideoTextSecondary)
+                ) {
                     Text("Cancelar")
                 }
             }
@@ -974,6 +1016,9 @@ fun VideosScreen(
         val validRawIds = remember(rawVideos) { rawVideos.mapTo(HashSet()) { it.id } }
         AlertDialog(
             onDismissRequest = { videoIdsPendingPlaylist = null },
+            containerColor = VideoTitaniumCard,
+            titleContentColor = Color.White,
+            textContentColor = Color.White,
             title = { Text("Añadir a playlist", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -983,6 +1028,8 @@ fun VideosScreen(
                             videoIdsPendingPlaylist = null
                             showCreatePlaylistDialog = true
                         },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = VideoNeonCyan),
+                        border = BorderStroke(1.dp, VideoNeonCyan.copy(alpha = 0.5f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(Icons.Rounded.CreateNewFolder, contentDescription = null)
@@ -993,7 +1040,7 @@ fun VideosScreen(
                         Text(
                             "Aún no tienes playlists creadas.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = VideoTextSecondary,
                             modifier = Modifier.padding(top = 4.dp)
                         )
                     } else {
@@ -1013,17 +1060,18 @@ fun VideosScreen(
                                         Toast.makeText(context, "Añadido a ${pl.name}", Toast.LENGTH_SHORT).show()
                                     },
                                     shape = RoundedCornerShape(10.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                    color = VideoTitaniumCard,
+                                    border = BorderStroke(1.dp, VideoBorderSlate),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Row(
                                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Icon(Icons.Rounded.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                        Icon(Icons.Rounded.Folder, contentDescription = null, tint = VideoNeonCyan)
                                         Spacer(Modifier.width(10.dp))
-                                        Text(pl.name, modifier = Modifier.weight(1f), fontWeight = FontWeight.Medium)
-                                        Text("$validCount", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(pl.name, modifier = Modifier.weight(1f), fontWeight = FontWeight.Medium, color = Color.White)
+                                        Text("$validCount", style = MaterialTheme.typography.labelMedium, color = VideoTextSecondary)
                                     }
                                 }
                             }
@@ -1032,7 +1080,10 @@ fun VideosScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { videoIdsPendingPlaylist = null }) {
+                TextButton(
+                    onClick = { videoIdsPendingPlaylist = null },
+                    colors = ButtonDefaults.textButtonColors(contentColor = VideoNeonCyan)
+                ) {
                     Text("Cerrar")
                 }
             }
@@ -1046,6 +1097,9 @@ fun VideosScreen(
                 showCreatePlaylistDialog = false
                 pendingPlaylistInitialVideos = emptyList()
             },
+            containerColor = VideoTitaniumCard,
+            titleContentColor = Color.White,
+            textContentColor = Color.White,
             title = { Text("Nueva playlist de videos", fontWeight = FontWeight.Bold) },
             text = {
                 OutlinedTextField(
@@ -1053,6 +1107,15 @@ fun VideosScreen(
                     onValueChange = { newName = it },
                     label = { Text("Nombre de la carpeta/playlist") },
                     singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = VideoNeonCyan,
+                        unfocusedBorderColor = VideoBorderSlate,
+                        focusedLabelColor = VideoNeonCyan,
+                        unfocusedLabelColor = VideoTextSecondary,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        cursorColor = VideoNeonCyan
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
             },
@@ -1066,9 +1129,10 @@ fun VideosScreen(
                         showCreatePlaylistDialog = false
                         pendingPlaylistInitialVideos = emptyList()
                     },
-                    enabled = newName.isNotBlank()
+                    enabled = newName.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = VideoNeonCyan, contentColor = Color.Black)
                 ) {
-                    Text("Crear")
+                    Text("Crear", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -1076,7 +1140,8 @@ fun VideosScreen(
                     onClick = {
                         showCreatePlaylistDialog = false
                         pendingPlaylistInitialVideos = emptyList()
-                    }
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = VideoTextSecondary)
                 ) {
                     Text("Cancelar")
                 }
@@ -1088,6 +1153,9 @@ fun VideosScreen(
         var updatedName by remember(target.id) { mutableStateOf(target.name) }
         AlertDialog(
             onDismissRequest = { renameTargetPlaylist = null },
+            containerColor = VideoTitaniumCard,
+            titleContentColor = Color.White,
+            textContentColor = Color.White,
             title = { Text("Renombrar playlist", fontWeight = FontWeight.Bold) },
             text = {
                 OutlinedTextField(
@@ -1095,6 +1163,15 @@ fun VideosScreen(
                     onValueChange = { updatedName = it },
                     label = { Text("Nuevo nombre") },
                     singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = VideoNeonCyan,
+                        unfocusedBorderColor = VideoBorderSlate,
+                        focusedLabelColor = VideoNeonCyan,
+                        unfocusedLabelColor = VideoTextSecondary,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        cursorColor = VideoNeonCyan
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
             },
@@ -1104,13 +1181,17 @@ fun VideosScreen(
                         videosViewModel.renameVideoPlaylist(target.id, updatedName)
                         renameTargetPlaylist = null
                     },
-                    enabled = updatedName.isNotBlank()
+                    enabled = updatedName.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = VideoNeonCyan, contentColor = Color.Black)
                 ) {
-                    Text("Guardar")
+                    Text("Guardar", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { renameTargetPlaylist = null }) {
+                TextButton(
+                    onClick = { renameTargetPlaylist = null },
+                    colors = ButtonDefaults.textButtonColors(contentColor = VideoTextSecondary)
+                ) {
                     Text("Cancelar")
                 }
             }
@@ -1120,6 +1201,9 @@ fun VideosScreen(
     deleteTargetPlaylist?.let { target ->
         AlertDialog(
             onDismissRequest = { deleteTargetPlaylist = null },
+            containerColor = VideoTitaniumCard,
+            titleContentColor = Color.White,
+            textContentColor = VideoTextSecondary,
             title = { Text("Eliminar playlist", fontWeight = FontWeight.Bold) },
             text = { Text("¿Eliminar \"${target.name}\"? Solo se eliminará la lista virtual; tus videos seguirán en tu dispositivo.") },
             confirmButton = {
@@ -1129,13 +1213,16 @@ fun VideosScreen(
                         videosViewModel.deleteVideoPlaylist(target.id)
                         deleteTargetPlaylist = null
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    colors = ButtonDefaults.buttonColors(containerColor = VideoDangerRed, contentColor = Color.White)
                 ) {
                     Text("Eliminar")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { deleteTargetPlaylist = null }) {
+                TextButton(
+                    onClick = { deleteTargetPlaylist = null },
+                    colors = ButtonDefaults.textButtonColors(contentColor = VideoTextSecondary)
+                ) {
                     Text("Cancelar")
                 }
             }
@@ -1152,13 +1239,20 @@ private fun SortOptionRow(label: String, selected: Boolean, onSelect: () -> Unit
             .padding(vertical = 10.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        RadioButton(selected = selected, onClick = onSelect)
+        RadioButton(
+            selected = selected,
+            onClick = onSelect,
+            colors = RadioButtonDefaults.colors(
+                selectedColor = VideoNeonCyan,
+                unselectedColor = VideoTextSecondary
+            )
+        )
         Spacer(Modifier.width(8.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+            color = if (selected) VideoNeonCyan else Color.White
         )
     }
 }
@@ -1286,11 +1380,11 @@ fun VideoListRow(
             .clip(RoundedCornerShape(12.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         shape = RoundedCornerShape(12.dp),
-        border = if (isSelected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
+        border = if (isSelected) BorderStroke(1.5.dp, VideoNeonCyan) else BorderStroke(1.dp, VideoBorderSlate),
         color = if (isSelected) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            VideoNeonCyan.copy(alpha = 0.14f)
         } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
+            VideoTitaniumCard
         }
     ) {
         Row(
@@ -1337,6 +1431,7 @@ fun VideoListRow(
                 Text(
                     text = video.title,
                     style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White,
                     fontSize = 13.5.sp,
                     lineHeight = 17.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -1351,18 +1446,18 @@ fun VideoListRow(
                     Text(
                         text = video.fileSizeFormatted.ifBlank { "Video" },
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = VideoTextSecondary,
                         fontSize = 11.sp,
                         maxLines = 1,
                         softWrap = false
                     )
                     Surface(
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                        color = VideoNeonCyan.copy(alpha = 0.14f),
                         shape = RoundedCornerShape(4.dp)
                     ) {
                         Text(
                             text = origin,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = VideoNeonCyan,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
@@ -1381,7 +1476,7 @@ fun VideoListRow(
                     Icon(
                         Icons.Rounded.MoreVert,
                         contentDescription = "Opciones",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = VideoTextSecondary,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -1480,12 +1575,12 @@ fun VideoGridCard(
             .clip(RoundedCornerShape(12.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         shape = RoundedCornerShape(12.dp),
-        border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+        border = if (isSelected) BorderStroke(2.dp, VideoNeonCyan) else BorderStroke(1.dp, VideoBorderSlate),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                VideoNeonCyan.copy(alpha = 0.14f)
             } else {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
+                VideoTitaniumCard
             }
         )
     ) {
@@ -1533,6 +1628,7 @@ fun VideoGridCard(
                     Text(
                         text = video.title,
                         style = MaterialTheme.typography.bodySmall,
+                        color = Color.White,
                         fontSize = 12.sp,
                         lineHeight = 16.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -1543,7 +1639,7 @@ fun VideoGridCard(
                     Text(
                         text = "${video.fileSizeFormatted.ifBlank { "Video" }} • ${videoOriginLabel(video)}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+                        color = VideoTextSecondary,
                         fontSize = 10.5.sp,
                         maxLines = 1,
                         softWrap = false,
@@ -1559,7 +1655,7 @@ fun VideoGridCard(
                         Icon(
                             Icons.Rounded.MoreVert,
                             contentDescription = "Opciones",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = VideoTextSecondary,
                             modifier = Modifier.size(18.dp)
                         )
                     }

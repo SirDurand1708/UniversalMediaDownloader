@@ -490,27 +490,39 @@ class UniversalDownloadEngine private constructor(context: Context) {
                         addOption("--audio-format", "m4a")
                         addOption("--add-metadata")
                     }
+                    MediaFormat.MP4_MAX -> {
+                        addOption(
+                            "-f",
+                            "bestvideo+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
+                        )
+                        addOption("-S", "res,fps,br")
+                        addOption("--merge-output-format", "mp4")
+                        addOption("--add-metadata")
+                    }
                     MediaFormat.MP4_1080 -> {
                         addOption(
                             "-f",
-                            "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[ext=mp4]/best"
+                            "bestvideo[height<=1080]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"
                         )
+                        addOption("-S", "res,fps,br")
                         addOption("--merge-output-format", "mp4")
                         addOption("--add-metadata")
                     }
                     MediaFormat.MP4_720 -> {
                         addOption(
                             "-f",
-                            "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[ext=mp4]/best"
+                            "bestvideo[height<=720]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best[height<=720]/best"
                         )
+                        addOption("-S", "res,fps,br")
                         addOption("--merge-output-format", "mp4")
                         addOption("--add-metadata")
                     }
                     MediaFormat.MP4_480 -> {
                         addOption(
                             "-f",
-                            "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[ext=mp4]/best"
+                            "bestvideo[height<=480]+bestaudio[ext=m4a]/bestvideo[height<=480]+bestaudio/best[height<=480]/best"
                         )
+                        addOption("-S", "res,fps,br")
                         addOption("--merge-output-format", "mp4")
                         addOption("--add-metadata")
                     }
@@ -571,7 +583,7 @@ class UniversalDownloadEngine private constructor(context: Context) {
             val finalExt = when (format) {
                 MediaFormat.MP3_320 -> "mp3"
                 MediaFormat.M4A -> if (downloadedCacheFile.extension.equals("mp3", ignoreCase = true)) "mp3" else "m4a"
-                MediaFormat.MP4_1080, MediaFormat.MP4_720, MediaFormat.MP4_480 -> "mp4"
+                MediaFormat.MP4_MAX, MediaFormat.MP4_1080, MediaFormat.MP4_720, MediaFormat.MP4_480 -> "mp4"
             }
             val finalMimeType = when (finalExt) {
                 "mp3" -> "audio/mpeg"

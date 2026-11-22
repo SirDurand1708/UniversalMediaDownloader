@@ -1,19 +1,19 @@
 {
-  "version": "2.5.50",
-  "version_code": 300,
+  "version": "2.5.51",
+  "version_code": 301,
   "release_date": "2026-11-22",
-  "title": "OmniVault v2.5.50 — Windows PC & Android",
-  "changelog": "✨ Android Descargas y Videos: Fusión 3 (Seal + Switch Audio/Video) con la paleta cian exacta de Música (#00E5FF / #141923) y logos degradados unificados en Descargas y Videos",
+  "title": "OmniVault v2.5.51 — Windows PC & Android",
+  "changelog": "✨ Android Video Máxima Calidad + Paleta Unificada: Nuevo selector Máxima (4K/HD) en MP4 sin degradación de bitrate/resolución y pestaña Videos unificada con la paleta de Música (#00E5FF / #141923)",
   "android": {
-    "version": "2.5.50",
-    "version_code": 300,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.50/OmniVault-v2.5.50-Android.apk",
+    "version": "2.5.51",
+    "version_code": 301,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.51/OmniVault-v2.5.51-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.50",
-    "version_code": 300,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.50/OmniVault-v2.5.50-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.50/OmniVault-v2.5.50-Windows-x64-Portable.zip"
+    "version": "2.5.51",
+    "version_code": 301,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.51/OmniVault-v2.5.51-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.51/OmniVault-v2.5.51-Windows-x64-Portable.zip"
   }
 }

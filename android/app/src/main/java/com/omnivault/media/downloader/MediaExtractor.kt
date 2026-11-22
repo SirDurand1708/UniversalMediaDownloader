@@ -805,7 +805,12 @@ object MediaExtractor {
                     if (forceProgressiveOnly) return null
                 }
 
-                val targetHeight = if (requestedFormat == MediaFormat.MP4_1080) 1080 else 720
+                val targetHeight = when (requestedFormat) {
+                    MediaFormat.MP4_MAX -> 4320
+                    MediaFormat.MP4_1080 -> 1080
+                    MediaFormat.MP4_720 -> 720
+                    else -> 480
+                }
                 val videoMp4Adaptive = adaptiveList.filter { it.mime.startsWith("video/mp4") }
                 val avc1Candidates = videoMp4Adaptive.filter { it.mime.contains("avc1", ignoreCase = true) }
                 val matchingAvc1 = avc1Candidates
@@ -965,9 +970,16 @@ object MediaExtractor {
 
                     val videos = root.getAsJsonArray("videoStreams")
                     if (videos != null && videos.size() > 0) {
-                        val targetHeight = if (requestedFormat == MediaFormat.MP4_1080) 1080 else 720
+                        val targetHeight = when (requestedFormat) {
+                            MediaFormat.MP4_MAX -> 4320
+                            MediaFormat.MP4_1080 -> 1080
+                            MediaFormat.MP4_720 -> 720
+                            else -> 480
+                        }
                         var vTargetUrl: String? = null
+                        var bestHeight = -1
                         val candidateVideoUrls = mutableListOf<String>()
+                        val heightRegex = Regex("""(\d+)""")
 
                         for (elem in videos) {
                             val obj = elem.asJsonObject
@@ -976,7 +988,9 @@ object MediaExtractor {
                             val sUrl = obj.get("url")?.takeIf { !it.isJsonNull }?.asString ?: ""
                             if (!isUsablePipedStream(sUrl, q, fmt)) continue
                             candidateVideoUrls.add(sUrl)
-                            if (vTargetUrl == null && (q.contains("$targetHeight") || q.contains("${targetHeight}p")) && fmt.contains("mp4", ignoreCase = true)) {
+                            val h = heightRegex.find(q)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                            if (h in 1..targetHeight && (h > bestHeight || (h == bestHeight && fmt.contains("mp4", ignoreCase = true)))) {
+                                bestHeight = h
                                 vTargetUrl = sUrl
                             }
                         }
@@ -997,10 +1011,12 @@ object MediaExtractor {
                         if (candidateVideoUrls.isNotEmpty()) {
                             return ExtractedMediaInfo(
                                 title = title,
-                                directStreamUrl = candidateVideoUrls.first(),
+                                directStreamUrl = vTargetUrl ?: candidateVideoUrls.first(),
                                 format = requestedFormat,
                                 thumbnailUrl = thumbUrl,
-                                backupStreamUrls = candidateVideoUrls.drop(1)
+                                audioStreamUrl = aUrl,
+                                backupStreamUrls = candidateVideoUrls.drop(1),
+                                backupAudioUrls = audioUrls.drop(1)
                             )
                         }
                     }
@@ -1064,7 +1080,12 @@ object MediaExtractor {
             val bestThumb = extractor.thumbnails.maxByOrNull { it.width * it.height }?.url ?: thumbUrl
 
             if (!requestedFormat.isAudio) {
-                val targetHeight = if (requestedFormat == MediaFormat.MP4_1080) 1080 else 720
+                val targetHeight = when (requestedFormat) {
+                    MediaFormat.MP4_MAX -> 4320
+                    MediaFormat.MP4_1080 -> 1080
+                    MediaFormat.MP4_720 -> 720
+                    else -> 480
+                }
                 val muxedList = extractor.videoStreams
                     .filter { it.format == org.schabi.newpipe.extractor.MediaFormat.MPEG_4 }
                 val bestMuxed = muxedList
