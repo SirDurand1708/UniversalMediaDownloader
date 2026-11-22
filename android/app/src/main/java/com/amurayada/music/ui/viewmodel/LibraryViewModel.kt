@@ -640,47 +640,61 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                         )
                     }.distinctBy { it.id }
                     
-                    // Combine albums, favoring MediaStore versions (usually better metadata), but adding missing ones
+                    // Combine albums, favoring MediaStore versions, filtering out 1-song singles and generic placeholders
+                    val genericAlbumNames = setOf(
+                        "<unknown>", "unknown", "unknown album", "álbum desconocido",
+                        "omnivault", "descargas", "download", "downloads",
+                        "music", "música", "musica", "whatsapp audio", "snaptube audio", "sencillos"
+                    )
                     val allAlbums = (mediaStoreAlbums + downloadedAlbums).distinctBy { it.id }
                     // Recalculate song counts correctly based on FULL song list in O(N) linear time
                     val songCountByAlbum = sortedSongs.groupingBy { it.albumId }.eachCount()
                     val finalAlbums = allAlbums.mapNotNull { album ->
                         val count = songCountByAlbum[album.id] ?: 0
-                        if (count > 0) {
-                            if (count != album.songCount) album.copy(songCount = count) else album
+                        val normName = album.name.trim().lowercase()
+                        if (count >= 2 && normName.isNotEmpty() && !genericAlbumNames.contains(normName)) {
+                            val cleanArtist = if (album.artist.trim().lowercase() in setOf("<unknown>", "unknown", "unknown artist", "")) {
+                                "Varios artistas"
+                            } else album.artist
+                            album.copy(songCount = count, artist = cleanArtist)
                         } else null
-                    }.sortedBy { it.name }
+                    }.sortedBy { it.name.lowercase() }
 
-                    // Merge Artists: Start with MediaStore artists, add downloaded artists
+                    // Merge Artists: normalize <unknown> and keep artists with >= 2 songs (avoids 1-track uploader clutter)
                     val mediaStoreArtists = repository.getAllArtists()
-                    // Map names to existing IDs to avoid duplicates for same artist
-                    val knownArtistNames = mediaStoreArtists.associate { it.name.lowercase() to it.id }
+                    val normalizeArtistName: (String) -> String = { raw ->
+                        val trimmed = raw.trim()
+                        val lower = trimmed.lowercase()
+                        if (trimmed.isEmpty() || lower == "<unknown>" || lower == "unknown" || lower == "unknown artist") {
+                            "Artista desconocido"
+                        } else trimmed
+                    }
+                    val knownArtistNames = mediaStoreArtists.associate { normalizeArtistName(it.name).lowercase() to it.id }
 
                     val downloadedArtists = downloadedSongs.map { song ->
-                        // Reuse existing ID if artist allows matches, otherwise generate hash
-                        val existingId = knownArtistNames[song.artist.lowercase()]
+                        val cleanName = normalizeArtistName(song.artist)
+                        val existingId = knownArtistNames[cleanName.lowercase()]
                         Artist(
-                            id = existingId ?: song.artist.hashCode().toLong(),
-                            name = song.artist,
-                            albumCount = 0, // Recalculate below
-                            songCount = 0  // Recalculate below
+                            id = existingId ?: cleanName.lowercase().hashCode().toLong(),
+                            name = cleanName,
+                            albumCount = 0,
+                            songCount = 0
                         )
                     }.distinctBy { it.id }
-                    
-                    // Combine artists
-                    val allArtists = (mediaStoreArtists + downloadedArtists).distinctBy { it.id }
-                    // Recalculate counts in O(N) linear time using precomputed maps
-                    val songCountByArtist = sortedSongs.groupingBy { it.artist.lowercase().trim() }.eachCount()
-                    val albumCountByArtist = finalAlbums.groupingBy { it.artist.lowercase().trim() }.eachCount()
+
+                    val allArtists = (mediaStoreArtists.map { it.copy(name = normalizeArtistName(it.name)) } + downloadedArtists)
+                        .distinctBy { it.name.lowercase() }
+                    val songCountByArtist = sortedSongs.groupingBy { normalizeArtistName(it.artist).lowercase() }.eachCount()
+                    val albumCountByArtist = finalAlbums.groupingBy { normalizeArtistName(it.artist).lowercase() }.eachCount()
 
                     val finalArtists = allArtists.mapNotNull { artist ->
                         val key = artist.name.lowercase().trim()
                         val tracksCount = songCountByArtist[key] ?: 0
-                        if (tracksCount > 0) {
+                        if (tracksCount >= 2 && key != "artista desconocido" && key != "omnivault") {
                             val albumsCount = albumCountByArtist[key] ?: 0
                             artist.copy(songCount = tracksCount, albumCount = albumsCount)
                         } else null
-                    }.sortedBy { it.name }
+                    }.sortedBy { it.name.lowercase() }
 
                     val finalGenres = repository.getAllGenres()
                     

@@ -112,8 +112,8 @@ object CoverArtHelper {
             tpe1Body.write(cleanArtist.toByteArray(Charsets.UTF_16LE))
             val tpe1Frame = makeId3Frame("TPE1", tpe1Body.toByteArray())
 
-            // 4. Frame TALB (Álbum: evita que Android lo catalogue como 'Álbum desconocido')
-            val albumName = if (artist.isNotBlank()) "$artist - Single" else cleanTitle
+            // 4. Frame TALB (Álbum: usa contenedor neutro 'OmniVault' para no generar cientos de álbumes de 1 canción)
+            val albumName = "OmniVault"
             val talbBody = ByteArrayOutputStream()
             talbBody.write(0x01)
             talbBody.write(byteArrayOf(0xFF.toByte(), 0xFE.toByte()))
@@ -409,7 +409,7 @@ object CoverArtHelper {
             ilstBody.write(buildAtom("aART", artistData))
         }
 
-        val albumName = if (artist.isNotBlank()) "$artist - Single" else if (title.isNotBlank()) title else "OmniVault Audio"
+        val albumName = "OmniVault"
         val albumData = buildDataAtom(1, albumName.toByteArray(Charsets.UTF_8))
         ilstBody.write(buildAtom("\u00a9alb", albumData))
 

@@ -2,6 +2,7 @@ package com.amurayada.music.ui.screens.music
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -21,17 +23,77 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.amurayada.music.data.model.Album
 import com.amurayada.music.data.model.Artist
 import com.amurayada.music.data.model.Song
 
+private val MusicNeonCyan = Color(0xFF00E5FF)
+private val MusicNeonGreen = Color(0xFF00E676)
+private val MusicTitaniumCard = Color(0xFF141923)
+private val MusicBorderSlate = Color(0xFF263248)
+private val MusicTextSecondary = Color(0xFF9AA4AF)
+
+private fun formatSongCount(count: Int): String =
+    if (count == 1) "1 canción" else "$count canciones"
+
+@Composable
+private fun LibrarySectionSummary(label: String) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = MusicTextSecondary,
+        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+    )
+}
+
+@Composable
+private fun LibraryEmptyState(icon: ImageVector, title: String, subtitle: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(MusicNeonCyan.copy(alpha = 0.12f))
+                    .border(1.dp, MusicNeonCyan.copy(alpha = 0.3f), RoundedCornerShape(18.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = MusicNeonCyan, modifier = Modifier.size(32.dp))
+            }
+            Spacer(Modifier.height(14.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MusicTextSecondary
+            )
+        }
+    }
+}
+
 /**
- * Pestaña de Carpetas locales con filtrado en vivo.
+ * Pestaña de Carpetas locales con filtrado en vivo y paleta unificada de Música.
  */
 @Composable
 internal fun FoldersContent(
@@ -47,17 +109,33 @@ internal fun FoldersContent(
             folderGroups.entries.filter { it.key.lowercase().contains(q) }
         }
     }
+    if (visibleFolders.isEmpty()) {
+        LibraryEmptyState(
+            icon = Icons.Rounded.Folder,
+            title = if (searchQuery.isNotBlank()) "Sin carpetas coincidentes" else "No hay carpetas de audio",
+            subtitle = "Tus descargas se guardan localmente en Music/OmniVault"
+        )
+        return
+    }
+    val totalSongs = remember(visibleFolders) { visibleFolders.sumOf { it.value.size } }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        items(visibleFolders) { (folderName, songs) ->
+        item(key = "folders_summary") {
+            LibrarySectionSummary("${visibleFolders.size} carpetas locales • ${formatSongCount(totalSongs)}")
+        }
+        items(visibleFolders, key = { it.key }) { (folderName, songs) ->
+            val isOmniVault = folderName.equals("OmniVault", ignoreCase = true)
             Surface(
                 onClick = { onFolderClick(folderName, songs) },
-                color = Color(0xFF141923).copy(alpha = 0.7f),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color(0xFF263248)),
+                color = MusicTitaniumCard,
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(
+                    1.dp,
+                    if (isOmniVault) MusicNeonCyan.copy(alpha = 0.45f) else MusicBorderSlate
+                ),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -66,19 +144,76 @@ internal fun FoldersContent(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFF00B0FF).copy(alpha = 0.15f)),
+                            .size(46.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (isOmniVault) {
+                                    Brush.linearGradient(
+                                        listOf(MusicNeonGreen.copy(alpha = 0.22f), MusicNeonCyan.copy(alpha = 0.22f))
+                                    )
+                                } else {
+                                    Brush.linearGradient(
+                                        listOf(MusicNeonCyan.copy(alpha = 0.14f), MusicNeonCyan.copy(alpha = 0.08f))
+                                    )
+                                }
+                            )
+                            .border(1.dp, MusicNeonCyan.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Rounded.Folder, contentDescription = null, tint = Color(0xFF00B0FF))
+                        Icon(
+                            Icons.Rounded.Folder,
+                            contentDescription = null,
+                            tint = if (isOmniVault) MusicNeonGreen else MusicNeonCyan
+                        )
                     }
                     Spacer(Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(folderName, fontWeight = FontWeight.SemiBold, color = Color.White)
-                        Text("${songs.size} canciones", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = folderName,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            if (isOmniVault) {
+                                Spacer(Modifier.width(8.dp))
+                                Surface(
+                                    color = MusicNeonGreen.copy(alpha = 0.16f),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        text = "Local App",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MusicNeonGreen,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = formatSongCount(songs.size),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MusicTextSecondary
+                        )
                     }
-                    Icon(Icons.Rounded.PlayArrow, contentDescription = "Reproducir", tint = Color.Gray)
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(MusicNeonCyan.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Rounded.PlayArrow,
+                            contentDescription = "Reproducir",
+                            tint = MusicNeonCyan,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }
@@ -86,24 +221,46 @@ internal fun FoldersContent(
 }
 
 /**
- * Pestaña de Álbumes locales.
+ * Pestaña de Álbumes locales (solo álbumes reales con 2+ canciones) con paleta unificada de Música.
  */
 @Composable
 internal fun AlbumsContent(
     albums: List<Album>,
+    searchQuery: String = "",
     onAlbumClick: (Album) -> Unit
 ) {
+    val visibleAlbums = remember(albums, searchQuery) {
+        if (searchQuery.isBlank()) {
+            albums
+        } else {
+            val q = searchQuery.trim().lowercase()
+            albums.filter {
+                it.name.lowercase().contains(q) || it.artist.lowercase().contains(q)
+            }
+        }
+    }
+    if (visibleAlbums.isEmpty()) {
+        LibraryEmptyState(
+            icon = Icons.Rounded.Album,
+            title = if (searchQuery.isNotBlank()) "Sin álbumes coincidentes" else "Sin álbumes agrupados",
+            subtitle = "Los sencillos independientes se mantienen en Canciones para evitar ruido"
+        )
+        return
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        items(albums) { album ->
+        item(key = "albums_summary") {
+            LibrarySectionSummary("${visibleAlbums.size} álbumes")
+        }
+        items(visibleAlbums, key = { it.id }) { album ->
             Surface(
                 onClick = { onAlbumClick(album) },
-                color = Color(0xFF141923).copy(alpha = 0.7f),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color(0xFF263248)),
+                color = MusicTitaniumCard,
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, MusicBorderSlate),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -112,27 +269,61 @@ internal fun AlbumsContent(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(50.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color.DarkGray),
+                            .size(54.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MusicNeonCyan.copy(alpha = 0.12f))
+                            .border(1.dp, MusicBorderSlate, RoundedCornerShape(10.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         if (album.artworkUri != null) {
                             AsyncImage(
                                 model = album.artworkUri,
-                                contentDescription = null,
+                                contentDescription = album.name,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop
                             )
                         } else {
-                            Icon(Icons.Rounded.Album, contentDescription = null, tint = Color.White)
+                            Icon(Icons.Rounded.Album, contentDescription = null, tint = MusicNeonCyan)
                         }
                     }
                     Spacer(Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(album.name, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1)
-                        Text(album.artist, style = MaterialTheme.typography.bodySmall, color = Color.Gray, maxLines = 1)
+                        Text(
+                            text = album.name,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = album.artist,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MusicTextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
+                    Spacer(Modifier.width(8.dp))
+                    Surface(
+                        color = MusicNeonCyan.copy(alpha = 0.14f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = formatSongCount(album.songCount),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MusicNeonCyan,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        Icons.Rounded.ChevronRight,
+                        contentDescription = null,
+                        tint = MusicTextSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
         }
@@ -140,24 +331,44 @@ internal fun AlbumsContent(
 }
 
 /**
- * Pestaña de Artistas locales.
+ * Pestaña de Artistas locales (con 2+ canciones) con paleta unificada de Música.
  */
 @Composable
 internal fun ArtistsContent(
     artists: List<Artist>,
+    searchQuery: String = "",
     onArtistClick: (Artist) -> Unit
 ) {
+    val visibleArtists = remember(artists, searchQuery) {
+        if (searchQuery.isBlank()) {
+            artists
+        } else {
+            val q = searchQuery.trim().lowercase()
+            artists.filter { it.name.lowercase().contains(q) }
+        }
+    }
+    if (visibleArtists.isEmpty()) {
+        LibraryEmptyState(
+            icon = Icons.Rounded.Person,
+            title = if (searchQuery.isNotBlank()) "Sin artistas coincidentes" else "Sin artistas destacados",
+            subtitle = "Los temas independientes de 1 sola pista se mantienen en Canciones"
+        )
+        return
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        items(artists) { artist ->
+        item(key = "artists_summary") {
+            LibrarySectionSummary("${visibleArtists.size} artistas")
+        }
+        items(visibleArtists, key = { it.id }) { artist ->
             Surface(
                 onClick = { onArtistClick(artist) },
-                color = Color(0xFF141923).copy(alpha = 0.7f),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color(0xFF263248)),
+                color = MusicTitaniumCard,
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, MusicBorderSlate),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -166,18 +377,47 @@ internal fun ArtistsContent(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(46.dp)
+                            .size(48.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF7C4DFF).copy(alpha = 0.2f)),
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(MusicNeonGreen.copy(alpha = 0.2f), MusicNeonCyan.copy(alpha = 0.2f))
+                                )
+                            )
+                            .border(1.dp, MusicNeonCyan.copy(alpha = 0.35f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Rounded.Person, contentDescription = null, tint = Color(0xFF7C4DFF))
+                        Icon(Icons.Rounded.Person, contentDescription = null, tint = MusicNeonCyan)
                     }
                     Spacer(Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(artist.name, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1)
-                        Text("${artist.songCount} canciones", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text(
+                            text = artist.name,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        val subtitle = if (artist.albumCount > 0) {
+                            "${formatSongCount(artist.songCount)} • ${artist.albumCount} ${if (artist.albumCount == 1) "álbum" else "álbumes"}"
+                        } else {
+                            formatSongCount(artist.songCount)
+                        }
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MusicTextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
+                    Icon(
+                        Icons.Rounded.ChevronRight,
+                        contentDescription = null,
+                        tint = MusicTextSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
         }

@@ -1,19 +1,19 @@
 {
-  "version": "2.5.53",
-  "version_code": 303,
+  "version": "2.5.54",
+  "version_code": 304,
   "release_date": "2026-11-22",
-  "title": "OmniVault v2.5.53 — Windows PC & Android",
-  "changelog": "✨ Android Audio & Video: Carátula garantizada por streaming 64 KB incluso en audios de 2-4+ horas (>25 MB) con conversión WebP->JPEG y máxima calidad real de video en YouTube (android_vr/tv + prioridad 4K/2K en MP4_MAX)",
+  "title": "OmniVault v2.5.54 — Windows PC & Android",
+  "changelog": "✨ Android Música (Carpetas, Álbumes y Artistas): Rediseño completo con la paleta de Canciones (#00E5FF / #141923), filtrado real de Álbumes y Artistas (>=2 canciones sin ruido de sencillos/unknown) e independencia local bajo OmniVault",
   "android": {
-    "version": "2.5.53",
-    "version_code": 303,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.53/OmniVault-v2.5.53-Android.apk",
+    "version": "2.5.54",
+    "version_code": 304,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.54/OmniVault-v2.5.54-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.53",
-    "version_code": 303,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.53/OmniVault-v2.5.53-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.53/OmniVault-v2.5.53-Windows-x64-Portable.zip"
+    "version": "2.5.54",
+    "version_code": 304,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.54/OmniVault-v2.5.54-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.54/OmniVault-v2.5.54-Windows-x64-Portable.zip"
   }
 }

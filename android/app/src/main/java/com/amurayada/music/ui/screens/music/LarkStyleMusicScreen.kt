@@ -162,18 +162,28 @@ fun LarkStyleMusicScreen(
         }
     }
 
-    // Agrupación optimizada por carpetas mediante manipulación directa de cadenas (sin instanciar miles de Files)
+    // Agrupación optimizada por carpetas locales sin depender de reproductores externos
     val folderGroups = remember(rawSongs) {
         rawSongs.groupBy { song ->
             val p = song.path
-            if (p.startsWith("/")) {
-                val lastSlash = p.lastIndexOf('/')
-                if (lastSlash > 0) {
-                    val prevSlash = p.lastIndexOf('/', lastSlash - 1)
-                    if (prevSlash >= 0) p.substring(prevSlash + 1, lastSlash) else "Almacenamiento Interno"
-                } else "Almacenamiento Interno"
-            } else "Música"
-        }
+            when {
+                p.startsWith("/") -> {
+                    val lastSlash = p.lastIndexOf('/')
+                    if (lastSlash > 0) {
+                        val prevSlash = p.lastIndexOf('/', lastSlash - 1)
+                        if (prevSlash >= 0) p.substring(prevSlash + 1, lastSlash) else "Almacenamiento Interno"
+                    } else "Almacenamiento Interno"
+                }
+                p.startsWith("content://") -> "OmniVault"
+                else -> "Almacenamiento Interno"
+            }
+        }.entries
+            .sortedWith(
+                compareByDescending<Map.Entry<String, List<Song>>> { it.key.equals("OmniVault", ignoreCase = true) }
+                    .thenByDescending { it.value.size }
+                    .thenBy { it.key.lowercase() }
+            )
+            .associate { it.key to it.value }
     }
 
     val neonCyan = Color(0xFF00E5FF)
@@ -577,6 +587,7 @@ fun LarkStyleMusicScreen(
             LarkCategory.ALBUMES -> {
                 AlbumsContent(
                     albums = libraryViewModel.albums,
+                    searchQuery = searchQuery,
                     onAlbumClick = onAlbumClick
                 )
             }
@@ -584,6 +595,7 @@ fun LarkStyleMusicScreen(
             LarkCategory.ARTISTAS -> {
                 ArtistsContent(
                     artists = libraryViewModel.artists,
+                    searchQuery = searchQuery,
                     onArtistClick = onArtistClick
                 )
             }
