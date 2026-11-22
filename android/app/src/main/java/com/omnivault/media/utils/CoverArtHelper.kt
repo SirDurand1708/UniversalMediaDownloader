@@ -1,12 +1,18 @@
 package com.omnivault.media.utils
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.RandomAccessFile
 import java.util.concurrent.TimeUnit
 
 object CoverArtHelper {
@@ -18,24 +24,55 @@ object CoverArtHelper {
         .build()
 
     /**
-     * Descarga los bytes binarios de la imagen de carátula desde la URL proporcionada.
+     * Descarga los bytes binarios de la imagen de carátula desde la URL proporcionada
+     * y los normaliza a JPEG/PNG para compatibilidad con ID3 APIC y QuickTime 'covr'.
      */
     fun downloadCoverBytes(coverUrl: String?): ByteArray? {
         if (coverUrl.isNullOrBlank()) return null
-        return try {
-            val req = Request.Builder()
-                .url(coverUrl)
-                .header("User-Agent", "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
-                .build()
+        val candidates = mutableListOf(coverUrl)
+        if (coverUrl.contains("i.ytimg.com") && !coverUrl.contains("hqdefault.jpg")) {
+            val replaced = coverUrl
+                .replace("/vi_webp/", "/vi/")
+                .replace(Regex("/[^/]+\\.(webp|jpg)(\\?.*)?$"), "/hqdefault.jpg")
+            if (replaced != coverUrl) candidates.add(replaced)
+        }
+        for (url in candidates) {
+            try {
+                val req = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+                    .build()
 
-            client.newCall(req).execute().use { resp ->
-                if (resp.isSuccessful) {
-                    resp.body?.bytes()
-                } else null
+                val rawBytes = client.newCall(req).execute().use { resp ->
+                    if (resp.isSuccessful) resp.body?.bytes() else null
+                }
+                if (rawBytes != null && rawBytes.isNotEmpty()) {
+                    return normalizeCoverToJpegOrPng(rawBytes)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "No se pudo descargar la carátula desde $url: ${e.message}")
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "No se pudo descargar la carátula desde $coverUrl: ${e.message}")
-            null
+        }
+        return null
+    }
+
+    private fun normalizeCoverToJpegOrPng(bytes: ByteArray): ByteArray {
+        val isJpeg = bytes.size > 3 &&
+            bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() && bytes[2] == 0xFF.toByte()
+        val isPng = bytes.size > 8 &&
+            bytes[0] == 0x89.toByte() && bytes[1] == 0x50.toByte() &&
+            bytes[2] == 0x4E.toByte() && bytes[3] == 0x47.toByte()
+        if (isJpeg || isPng) return bytes
+
+        return try {
+            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return bytes
+            val out = ByteArrayOutputStream()
+            bmp.compress(Bitmap.CompressFormat.JPEG, 92, out)
+            bmp.recycle()
+            val converted = out.toByteArray()
+            if (converted.isNotEmpty()) converted else bytes
+        } catch (_: Exception) {
+            bytes
         }
     }
 
@@ -44,8 +81,9 @@ object CoverArtHelper {
      */
     fun embedCoverInMp3(mp3File: File, coverBytes: ByteArray, title: String, artist: String, lyrics: String? = null): Boolean {
         if (!mp3File.exists() || coverBytes.isEmpty()) return false
+        val normalizedCover = normalizeCoverToJpegOrPng(coverBytes)
         return try {
-            val isPng = coverBytes.size > 8 && coverBytes[0] == 0x89.toByte() && coverBytes[1] == 0x50.toByte()
+            val isPng = normalizedCover.size > 8 && normalizedCover[0] == 0x89.toByte() && normalizedCover[1] == 0x50.toByte()
             val mime = if (isPng) "image/png" else "image/jpeg"
 
             // 1. Frame APIC (Front Cover)
@@ -55,7 +93,7 @@ object CoverArtHelper {
             apicBody.write(0x00) // Null terminator MIME
             apicBody.write(0x03) // Tipo de imagen: Cover (Front)
             apicBody.write(0x00) // Descripción vacía (null terminator)
-            apicBody.write(coverBytes)
+            apicBody.write(normalizedCover)
             val apicFrame = makeId3Frame("APIC", apicBody.toByteArray())
 
             // 2. Frame TIT2 (Título con UTF-16LE + BOM para máxima compatibilidad Android)
@@ -182,101 +220,133 @@ object CoverArtHelper {
 
     /**
      * Incrusta la carátula, letras y metadatos en contenedores M4A / MP4 utilizando el átomo QuickTime estándar 'covr'.
-     * Compatible al 100% con reproductores de música de Android, pantalla de bloqueo y Android MediaStore.
+     * Usa streaming por disco en bloques de 64 KB para soportar archivos de varias horas (2h, 3h, 4h+) sin riesgo de OOM.
      */
     fun embedCoverInM4a(mediaFile: File, coverBytes: ByteArray, title: String, artist: String, lyrics: String? = null): Boolean {
         if (!mediaFile.exists() || coverBytes.isEmpty()) return false
 
-        // Protección contra OutOfMemoryError en archivos M4A de gran tamaño (> 25 MB):
-        // En lugar de clonar 50-200MB en la memoria RAM, guardamos la carátula complementaria en disco (.jpg)
-        if (mediaFile.length() > 25 * 1024 * 1024L) {
-            return try {
-                val companionArt = File(mediaFile.parentFile, "${mediaFile.nameWithoutExtension}.jpg")
-                companionArt.writeBytes(coverBytes)
-                Log.i(TAG, "M4A grande (${mediaFile.length() / (1024 * 1024)} MB): carátula guardada como companion .jpg para evitar OOM")
-                true
-            } catch (_: Exception) { false }
-        }
-
+        val normalizedCover = normalizeCoverToJpegOrPng(coverBytes)
+        val tempFile = File(mediaFile.parentFile, "${mediaFile.name}.tagged")
         return try {
-            val isPng = coverBytes.size > 8 && coverBytes[0] == 0x89.toByte() && coverBytes[1] == 0x50.toByte()
-            val fileBytes = mediaFile.readBytes()
+            val isPng = normalizedCover.size > 8 &&
+                normalizedCover[0] == 0x89.toByte() && normalizedCover[1] == 0x50.toByte()
+            val fileLength = mediaFile.length()
 
-            // 1. Construir caja 'udta' con 'ilst' conteniendo 'covr', '©nam', '©ART', '©alb' y '©lyr'
-            val udtaBox = buildUdtaBox(title, artist, coverBytes, isPng, lyrics)
-
-            // 2. Localizar cajas 'moov' y 'mdat'
-            var idx = 0
-            var moovPos = -1
+            // 1. Localizar cajas 'moov' y 'mdat' haciendo seek en disco (0 MB en RAM)
+            var moovPos = -1L
             var moovSize = 0L
-            var mdatPos = -1
+            var mdatPos = -1L
 
-            while (idx + 8 <= fileBytes.size) {
-                var size = readUInt32(fileBytes, idx)
-                val type = String(fileBytes, idx + 4, 4, Charsets.ISO_8859_1)
+            RandomAccessFile(mediaFile, "r").use { raf ->
+                var idx = 0L
+                val typeBuf = ByteArray(4)
+                while (idx + 8L <= fileLength) {
+                    raf.seek(idx)
+                    var size = raf.readInt().toLong() and 0xFFFFFFFFL
+                    raf.readFully(typeBuf)
+                    val type = String(typeBuf, Charsets.ISO_8859_1)
 
-                if (size == 1L && idx + 16 <= fileBytes.size) {
-                    size = readUInt64(fileBytes, idx + 8)
-                } else if (size == 0L) {
-                    size = (fileBytes.size - idx).toLong()
+                    if (size == 1L && idx + 16L <= fileLength) {
+                        size = raf.readLong()
+                    } else if (size == 0L) {
+                        size = fileLength - idx
+                    }
+
+                    if (type == "moov") {
+                        moovPos = idx
+                        moovSize = size
+                    } else if (type == "mdat") {
+                        mdatPos = idx
+                    }
+
+                    if (size <= 0L) break
+                    idx += size
                 }
-
-                if (type == "moov") {
-                    moovPos = idx
-                    moovSize = size
-                } else if (type == "mdat") {
-                    mdatPos = idx
-                }
-
-                if (size <= 0) break
-                idx += size.toInt()
             }
 
-            if (moovPos == -1 || moovSize <= 8) {
-                Log.w(TAG, "No se encontró caja moov en ${mediaFile.name}, guardando carátula complementaria")
-                val companionArt = File(mediaFile.parentFile, "${mediaFile.nameWithoutExtension}.jpg")
-                companionArt.writeBytes(coverBytes)
-                return true
+            if (moovPos < 0L || moovSize <= 8L || moovSize > 32L * 1024L * 1024L) {
+                Log.w(TAG, "Caja moov no válida (pos=$moovPos, size=$moovSize) en ${mediaFile.name}")
+                return false
             }
 
-            // 3. Insertar 'udta' dentro de la caja 'moov' (al final de moov)
-            val moovEnd = (moovPos + moovSize).toInt()
-            val newFileBytes = ByteArray(fileBytes.size + udtaBox.size)
+            // 2. Leer únicamente la caja 'moov' en RAM (normalmente 0.2-3 MB incluso en audios de 4h)
+            val moovBytes = ByteArray(moovSize.toInt())
+            RandomAccessFile(mediaFile, "r").use { raf ->
+                raf.seek(moovPos)
+                raf.readFully(moovBytes)
+            }
 
-            System.arraycopy(fileBytes, 0, newFileBytes, 0, moovEnd)
-            System.arraycopy(udtaBox, 0, newFileBytes, moovEnd, udtaBox.size)
-            System.arraycopy(fileBytes, moovEnd, newFileBytes, moovEnd + udtaBox.size, fileBytes.size - moovEnd)
-
-            // 4. Actualizar tamaño de la caja 'moov'
+            // 3. Construir caja 'udta' con 'ilst' conteniendo 'covr', '©nam', '©ART', '©alb' y '©lyr'
+            val udtaBox = buildUdtaBox(title, artist, normalizedCover, isPng, lyrics)
             val newMoovSize = moovSize + udtaBox.size
-            writeUInt32(newMoovSize, newFileBytes, moovPos)
+            val newMoovBytes = ByteArray(newMoovSize.toInt())
+            System.arraycopy(moovBytes, 0, newMoovBytes, 0, moovBytes.size)
+            System.arraycopy(udtaBox, 0, newMoovBytes, moovBytes.size, udtaBox.size)
 
-            // 5. Si moov estaba antes de mdat, ajustar tablas de offsets 'stco' y 'co64'
-            if (moovPos < mdatPos) {
-                val delta = udtaBox.size.toLong()
-                adjustChunkOffsets(newFileBytes, moovPos, newMoovSize.toInt(), delta)
+            // Actualizar tamaño de la caja 'moov' (si no usa extended size 64-bit)
+            if (readUInt32(newMoovBytes, 0) != 1L) {
+                writeUInt32(newMoovSize, newMoovBytes, 0)
             }
 
-            // 6. Escribir archivo temporal y reemplazar atómicamente
-            val tempFile = File(mediaFile.parentFile, "${mediaFile.name}.tagged")
-            tempFile.writeBytes(newFileBytes)
+            // 4. Si moov estaba antes de mdat, ajustar tablas de offsets 'stco' y 'co64'
+            if (mdatPos >= 0L && moovPos < mdatPos) {
+                adjustChunkOffsets(newMoovBytes, 0, newMoovBytes.size, udtaBox.size.toLong())
+            }
 
-            if (tempFile.exists() && tempFile.length() > mediaFile.length()) {
+            // 5. Escribir archivo final mediante streaming en bloques de 64 KB
+            val moovEnd = moovPos + moovSize
+            FileInputStream(mediaFile).use { fis ->
+                BufferedInputStream(fis, 65536).use { bis ->
+                    FileOutputStream(tempFile).use { fos ->
+                        BufferedOutputStream(fos, 65536).use { bos ->
+                            val buffer = ByteArray(65536)
+                            // Copiar prefijo [0 .. moovPos)
+                            var remaining = moovPos
+                            while (remaining > 0L) {
+                                val toRead = minOf(remaining, buffer.size.toLong()).toInt()
+                                val read = bis.read(buffer, 0, toRead)
+                                if (read <= 0) break
+                                bos.write(buffer, 0, read)
+                                remaining -= read
+                            }
+                            // Saltar el moov original
+                            var toSkip = moovSize
+                            while (toSkip > 0L) {
+                                val skipped = bis.skip(toSkip)
+                                if (skipped <= 0L) {
+                                    val r = bis.read(buffer, 0, minOf(toSkip, buffer.size.toLong()).toInt())
+                                    if (r <= 0) break
+                                    toSkip -= r
+                                } else {
+                                    toSkip -= skipped
+                                }
+                            }
+                            // Escribir nuevo moov con 'covr'
+                            bos.write(newMoovBytes)
+                            // Copiar sufijo [moovEnd .. fileLength)
+                            if (moovEnd < fileLength) {
+                                var bytesRead: Int
+                                while (bis.read(buffer).also { bytesRead = it } != -1) {
+                                    bos.write(buffer, 0, bytesRead)
+                                }
+                            }
+                            bos.flush()
+                        }
+                    }
+                }
+            }
+
+            if (tempFile.exists() && tempFile.length() > fileLength) {
                 mediaFile.delete()
                 tempFile.renameTo(mediaFile)
-                Log.i(TAG, "Carátula 'covr' incrustada con éxito en ${mediaFile.name}")
+                Log.i(TAG, "Carátula 'covr' incrustada con éxito (streaming) en ${mediaFile.name} (${fileLength / (1024 * 1024)} MB)")
+                true
             } else {
                 tempFile.delete()
+                false
             }
-
-            // Guardar también carátula complementaria .jpg para visores de archivos locales
-            try {
-                val companionArt = File(mediaFile.parentFile, "${mediaFile.nameWithoutExtension}.jpg")
-                companionArt.writeBytes(coverBytes)
-            } catch (_: Exception) {}
-
-            true
         } catch (e: Exception) {
+            tempFile.delete()
             Log.e(TAG, "Error al incrustar átomo covr en ${mediaFile.name}", e)
             false
         }
@@ -290,13 +360,16 @@ object CoverArtHelper {
                 data[i + 2] == 'c'.code.toByte() && data[i + 3] == 'o'.code.toByte()) {
                 val stcoBoxStart = i - 4
                 if (stcoBoxStart >= moovStart && stcoBoxStart + 16 <= moovEnd) {
+                    val boxSize = readUInt32(data, stcoBoxStart)
                     val count = readUInt32(data, stcoBoxStart + 12).toInt()
                     val entriesStart = stcoBoxStart + 16
-                    for (c in 0 until count) {
-                        val pos = entriesStart + c * 4
-                        if (pos + 4 <= moovEnd) {
-                            val oldOff = readUInt32(data, pos)
-                            writeUInt32(oldOff + delta, data, pos)
+                    if (count >= 0 && boxSize == 16L + count * 4L) {
+                        for (c in 0 until count) {
+                            val pos = entriesStart + c * 4
+                            if (pos + 4 <= moovEnd) {
+                                val oldOff = readUInt32(data, pos)
+                                writeUInt32(oldOff + delta, data, pos)
+                            }
                         }
                     }
                 }
@@ -304,13 +377,16 @@ object CoverArtHelper {
                        data[i + 2] == '6'.code.toByte() && data[i + 3] == '4'.code.toByte()) {
                 val co64BoxStart = i - 4
                 if (co64BoxStart >= moovStart && co64BoxStart + 16 <= moovEnd) {
+                    val boxSize = readUInt32(data, co64BoxStart)
                     val count = readUInt32(data, co64BoxStart + 12).toInt()
                     val entriesStart = co64BoxStart + 16
-                    for (c in 0 until count) {
-                        val pos = entriesStart + c * 8
-                        if (pos + 8 <= moovEnd) {
-                            val oldOff = readUInt64(data, pos)
-                            writeUInt64(oldOff + delta, data, pos)
+                    if (count >= 0 && boxSize == 16L + count * 8L) {
+                        for (c in 0 until count) {
+                            val pos = entriesStart + c * 8
+                            if (pos + 8 <= moovEnd) {
+                                val oldOff = readUInt64(data, pos)
+                                writeUInt64(oldOff + delta, data, pos)
+                            }
                         }
                     }
                 }

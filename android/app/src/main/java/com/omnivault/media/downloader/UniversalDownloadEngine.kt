@@ -459,7 +459,7 @@ class UniversalDownloadEngine private constructor(context: Context) {
                 addOption("--no-mtime")
                 addOption("--concurrent-fragments", 8)
                 addOption("--buffer-size", "256K")
-                addOption("--extractor-args", "youtube:player_client=android,web")
+                addOption("--extractor-args", "youtube:player_client=android_vr,tv,default")
                 addOption("--retries", 3)
                 addOption("--fragment-retries", 3)
                 addOption("--socket-timeout", 20)
@@ -594,7 +594,15 @@ class UniversalDownloadEngine private constructor(context: Context) {
 
             // Si es audio, asegurar carátula local y archivo de letras sincronizadas (.lrc)
             var localCoverPath: String? = null
-            val coverBytes = CoverArtHelper.downloadCoverBytes(metadata.thumbnailUrl)
+            var effectiveThumbUrl = metadata.thumbnailUrl
+            if (effectiveThumbUrl.isNullOrBlank()) {
+                val ytId = Regex("(?:v=|youtu\\.be/|shorts/|embed/|live/)([A-Za-z0-9_-]{11})")
+                    .find(cleanUrl)?.groupValues?.getOrNull(1)
+                if (!ytId.isNullOrBlank()) {
+                    effectiveThumbUrl = "https://i.ytimg.com/vi/$ytId/hqdefault.jpg"
+                }
+            }
+            val coverBytes = CoverArtHelper.downloadCoverBytes(effectiveThumbUrl)
             if (coverBytes != null && coverBytes.isNotEmpty()) {
                 val cachedCover = CoverArtHelper.cacheCoverLocally(appContext, processId, coverBytes)
                 if (cachedCover != null) {

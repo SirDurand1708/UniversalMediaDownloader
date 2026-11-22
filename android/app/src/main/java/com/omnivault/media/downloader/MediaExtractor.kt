@@ -812,19 +812,30 @@ object MediaExtractor {
                     else -> 480
                 }
                 val videoMp4Adaptive = adaptiveList.filter { it.mime.startsWith("video/mp4") }
-                val avc1Candidates = videoMp4Adaptive.filter { it.mime.contains("avc1", ignoreCase = true) }
-                val matchingAvc1 = avc1Candidates
-                    .filter { it.height in 1..targetHeight }
-                    .sortedWith(compareByDescending<YtStreamCandidate> { it.height }.thenByDescending { it.bitrate })
-                val fallbackAvc1 = avc1Candidates
-                    .filter { it.height > targetHeight }
-                    .sortedWith(compareBy<YtStreamCandidate> { it.height }.thenByDescending { it.bitrate })
-                val otherMp4 = videoMp4Adaptive
-                    .filter { !it.mime.contains("avc1", ignoreCase = true) }
-                    .sortedWith(compareByDescending<YtStreamCandidate> { it.height }.thenByDescending { it.bitrate })
+                val orderedVideoCandidates = if (requestedFormat == MediaFormat.MP4_MAX) {
+                    videoMp4Adaptive
+                        .filter { it.height in 1..targetHeight }
+                        .sortedWith(
+                            compareByDescending<YtStreamCandidate> { it.height }
+                                .thenByDescending { it.bitrate }
+                                .thenByDescending { it.mime.contains("avc1", ignoreCase = true) }
+                        )
+                } else {
+                    val avc1Candidates = videoMp4Adaptive.filter { it.mime.contains("avc1", ignoreCase = true) }
+                    val matchingAvc1 = avc1Candidates
+                        .filter { it.height in 1..targetHeight }
+                        .sortedWith(compareByDescending<YtStreamCandidate> { it.height }.thenByDescending { it.bitrate })
+                    val fallbackAvc1 = avc1Candidates
+                        .filter { it.height > targetHeight }
+                        .sortedWith(compareBy<YtStreamCandidate> { it.height }.thenByDescending { it.bitrate })
+                    val otherMp4 = videoMp4Adaptive
+                        .filter { !it.mime.contains("avc1", ignoreCase = true) }
+                        .sortedWith(compareByDescending<YtStreamCandidate> { it.height }.thenByDescending { it.bitrate })
+                    matchingAvc1 + fallbackAvc1 + otherMp4
+                }
 
                 val orderedVideos = prioritizeItag(
-                    (matchingAvc1 + fallbackAvc1 + otherMp4).distinctBy { it.url },
+                    orderedVideoCandidates.distinctBy { it.url },
                     preferredItag
                 )
                 val orderedDashAudios = prioritizeItag(

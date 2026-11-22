@@ -3,7 +3,7 @@
 ; Abre este archivo en Inno Setup Compiler y presiona 'Compile' (F9).
 
 #ifndef MyAppVersion
-#define MyAppVersion "2.5.52"
+#define MyAppVersion "2.5.53"
 #endif
 
 #ifndef OutputBaseFilename

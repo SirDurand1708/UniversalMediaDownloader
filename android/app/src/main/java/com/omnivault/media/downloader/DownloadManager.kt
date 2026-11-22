@@ -185,6 +185,7 @@ class DownloadManager private constructor(private val context: Context) {
                 }
                 request.addOption("-f", formatSelector)
                 request.addOption("-S", "res,fps,br")
+                request.addOption("--extractor-args", "youtube:player_client=android_vr,tv,default")
                 request.addOption("--merge-output-format", "mp4")
             }
 
