@@ -44,6 +44,10 @@ fun ArtistDetailScreen(
     val defaultBackground = MaterialTheme.colorScheme.background
     var gradientColors by remember { mutableStateOf(Color.Transparent to defaultBackground) }
     
+    val imageLoader = remember(context) { coil.ImageLoader(context) }
+    DisposableEffect(imageLoader) {
+        onDispose { imageLoader.shutdown() }
+    }
     LaunchedEffect(artist.imageUrl) {
         if (artist.imageUrl != null) {
             try {
@@ -51,7 +55,7 @@ fun ArtistDetailScreen(
                     .data(artist.imageUrl)
                     .allowHardware(false)
                     .build()
-                val result = coil.ImageLoader(context).execute(request)
+                val result = imageLoader.execute(request)
                 val bitmap = (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
                 bitmap?.let {
                     androidx.palette.graphics.Palette.from(it).generate { palette ->

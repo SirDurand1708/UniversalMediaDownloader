@@ -37,14 +37,14 @@ fun EqualizerScreen(
 ) {
     val isEnabled by viewModel.isEnabled.collectAsState()
     val bandLevels by viewModel.bandLevels.collectAsState()
-    val bandCount = remember { viewModel.getBandCount() }
-    val levelRange = remember { viewModel.getLevelRange() }
+    val bandCount = remember(bandLevels) { viewModel.getBandCount() }
+    val levelRange = remember(bandLevels) { viewModel.getLevelRange() }
     
     val bassBoost by viewModel.bassBoost.collectAsState()
     val virtualizer by viewModel.virtualizer.collectAsState()
     val volumeBoost by viewModel.volumeBoost.collectAsState()
     
-    val presets = remember { viewModel.getPresets() }
+    val presets = remember(bandLevels) { viewModel.getPresets() }
     var selectedPreset by remember { mutableIntStateOf(-1) }
     
     // Glassy Background Color
@@ -469,7 +469,8 @@ fun PremiumVerticalSlider(
             cornerRadius = CornerRadius(cornerRadius)
         )
         
-        val fraction = (value - min) / (max - min)
+        val range = max - min
+        val fraction = if (range > 0f) ((value - min) / range).coerceIn(0f, 1f) else 0.5f
         val thumbY = height * (1 - fraction)
         
         // 2. Active Fill (Gradient)
@@ -526,12 +527,13 @@ fun PremiumVerticalSlider(
     }
 }
 
-private fun formatFrequency(freq: Int): String {
-    return if (freq >= 1000 * 1000) {
-        "${freq / (1000 * 1000)}k"
-    } else if (freq >= 1000) {
-        "${freq / 1000}k"
+private fun formatFrequency(freqMilliHz: Int): String {
+    val hz = freqMilliHz / 1000
+    return if (hz >= 1000) {
+        "${hz / 1000}k"
+    } else if (hz > 0) {
+        "${hz}Hz"
     } else {
-        "$freq"
+        "${freqMilliHz}Hz"
     }
 }

@@ -32,8 +32,8 @@ data class UpdateInfo(
 
 object UpdateManager {
     private const val TAG = "UpdateManager"
-    const val CURRENT_VERSION_NAME = "2.5.54"
-    const val CURRENT_VERSION_CODE = 304
+    const val CURRENT_VERSION_NAME = "2.5.55"
+    const val CURRENT_VERSION_CODE = 305
     private const val UPDATE_URL = "https://raw.githubusercontent.com/SirDurand1708/UniversalMediaDownloader/main/version.json"
 
     private val client = OkHttpClient.Builder()
@@ -121,6 +121,8 @@ object UpdateManager {
     /**
      * Descarga el APK oficial en segundo plano e invoca el instalador nativo del sistema operativo.
      */
+    private val isDownloading = java.util.concurrent.atomic.AtomicBoolean(false)
+
     fun downloadAndInstallUpdate(
         context: Context,
         apkUrl: String,
@@ -129,6 +131,10 @@ object UpdateManager {
         onComplete: ((File) -> Unit)? = null,
         onError: ((String) -> Unit)? = null
     ) {
+        if (!isDownloading.compareAndSet(false, true)) {
+            onError?.invoke("Ya hay una descarga de actualización en curso")
+            return
+        }
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val updateDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "updates")
@@ -193,6 +199,8 @@ object UpdateManager {
                 withContext(Dispatchers.Main) {
                     onError?.invoke(e.message ?: "Error al descargar")
                 }
+            } finally {
+                isDownloading.set(false)
             }
         }
     }
@@ -207,8 +215,14 @@ object UpdateManager {
                 return
             }
             val pkgInfo = context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
-            if (pkgInfo != null && pkgInfo.packageName != context.packageName) {
-                Log.e(TAG, "El APK descargado no coincide con el packageName esperado: ${pkgInfo.packageName}")
+            if (pkgInfo == null || pkgInfo.packageName != context.packageName) {
+                Log.e(TAG, "El APK descargado es inválido o no coincide con el packageName esperado: ${pkgInfo?.packageName}")
+                android.widget.Toast.makeText(
+                    context,
+                    "El archivo descargado no es un APK válido",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+                apkFile.delete()
                 return
             }
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
@@ -242,6 +256,11 @@ object UpdateManager {
             context.startActivity(installIntent)
         } catch (e: Exception) {
             Log.e(TAG, "No se pudo lanzar el instalador de APK", e)
+            android.widget.Toast.makeText(
+                context,
+                "No se pudo abrir el instalador de APK: ${e.message}",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
         }
     }
 

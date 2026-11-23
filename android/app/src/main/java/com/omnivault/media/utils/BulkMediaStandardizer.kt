@@ -209,6 +209,14 @@ object BulkMediaStandardizer {
 
             if (updated) {
                 renamedCount++
+                val newPath = parentDir?.let { File(it, newDisplayName).absolutePath }
+                if (!newPath.isNullOrBlank()) {
+                    try {
+                        com.amurayada.music.data.database.DownloadDatabase.getDatabase(context)
+                            .downloadDao()
+                            .updateDownloadPathAndTitle(candidate.currentPath, newPath, candidate.newTitle)
+                    } catch (_: Exception) {}
+                }
                 renameCompanionFilesSafely(oldFile.parentFile, candidate.currentBaseName, candidate.targetBaseName)
             } else {
                 failedCount++

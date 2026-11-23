@@ -336,7 +336,7 @@ object MediaExtractor {
 
             client.newCall(req).execute().use { resp ->
                 if (resp.isSuccessful) {
-                    val html = resp.body?.string() ?: ""
+                    val html = readBoundedHtml(resp)
 
                     // 1. Título
                     var title = "Video de Facebook"
@@ -461,7 +461,7 @@ object MediaExtractor {
 
             client.newCall(req).execute().use { resp ->
                 if (resp.isSuccessful) {
-                    val html = resp.body?.string() ?: ""
+                    val html = readBoundedHtml(resp)
 
                     // Título (XVideos, Pornhub, OpenGraph, <title>)
                     var title: String? = null
@@ -1247,17 +1247,19 @@ object MediaExtractor {
     }
 
     private fun parseTikWMResponse(json: com.google.gson.JsonObject, requestedFormat: MediaFormat): ExtractedMediaInfo {
-        val data = json.getAsJsonObject("data") ?: throw Exception("Respuesta de TikTok inválida")
-        val title = data.get("title")?.asString?.ifBlank { "TikTok Video" } ?: "TikTok Video"
-        val author = data.getAsJsonObject("author")?.get("nickname")?.asString ?: "TikTok Creator"
-        val cover = data.get("cover")?.asString ?: ""
+        val dataElem = json.get("data")
+        val data = if (dataElem != null && dataElem.isJsonObject) dataElem.asJsonObject else throw Exception("Respuesta de TikTok inválida")
+        val title = data.get("title")?.takeIf { it.isJsonPrimitive }?.asString?.ifBlank { "TikTok Video" } ?: "TikTok Video"
+        val authorElem = data.get("author")?.takeIf { it.isJsonObject }?.asJsonObject
+        val author = authorElem?.get("nickname")?.takeIf { it.isJsonPrimitive }?.asString ?: "TikTok Creator"
+        val cover = data.get("cover")?.takeIf { it.isJsonPrimitive }?.asString ?: ""
 
         val streamUrl = if (requestedFormat.isAudio) {
-            var music = data.get("music")?.asString
-            if (music.isNullOrBlank()) music = data.get("play")?.asString
+            var music = data.get("music")?.takeIf { it.isJsonPrimitive }?.asString
+            if (music.isNullOrBlank()) music = data.get("play")?.takeIf { it.isJsonPrimitive }?.asString
             music ?: throw Exception("No se encontró audio disponible en este video")
         } else {
-            data.get("play")?.asString ?: throw Exception("No se encontró video disponible en este enlace")
+            data.get("play")?.takeIf { it.isJsonPrimitive }?.asString ?: throw Exception("No se encontró video disponible en este enlace")
         }
 
         val fullStreamUrl = if (streamUrl.startsWith("http")) streamUrl else "https://www.tikwm.com$streamUrl"
@@ -1288,7 +1290,7 @@ object MediaExtractor {
 
             client.newCall(req).execute().use { resp ->
                 if (resp.isSuccessful) {
-                    val html = resp.body?.string() ?: ""
+                    val html = readBoundedHtml(resp)
 
                     var hdUrl: String? = null
                     var sdUrl: String? = null
@@ -1385,7 +1387,7 @@ object MediaExtractor {
 
             client.newCall(req).execute().use { resp ->
                 if (resp.isSuccessful) {
-                    val html = resp.body?.string() ?: ""
+                    val html = readBoundedHtml(resp)
                     val videoMatcher = Pattern.compile("/video_redirect/\\?src=([^\"&]+)").matcher(html)
                     if (videoMatcher.find()) {
                         val encodedStream = videoMatcher.group(1)
@@ -1475,7 +1477,7 @@ object MediaExtractor {
 
             client.newCall(req).execute().use { resp ->
                 if (resp.isSuccessful) {
-                    val html = resp.body?.string() ?: ""
+                    val html = readBoundedHtml(resp)
 
                     // a. XVideos / XNXX (html5player.setVideoUrlHigh / Low)
                     var streamUrl: String? = null
@@ -1634,7 +1636,7 @@ object MediaExtractor {
 
             client.newCall(req).execute().use { resp ->
                 if (resp.isSuccessful) {
-                    val html = resp.body?.string() ?: ""
+                    val html = readBoundedHtml(resp)
 
                     // Regex para og:video
                     val videoMatcher = Pattern.compile("<meta\\s+(?:property|name)=[\"']og:video[\"']\\s+content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE).matcher(html)
@@ -1651,5 +1653,30 @@ object MediaExtractor {
             }
         } catch (_: Exception) {}
         return result
+    }
+
+    private fun readBoundedHtml(resp: okhttp3.Response, maxBytes: Long = 2L * 1024L * 1024L): String {
+        val ct = resp.header("Content-Type")?.lowercase() ?: ""
+        if (ct.startsWith("video/") || ct.startsWith("audio/") || ct.contains("application/octet-stream")) {
+            return ""
+        }
+        val body = resp.body ?: return ""
+        val contentLen = body.contentLength()
+        if (contentLen > maxBytes) return ""
+        return try {
+            val stream = body.byteStream()
+            val out = java.io.ByteArrayOutputStream()
+            val buf = ByteArray(16384)
+            var total = 0L
+            while (total < maxBytes) {
+                val read = stream.read(buf, 0, minOf(buf.size.toLong(), maxBytes - total).toInt())
+                if (read <= 0) break
+                out.write(buf, 0, read)
+                total += read
+            }
+            out.toString(Charsets.UTF_8.name())
+        } catch (_: Exception) {
+            ""
+        }
     }
 }

@@ -42,13 +42,13 @@ fun SyncedLyricsView(
     val parsedLyrics = remember(lyrics) { parseLyrics(lyrics) }
     val listState = rememberLazyListState()
     
-    // Auto-scroll logic (only when not editing)
-    LaunchedEffect(currentPosition, parsedLyrics, isEditing) {
-        if (parsedLyrics.isNotEmpty() && !isEditing) {
-            val currentIndex = parsedLyrics.indexOfLast { it.timestamp <= currentPosition }
-            if (currentIndex >= 0) {
-                listState.animateScrollToItem(currentIndex, scrollOffset = -200)
-            }
+    // Auto-scroll logic (only when active lyric line changes and not editing)
+    val currentIndex = remember(currentPosition, parsedLyrics) {
+        if (parsedLyrics.isNotEmpty()) parsedLyrics.indexOfLast { it.timestamp <= currentPosition } else -1
+    }
+    LaunchedEffect(currentIndex, isEditing) {
+        if (parsedLyrics.isNotEmpty() && !isEditing && currentIndex >= 0) {
+            listState.animateScrollToItem(currentIndex, scrollOffset = -200)
         }
     }
 

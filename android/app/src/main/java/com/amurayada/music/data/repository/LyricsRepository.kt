@@ -82,19 +82,32 @@ class LyricsRepository(context: Context) {
     }
 
     private fun performLrclibRequest(urlString: String, targetDuration: Int, isExact: Boolean): String? {
+        var connection: HttpURLConnection? = null
         try {
             val url = URL(urlString)
-            val connection = url.openConnection() as HttpURLConnection
-            
-            connection.requestMethod = "GET"
-            connection.setRequestProperty("User-Agent", USER_AGENT)
-            connection.connectTimeout = 10000
-            connection.readTimeout = 10000
-            
+            connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                setRequestProperty("User-Agent", USER_AGENT)
+                connectTimeout = 10000
+                readTimeout = 10000
+            }
+
             val responseCode = connection.responseCode
-            
+
             if (responseCode == HttpURLConnection.HTTP_OK) {
-                val response = connection.inputStream.bufferedReader().readText()
+                val response = connection.inputStream.bufferedReader().use { reader ->
+                    val sb = StringBuilder()
+                    val buf = CharArray(8192)
+                    var total = 0
+                    val maxChars = 512 * 1024
+                    while (total < maxChars) {
+                        val n = reader.read(buf, 0, minOf(buf.size, maxChars - total))
+                        if (n <= 0) break
+                        sb.append(buf, 0, n)
+                        total += n
+                    }
+                    sb.toString()
+                }
                 
                 if (isExact) {
                     // Handle single object response
@@ -108,21 +121,6 @@ class LyricsRepository(context: Context) {
                     // Find best match in search results
                     for (i in 0 until jsonArray.length()) {
                         val item = jsonArray.getJSONObject(i)
-                        
-                        // Basic artist check: must contain the artist name or vice versa
-                        // This prevents "Hello" by Adele matching "Hello" by Lionel Richie if the search is fuzzy
-                        val itemArtist = item.optString("artistName", "")
-                        if (itemArtist.isNotEmpty()) {
-                             // Clean up artist names for comparison (remove special chars, lowercase)
-                             val cleanItemArtist = itemArtist.lowercase().replace(Regex("[^a-z0-9]"), "")
-                             val cleanSongArtist = urlString.substringAfter("artist_name=").substringBefore("&").replace("+", " ").lowercase().replace(Regex("[^a-z0-9]"), "")
-                             
-                             // We can't easily get the original song artist here without passing it down
-                             // But we can check if the item artist is roughly similar to what we expect
-                             // Or we can just trust the search query "q=title artist" usually puts the right one on top
-                             // Let's rely on the fact that we searched for "Title Artist"
-                        }
-
                         val lyrics = extractLyricsFromJson(item, targetDuration, false)
                         if (lyrics != null) return lyrics
                     }
@@ -138,12 +136,14 @@ class LyricsRepository(context: Context) {
         } catch (e: Exception) {
             Log.w(TAG, "Request failed: ${e.message}")
             return null
+        } finally {
+            try { connection?.disconnect() } catch (_: Exception) {}
         }
     }
 
     private fun extractLyricsFromJson(json: JSONObject, targetDuration: Int, strictDuration: Boolean): String? {
-        val syncedLyrics = json.optString("syncedLyrics", null)
-        val plainLyrics = json.optString("plainLyrics", null)
+        val syncedLyrics = if (json.isNull("syncedLyrics")) null else json.optString("syncedLyrics", "").takeIf { it.isNotBlank() && it != "null" }
+        val plainLyrics = if (json.isNull("plainLyrics")) null else json.optString("plainLyrics", "").takeIf { it.isNotBlank() && it != "null" }
         val apiDuration = json.optInt("duration", 0)
         
         // Duration check

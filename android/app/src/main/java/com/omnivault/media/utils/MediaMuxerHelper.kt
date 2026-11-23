@@ -105,6 +105,8 @@ object MediaMuxerHelper {
 
             var videoDone = false
             var audioDone = false
+            var lastVideoPts = 0L
+            var lastAudioPts = 0L
 
             // Intercalado cronológico estricto de muestras para compatibilidad total con MediaMuxer en Android
             while (!videoDone || !audioDone) {
@@ -117,7 +119,9 @@ object MediaMuxerHelper {
                     if (videoBufferInfo.size < 0) {
                         videoDone = true
                     } else {
-                        videoBufferInfo.presentationTimeUs = videoExtractor.sampleTime.coerceAtLeast(0L)
+                        val pts = maxOf(lastVideoPts, videoExtractor.sampleTime.coerceAtLeast(0L))
+                        lastVideoPts = pts
+                        videoBufferInfo.presentationTimeUs = pts
                         videoBufferInfo.flags = videoExtractor.sampleFlags
                         muxer.writeSampleData(muxerVideoTrack, videoBuffer, videoBufferInfo)
                         videoExtractor.advance()
@@ -128,7 +132,9 @@ object MediaMuxerHelper {
                     if (audioBufferInfo.size < 0) {
                         audioDone = true
                     } else {
-                        audioBufferInfo.presentationTimeUs = audioExtractor.sampleTime.coerceAtLeast(0L)
+                        val pts = maxOf(lastAudioPts, audioExtractor.sampleTime.coerceAtLeast(0L))
+                        lastAudioPts = pts
+                        audioBufferInfo.presentationTimeUs = pts
                         audioBufferInfo.flags = audioExtractor.sampleFlags
                         muxer.writeSampleData(muxerAudioTrack, audioBuffer, audioBufferInfo)
                         audioExtractor.advance()
@@ -136,14 +142,14 @@ object MediaMuxerHelper {
                 }
             }
 
+            muxer.stop()
             Log.i(TAG, "Remuxing exitoso de 1080p FHD: ${outputFile.name} (${outputFile.length() / 1024} KB)")
-            return true
+            return outputFile.exists() && outputFile.length() > 0L
 
         } catch (e: Exception) {
             Log.e(TAG, "Error durante remuxing de pistas DASH: ${e.message}", e)
             return false
         } finally {
-            try { muxer?.stop() } catch (_: Exception) {}
             try { muxer?.release() } catch (_: Exception) {}
             try { videoExtractor?.release() } catch (_: Exception) {}
             try { audioExtractor?.release() } catch (_: Exception) {}

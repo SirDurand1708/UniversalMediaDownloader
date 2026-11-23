@@ -170,7 +170,7 @@ fun QueueSheet(
                     ) {
                         itemsIndexed(
                             items = queue,
-                            key = { _, song -> song.id },
+                            key = { index, song -> "${song.id}_$index" },
                             contentType = { _, _ -> "queue_item" }
                         ) { index, song ->
                             val isPlaying = song.id == currentSong.id

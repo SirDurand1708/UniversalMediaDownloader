@@ -625,7 +625,7 @@ private fun GoogleStyleAlbumCard(
 @Composable
 private fun GoogleStyleListItem(
     song: Song,
-    onDownloadClick: () -> Unit = {},
+    onDownloadClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -674,36 +674,37 @@ private fun GoogleStyleListItem(
             )
         }
         
-        Spacer(Modifier.width(16.dp))
-        
-        // 3-Dots Menu
-        Box(modifier = Modifier.offset(x = 8.dp)) {
-            IconButton(
-                onClick = { showMenu = true },
-                modifier = Modifier.size(24.dp)
-            ) {
-                Icon(
-                    Icons.Rounded.MoreVert,
-                    contentDescription = "Opciones",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-            DropdownMenu(
-                expanded = showMenu,
-                onDismissRequest = { showMenu = false },
-                modifier = Modifier.background(MaterialTheme.colorScheme.surface)
-            ) {
-                DropdownMenuItem(
-                    text = { Text("Descargar") },
-                    onClick = { 
-                        showMenu = false
-                        onDownloadClick()
-                    },
-                    leadingIcon = {
-                        Icon(Icons.Rounded.Download, contentDescription = null)
-                    }
-                )
+        // 3-Dots Menu (solo si hay acción de descarga disponible)
+        if (onDownloadClick != null) {
+            Spacer(Modifier.width(16.dp))
+            Box(modifier = Modifier.offset(x = 8.dp)) {
+                IconButton(
+                    onClick = { showMenu = true },
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.MoreVert,
+                        contentDescription = "Opciones",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Descargar") },
+                        onClick = {
+                            showMenu = false
+                            onDownloadClick()
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Rounded.Download, contentDescription = null)
+                        }
+                    )
+                }
             }
         }
     }

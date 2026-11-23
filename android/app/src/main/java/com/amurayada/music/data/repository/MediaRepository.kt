@@ -362,19 +362,22 @@ class MediaRepository(private val context: Context) {
     }
 
     suspend fun getGenreForAudio(audioId: Long): String? = withContext(Dispatchers.IO) {
+        if (audioId <= 0L || audioId > Int.MAX_VALUE) return@withContext null
         var genre: String? = null
-        val uri = MediaStore.Audio.Genres.getContentUriForAudioId("external", audioId.toInt())
-        context.contentResolver.query(
-            uri,
-            arrayOf(MediaStore.Audio.Genres.NAME),
-            null,
-            null,
-            null
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                genre = cursor.getString(0)
+        try {
+            val uri = MediaStore.Audio.Genres.getContentUriForAudioId("external", audioId.toInt())
+            context.contentResolver.query(
+                uri,
+                arrayOf(MediaStore.Audio.Genres.NAME),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    genre = cursor.getString(0)
+                }
             }
-        }
+        } catch (_: Exception) {}
         genre
     }
 
@@ -485,7 +488,6 @@ class MediaRepository(private val context: Context) {
                     urisNeedingPermission.add(uri)
                 } catch (e: Exception) {
                     android.util.Log.e("MediaRepository", "Error updating tags for $uri: ${e.message}", e)
-                    urisNeedingPermission.add(uri)
                 } finally {
                     tempFile.delete()
                 }
@@ -505,15 +507,18 @@ class MediaRepository(private val context: Context) {
             org.jaudiotagger.tag.TagOptionSingleton.getInstance().iD3V2Version = org.jaudiotagger.tag.reference.ID3V2Version.ID3_V23
             
             if (pathsToScan.isNotEmpty() && totalUpdated > 0) {
-                kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
-                    var completed = 0
-                    android.media.MediaScannerConnection.scanFile(context, pathsToScan.toTypedArray(), null) { path, uri ->
-                        if (uri != null) context.contentResolver.notifyChange(uri, null)
-                        completed++
-                        if (completed >= pathsToScan.size && cont.isActive) cont.resume(Unit) {}
+                kotlinx.coroutines.withTimeoutOrNull(5000L) {
+                    kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
+                        val completed = java.util.concurrent.atomic.AtomicInteger(0)
+                        android.media.MediaScannerConnection.scanFile(context, pathsToScan.toTypedArray(), null) { _, uri ->
+                            if (uri != null) context.contentResolver.notifyChange(uri, null)
+                            if (completed.incrementAndGet() >= pathsToScan.size && cont.isActive) {
+                                cont.resume(Unit) {}
+                            }
+                        }
                     }
                 }
-                kotlinx.coroutines.delay(1000)
+                kotlinx.coroutines.delay(500)
             }
             
             return@withContext Result.success(albumId)
@@ -668,6 +673,7 @@ class MediaRepository(private val context: Context) {
                     }
 
                     // Intentar editar etiquetas físicas con JAudioTagger si el contenedor es soportado
+                    var tagCommitted = false
                     try {
                         val audioFile = org.jaudiotagger.audio.AudioFileIO.read(tempFile)
                         val tag = audioFile.tagOrCreateAndSetDefault
@@ -675,12 +681,13 @@ class MediaRepository(private val context: Context) {
                         tag.setField(org.jaudiotagger.tag.FieldKey.ARTIST, newArtist)
                         tag.setField(org.jaudiotagger.tag.FieldKey.ALBUM, newAlbum)
                         audioFile.commit()
+                        tagCommitted = true
                     } catch (e: Exception) {
                         android.util.Log.w("MediaRepo", "JAudioTagger skipped/unsupported for $ext: ${e.message}")
                     }
 
-                    // Escribir al descriptor solo si tempFile es válido
-                    if (tempFile.exists() && tempFile.length() > 0L) {
+                    // Escribir al descriptor solo si JAudioTagger completó commit correctamente
+                    if (tagCommitted && tempFile.exists() && tempFile.length() > 0L) {
                         context.contentResolver.openFileDescriptor(targetUri, "rwt")?.use { writePfd ->
                             java.io.FileInputStream(tempFile).use { input ->
                                 java.io.FileOutputStream(writePfd.fileDescriptor).use { output ->

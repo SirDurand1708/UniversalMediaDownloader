@@ -95,38 +95,18 @@ fun CanvasPlayer(
 
     LaunchedEffect(uri) {
         if (uri == null) {
-            exoPlayer.pause()
+            exoPlayer.stop()
+            exoPlayer.clearMediaItems()
             isFirstFrameRendered = false
             return@LaunchedEffect
         }
         
-        // Use default 10s loop if no specific range provided (or if defaults are used)
-        // If the caller wants the full video, they should usually pass specific params, 
-        // but for Canvas, we prefer the loop.
-        val effectiveStart = if (startMs < 0) 0L else startMs
-        val effectiveEnd = if (endMs <= effectiveStart) effectiveStart + 10000L else endMs
-        
-        Log.d(TAG, "Loading Canvas: uri=$uri, start=$effectiveStart, end=$effectiveEnd")
+        Log.d(TAG, "Loading Canvas: uri=$uri")
         isFirstFrameRendered = false
         
         try {
-            val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(context)
-            val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory)
             val baseMediaItem = MediaItem.fromUri(Uri.parse(uri))
-            var mediaSource = mediaSourceFactory.createMediaSource(baseMediaItem)
-            
-            // Clipping Logic - Always apply for Canvas feel
-            val clippingSource = androidx.media3.exoplayer.source.ClippingMediaSource(
-                mediaSource,
-                effectiveStart * 1000,
-                effectiveEnd * 1000,
-                false,
-                false,
-                true
-            )
-            mediaSource = androidx.media3.exoplayer.source.LoopingMediaSource(clippingSource)
-            
-            exoPlayer.setMediaSource(mediaSource)
+            exoPlayer.setMediaItem(baseMediaItem)
             exoPlayer.prepare()
             exoPlayer.play()
         } catch (e: Exception) {
@@ -138,6 +118,7 @@ fun CanvasPlayer(
     DisposableEffect(Unit) {
         onDispose {
             Log.d(TAG, "Releasing player")
+            exoPlayer.clearVideoSurface()
             exoPlayer.release()
         }
     }

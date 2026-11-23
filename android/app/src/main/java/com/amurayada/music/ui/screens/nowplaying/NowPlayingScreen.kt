@@ -190,6 +190,9 @@ fun NowPlayingScreen(
     // Dynamic colors from album art
     var gradientColors by remember { mutableStateOf(Color.Black to Color.Black) }
     val imageLoader = remember(context) { ImageLoader(context) }
+    DisposableEffect(imageLoader) {
+        onDispose { imageLoader.shutdown() }
+    }
     
     LaunchedEffect(currentSong.albumArtUri) {
         try {
@@ -291,6 +294,13 @@ fun NowPlayingScreen(
                             if (horizontalDragOffset > 0) onSkipPreviousClick() else onSkipNextClick()
                         }
                         horizontalDragOffset = 0f
+                    }
+                },
+                onDragCancel = {
+                    horizontalDragOffset = 0f
+                    scope.launch {
+                        launch { dismissOffsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow)) }
+                        launch { dismissScale.animateTo(1f, spring(stiffness = Spring.StiffnessMediumLow)) }
                     }
                 },
                 onDrag = { change, dragAmount ->

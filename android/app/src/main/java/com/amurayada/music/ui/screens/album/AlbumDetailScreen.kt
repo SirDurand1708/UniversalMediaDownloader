@@ -76,6 +76,10 @@ fun AlbumDetailScreen(
     }
     
     // Re-run palette generation when album art or library version changes
+    val imageLoader = remember(context) { ImageLoader(context) }
+    DisposableEffect(imageLoader) {
+        onDispose { imageLoader.shutdown() }
+    }
     LaunchedEffect(album.artworkUri, libraryVersion) {
         try {
             val request = ImageRequest.Builder(context)
@@ -83,7 +87,7 @@ fun AlbumDetailScreen(
                 .setParameter("v", libraryVersion) // Force reload if version changes
                 .allowHardware(false)
                 .build()
-            val result = ImageLoader(context).execute(request)
+            val result = imageLoader.execute(request)
             val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
             bitmap?.let {
                 Palette.from(it).generate { palette ->

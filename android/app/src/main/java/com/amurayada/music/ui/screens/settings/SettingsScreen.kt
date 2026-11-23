@@ -674,7 +674,11 @@ fun SettingsScreen(
                                         if (release.downloadUrl.endsWith(".apk", ignoreCase = true)) {
                                             settingsViewModel.downloadAndInstallApk(release.downloadUrl)
                                         } else {
-                                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.downloadUrl)))
+                                            try {
+                                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.downloadUrl)))
+                                            } catch (_: Exception) {
+                                                Toast.makeText(context, "No hay aplicación disponible para abrir el enlace", Toast.LENGTH_SHORT).show()
+                                            }
                                         }
                                     }
                                 ) {
@@ -732,7 +736,11 @@ fun SettingsScreen(
                                             if (status.release.downloadUrl.endsWith(".apk", ignoreCase = true)) {
                                                 settingsViewModel.downloadAndInstallApk(status.release.downloadUrl)
                                             } else {
-                                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(status.release.downloadUrl)))
+                                                try {
+                                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(status.release.downloadUrl)))
+                                                } catch (_: Exception) {
+                                                    Toast.makeText(context, "No hay aplicación disponible para abrir el enlace", Toast.LENGTH_SHORT).show()
+                                                }
                                             }
                                         },
                                         modifier = Modifier.fillMaxWidth()
@@ -812,8 +820,12 @@ fun SettingsScreen(
                         icon = Icons.Rounded.Code,
                         showChevron = true,
                         onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/SirDurand1708/UniversalMediaDownloader"))
-                            context.startActivity(intent)
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/SirDurand1708/UniversalMediaDownloader"))
+                                context.startActivity(intent)
+                            } catch (_: Exception) {
+                                Toast.makeText(context, "No hay aplicación disponible para abrir el enlace", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     )
                     SettingsItem(
@@ -1149,20 +1161,40 @@ fun SettingsScreen(
                             withContext(Dispatchers.IO) {
                                 batch.forEach { (song, _) ->
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !song.path.contains(context.packageName)) {
-                                        pendingUris.add(
+                                        val candidateUri = if (song.path.startsWith("content://")) {
+                                            Uri.parse(song.path)
+                                        } else {
                                             android.content.ContentUris.withAppendedId(
                                                 android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                                                 song.id
                                             )
-                                        )
-                                    } else if (File(song.path).delete()) {
+                                        }
+                                        val existsInMediaStore = try {
+                                            context.contentResolver.query(
+                                                candidateUri,
+                                                arrayOf(android.provider.MediaStore.Audio.Media._ID),
+                                                null,
+                                                null,
+                                                null
+                                            )?.use { it.moveToFirst() } == true
+                                        } catch (_: Exception) { false }
+                                        if (existsInMediaStore) {
+                                            pendingUris.add(candidateUri)
+                                        } else if (!song.path.startsWith("content://") && File(song.path).delete()) {
+                                            deletedDirect++
+                                        }
+                                    } else if (!song.path.startsWith("content://") && File(song.path).delete()) {
                                         deletedDirect++
                                     }
                                 }
                             }
                             if (pendingUris.isNotEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                val pi = android.provider.MediaStore.createDeleteRequest(context.contentResolver, pendingUris)
-                                deleteDuplicatesLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+                                try {
+                                    val pi = android.provider.MediaStore.createDeleteRequest(context.contentResolver, pendingUris)
+                                    deleteDuplicatesLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "No se pudo solicitar eliminación: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
                             } else {
                                 onRescanLibrary()
                                 Toast.makeText(context, "$deletedDirect canciones duplicadas eliminadas", Toast.LENGTH_SHORT).show()

@@ -116,15 +116,22 @@ object StorageHelper {
 
                 val contentUri = appContext.contentResolver.insert(collection, contentValues)
                 if (contentUri != null) {
-                    appContext.contentResolver.openOutputStream(contentUri)?.use { outputStream ->
-                        sourceFile.inputStream().use { inputStream ->
-                            inputStream.copyTo(outputStream, bufferSize = 262_144)
+                    try {
+                        val out = appContext.contentResolver.openOutputStream(contentUri)
+                            ?: throw java.io.IOException("No se pudo abrir flujo MediaStore")
+                        out.use { outputStream ->
+                            sourceFile.inputStream().use { inputStream ->
+                                inputStream.copyTo(outputStream, bufferSize = 262_144)
+                            }
                         }
-                    }
 
-                    contentValues.clear()
-                    contentValues.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
-                    appContext.contentResolver.update(contentUri, contentValues, null, null)
+                        contentValues.clear()
+                        contentValues.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                        appContext.contentResolver.update(contentUri, contentValues, null, null)
+                    } catch (e: Exception) {
+                        try { appContext.contentResolver.delete(contentUri, null, null) } catch (_: Exception) {}
+                        throw e
+                    }
 
                     // Intentar obtener la ruta física canonical
                     val projection = arrayOf(android.provider.MediaStore.MediaColumns.DATA)
@@ -177,13 +184,6 @@ object StorageHelper {
             ) { path, uri ->
                 android.util.Log.i("StorageHelper", "Media indexed in MediaStore: $path -> $uri")
             }
-
-            // 2. Broadcast de difusión para compatibilidad con reproductores de música de terceros
-            try {
-                val mediaScanIntent = android.content.Intent(android.content.Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
-                mediaScanIntent.data = android.net.Uri.fromFile(file)
-                appContext.sendBroadcast(mediaScanIntent)
-            } catch (_: Exception) {}
 
         } catch (e: Exception) {
             android.util.Log.w("StorageHelper", "Error scanning media file: ${e.message}")

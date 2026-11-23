@@ -51,9 +51,15 @@ class DownloadWorker(
         )
         
         createNotificationChannel()
-        val notificationId = songId.toInt()
-        setForeground(createForegroundInfo(title, 0, notificationId))
-        
+        val rawId = songId.toInt()
+        val notificationId = if (rawId == 0) 1001 else kotlin.math.abs(rawId)
+        try {
+            setForeground(createForegroundInfo(title, 0, notificationId))
+        } catch (_: Exception) {}
+
+        var lastNotifPct = -1
+        var lastNotifTimeMs = 0L
+
         return try {
             val database = DownloadDatabase.getDatabase(applicationContext)
             val streamRepository = StreamRepositoryImpl()
@@ -66,7 +72,15 @@ class DownloadWorker(
             downloadRepository.downloadSong(song).collect { progress ->
                 when (progress.status) {
                     DownloadStatus.DOWNLOADING -> {
-                        setForeground(createForegroundInfo(title, (progress.progress * 100).toInt(), notificationId))
+                        val pct = (progress.progress * 100).toInt().coerceIn(0, 100)
+                        val now = System.currentTimeMillis()
+                        if (pct - lastNotifPct >= 5 || now - lastNotifTimeMs >= 600L) {
+                            lastNotifPct = pct
+                            lastNotifTimeMs = now
+                            try {
+                                setForeground(createForegroundInfo(title, pct, notificationId))
+                            } catch (_: Exception) {}
+                        }
                     }
                     DownloadStatus.COMPLETED -> {
                         // Fetch lyrics immediately for offline availability

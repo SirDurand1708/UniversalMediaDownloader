@@ -61,14 +61,16 @@ object LyricsHelper {
                         for (elem in jsonArray) {
                             val obj = elem.asJsonObject
                             // Priorizar letras sincronizadas con marcas de tiempo [mm:ss.xx]
-                            val synced = obj.get("syncedLyrics")?.asString
+                            val syncedElem = obj.get("syncedLyrics")
+                            val synced = if (syncedElem != null && syncedElem.isJsonPrimitive) syncedElem.asString else null
                             if (!synced.isNullOrBlank()) {
                                 Log.i(TAG, "Letras sincronizadas encontradas para: $cleanTitle")
                                 return synced
                             }
                         }
                         // Fallback: letra plana si no hay sincronizada
-                        val plain = jsonArray[0].asJsonObject.get("plainLyrics")?.asString
+                        val plainElem = jsonArray[0].asJsonObject.get("plainLyrics")
+                        val plain = if (plainElem != null && plainElem.isJsonPrimitive) plainElem.asString else null
                         if (!plain.isNullOrBlank()) {
                             return plain
                         }

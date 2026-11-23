@@ -822,6 +822,9 @@ fun NowPlayingContent(
                                         view.player = playerController
                                     }
                                 },
+                                onRelease = { view ->
+                                    view.player = null
+                                },
                                 modifier = Modifier.fillMaxSize().background(Color.Transparent)
                             )
                         }

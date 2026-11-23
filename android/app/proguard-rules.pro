@@ -31,6 +31,7 @@
 
 # Keep model classes used with JSON serialization
 -keep class com.amurayada.music.data.model.** { *; }
+-keep class com.omnivault.media.model.** { *; }
 
 # jaudiotagger - ignore missing Java AWT/ImageIO classes (not available on Android)
 -dontwarn java.awt.**

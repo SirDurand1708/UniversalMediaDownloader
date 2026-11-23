@@ -70,10 +70,11 @@ fun LoginScreen(
                         settings.domStorageEnabled = true
                         settings.databaseEnabled = true
                         
-                        // Clear existing cookies before login
-                        CookieManager.getInstance().removeAllCookies(null)
-                        CookieManager.getInstance().setAcceptCookie(true)
-                        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                        // Clear existing cookies before login and wait before loading loginUrl
+                        var loginHandled = false
+                        val cm = CookieManager.getInstance()
+                        cm.setAcceptCookie(true)
+                        cm.setAcceptThirdPartyCookies(this, true)
                         
                         webViewClient = object : WebViewClient() {
                             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -84,11 +85,12 @@ fun LoginScreen(
                                 isLoading = false
                                 
                                 // Check if we reached YouTube Music (login success)
-                                if (url != null && url.startsWith(targetUrl)) {
-                                    val cookies = CookieManager.getInstance().getCookie(url)
+                                if (!loginHandled && url != null && url.startsWith(targetUrl)) {
+                                    val cookies = cm.getCookie(url)
                                     if (cookies != null && cookies.contains("SID")) {
-                                        // Save cookies and signal success
-                                        view?.stopLoading() // Stop loading immediately
+                                        loginHandled = true
+                                        view?.stopLoading()
+                                        cm.flush()
                                         
                                         // Offload cookie saving to IO thread to prevent ANR
                                         scope.launch(Dispatchers.IO) {
@@ -100,7 +102,7 @@ fun LoginScreen(
                                             } catch (e: Exception) {
                                                 e.printStackTrace()
                                                 withContext(Dispatchers.Main) {
-                                                     onLoginFailed("Error saving cookies: ${e.message}")
+                                                    onLoginFailed("Error saving cookies: ${e.message}")
                                                 }
                                             }
                                         }
@@ -112,18 +114,16 @@ fun LoginScreen(
                             
                             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                                 val url = request?.url?.toString() ?: return false
-                                
-                                // Detect YouTube Music redirect
                                 if (url.startsWith(targetUrl)) {
-                                    // Let the WebView load it to trigger onPageFinished
                                     return false
                                 }
-                                
                                 return false
                             }
                         }
                         
-                        loadUrl(loginUrl)
+                        cm.removeAllCookies {
+                            post { loadUrl(loginUrl) }
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxSize(),

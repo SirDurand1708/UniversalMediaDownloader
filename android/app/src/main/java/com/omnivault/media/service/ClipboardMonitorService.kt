@@ -18,24 +18,25 @@ class ClipboardMonitorService : Service(), ClipboardManager.OnPrimaryClipChanged
     companion object {
         const val ACTION_START_MONITORING = "com.omnivault.media.START_MONITORING"
         const val ACTION_STOP_MONITORING = "com.omnivault.media.STOP_MONITORING"
-        private const val FOREGROUND_NOTIFICATION_ID = 9002
+        private const val FOREGROUND_NOTIFICATION_ID = 9003
 
         fun startService(context: Context) {
             val intent = Intent(context, ClipboardMonitorService::class.java).apply {
                 action = ACTION_START_MONITORING
             }
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (_: Exception) {}
         }
 
         fun stopService(context: Context) {
-            val intent = Intent(context, ClipboardMonitorService::class.java).apply {
-                action = ACTION_STOP_MONITORING
-            }
-            context.stopService(intent)
+            try {
+                context.stopService(Intent(context, ClipboardMonitorService::class.java))
+            } catch (_: Exception) {}
         }
     }
 
@@ -97,6 +98,11 @@ class ClipboardMonitorService : Service(), ClipboardManager.OnPrimaryClipChanged
                 NotificationHelper.showClipboardDetectedNotification(this, extractedUrl)
             }
         } catch (_: Exception) {}
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        stopSelf()
+        super.onTimeout(startId, fgsType)
     }
 
     override fun onDestroy() {

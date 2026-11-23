@@ -23,54 +23,59 @@ class PlaylistRepository(private val context: Context) {
 
     suspend fun loadPlaylists() {
         withContext(Dispatchers.IO) {
-            var content: String? = if (playlistsFile.exists()) {
-                playlistsFile.readText().takeIf { it.isNotBlank() && it.trim() != "[]" }
-            } else null
+            writeMutex.withLock {
+                var content: String? = if (playlistsFile.exists()) {
+                    playlistsFile.readText().takeIf { it.isNotBlank() && it.trim() != "[]" }
+                } else null
 
-            if (content == null) {
-                val backup = PlaylistBackupManager.readBackup(context, "playlists.json")
-                if (!backup.isNullOrBlank() && backup.trim() != "[]") {
-                    content = backup
-                    try { playlistsFile.writeText(backup) } catch (_: Exception) {}
-                }
-            } else {
-                // Asegurar respaldo inicial de playlists ya existentes
-                if (PlaylistBackupManager.readBackup(context, "playlists.json").isNullOrBlank()) {
-                    PlaylistBackupManager.saveBackup(context, "playlists.json", content)
-                }
-            }
-
-            if (content != null) {
-                try {
-                    val jsonArray = JSONArray(content)
-                    val loadedPlaylists = mutableListOf<Playlist>()
-                    
-                    for (i in 0 until jsonArray.length()) {
-                        val jsonObject = jsonArray.getJSONObject(i)
-                        val id = jsonObject.getLong("id")
-                        val name = jsonObject.getString("name")
-                        val dateCreated = jsonObject.optLong("dateCreated", System.currentTimeMillis())
-                        val artworkUri = jsonObject.optString("artworkUri", "").takeIf { it.isNotBlank() }
-                        
-                        val songIdsJsonArray = jsonObject.optJSONArray("songIds")
-                        val songIds = mutableListOf<Long>()
-                        if (songIdsJsonArray != null) {
-                            for (j in 0 until songIdsJsonArray.length()) {
-                                val sid = songIdsJsonArray.optLong(j, -1L)
-                                if (sid >= 0L) songIds.add(sid)
-                            }
-                        }
-                        
-                        loadedPlaylists.add(Playlist(id = id, name = name, songIds = songIds, dateCreated = dateCreated, artworkUri = artworkUri))
+                if (content == null) {
+                    val backup = PlaylistBackupManager.readBackup(context, "playlists.json")
+                    if (!backup.isNullOrBlank() && backup.trim() != "[]") {
+                        content = backup
+                        try { playlistsFile.writeText(backup) } catch (_: Exception) {}
                     }
-                    
-                    _playlists.value = loadedPlaylists
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    _playlists.value = emptyList()
+                } else {
+                    // Asegurar respaldo inicial de playlists ya existentes
+                    if (PlaylistBackupManager.readBackup(context, "playlists.json").isNullOrBlank()) {
+                        PlaylistBackupManager.saveBackup(context, "playlists.json", content)
+                    }
                 }
-            } else {
-                _playlists.value = emptyList()
+
+                if (content != null) {
+                    try {
+                        val jsonArray = JSONArray(content)
+                        val loadedPlaylists = mutableListOf<Playlist>()
+
+                        for (i in 0 until jsonArray.length()) {
+                            val jsonObject = jsonArray.getJSONObject(i)
+                            val id = jsonObject.getLong("id")
+                            val name = jsonObject.getString("name")
+                            val dateCreated = jsonObject.optLong("dateCreated", System.currentTimeMillis())
+                            val artworkUri = jsonObject.optString("artworkUri", "").takeIf { it.isNotBlank() }
+
+                            val songIdsJsonArray = jsonObject.optJSONArray("songIds")
+                            val songIds = mutableListOf<Long>()
+                            if (songIdsJsonArray != null) {
+                                for (j in 0 until songIdsJsonArray.length()) {
+                                    val sid = songIdsJsonArray.optLong(j, -1L)
+                                    if (sid >= 0L) songIds.add(sid)
+                                }
+                            }
+
+                            loadedPlaylists.add(Playlist(id = id, name = name, songIds = songIds, dateCreated = dateCreated, artworkUri = artworkUri))
+                        }
+
+                        if (_playlists.value.isEmpty()) {
+                            _playlists.value = loadedPlaylists
+                        } else {
+                            val loadedIds = loadedPlaylists.mapTo(HashSet()) { it.id }
+                            val inMemoryNew = _playlists.value.filter { it.id !in loadedIds }
+                            _playlists.value = loadedPlaylists + inMemoryNew
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
             }
         }
     }

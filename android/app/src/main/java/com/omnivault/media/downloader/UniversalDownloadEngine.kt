@@ -674,6 +674,7 @@ class UniversalDownloadEngine private constructor(context: Context) {
                 localThumbnailPath = localCoverPath
             )
         } catch (e: CancellationException) {
+            try { downloadQueueDao.deleteById(processId) } catch (_: Exception) {}
             cancelDownload(processId)
             throw e
         } catch (e: Exception) {
@@ -735,9 +736,11 @@ class UniversalDownloadEngine private constructor(context: Context) {
                     treeDoc.findFile(displayName)?.delete()
                     val targetDoc = treeDoc.createFile(mimeType, displayName)
                     if (targetDoc != null) {
-                        appContext.contentResolver.openOutputStream(targetDoc.uri)?.use { out ->
+                        val out = appContext.contentResolver.openOutputStream(targetDoc.uri)
+                            ?: throw java.io.IOException("No se pudo abrir flujo SAF")
+                        out.use { stream ->
                             sourceFile.inputStream().use { input ->
-                                input.copyTo(out, bufferSize = 262_144)
+                                input.copyTo(stream, bufferSize = 262_144)
                             }
                         }
                         return Triple(targetDoc.uri.toString(), null, fileLength)
@@ -771,17 +774,23 @@ class UniversalDownloadEngine private constructor(context: Context) {
 
                 val insertedUri = appContext.contentResolver.insert(collectionUri, values)
                 if (insertedUri != null) {
-                    appContext.contentResolver.openOutputStream(insertedUri)?.use { out ->
-                        sourceFile.inputStream().use { input ->
-                            input.copyTo(out, bufferSize = 262_144)
+                    try {
+                        val out = appContext.contentResolver.openOutputStream(insertedUri)
+                            ?: throw java.io.IOException("No se pudo abrir flujo MediaStore")
+                        out.use { stream ->
+                            sourceFile.inputStream().use { input ->
+                                input.copyTo(stream, bufferSize = 262_144)
+                            }
                         }
+                        val completeValues = ContentValues().apply {
+                            put(MediaStore.MediaColumns.IS_PENDING, 0)
+                        }
+                        appContext.contentResolver.update(insertedUri, completeValues, null, null)
+                        return Triple(insertedUri.toString(), null, fileLength)
+                    } catch (e: Exception) {
+                        try { appContext.contentResolver.delete(insertedUri, null, null) } catch (_: Exception) {}
+                        throw e
                     }
-                    val completeValues = ContentValues().apply {
-                        put(MediaStore.MediaColumns.IS_PENDING, 0)
-                    }
-                    appContext.contentResolver.update(insertedUri, completeValues, null, null)
-
-                    return Triple(insertedUri.toString(), null, fileLength)
                 }
             } catch (e: Exception) {
                 android.util.Log.w("UniversalDownloadEngine", "MediaStore export failed, falling back to StorageHelper: ${e.message}")

@@ -331,19 +331,20 @@ class MusicPlaybackService : MediaSessionService() {
                 if (artworkUri != null && artworkUri.startsWith("http")) {
                     if (artworkUri != lastArtworkUri) {
                         lastArtworkUri = artworkUri
+                        artworkData = null
                         serviceScope.launch(Dispatchers.IO) {
                             try {
                                 val bitmap = downloadBitmap(artworkUri)
                                 if (bitmap != null) {
                                     val stream = java.io.ByteArrayOutputStream()
-                                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
-                                    artworkData = stream.toByteArray()
-                                    
-                                    android.util.Log.d("MusicPlaybackService", "Artwork capturado como ByteArray para notificación: ${artworkData?.size} bytes")
-                                    
-                                    // Forzamos actualización de metadatos en Main Thread para Media3
-                                    withContext(Dispatchers.Main) {
-                                        mediaSession?.setCustomLayout(emptyList())
+                                    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, stream)
+                                    val bytes = stream.toByteArray()
+                                    // Evitar TransactionTooLargeException en Binder (> 500 KB)
+                                    if (bytes.size <= 512 * 1024) {
+                                        artworkData = bytes
+                                        withContext(Dispatchers.Main) {
+                                            mediaSession?.setCustomLayout(emptyList())
+                                        }
                                     }
                                 }
                             } catch (e: Exception) {
@@ -774,7 +775,12 @@ class MusicPlaybackService : MediaSessionService() {
         // Now handled automatically by ExoPlayer
     }
 
+    private var isServiceDestroyed = false
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
     override fun onDestroy() {
+        isServiceDestroyed = true
+        mainHandler.removeCallbacksAndMessages(null)
         if (instance == this) instance = null
         serviceScope.cancel()
         wakeLock?.let {
@@ -862,9 +868,12 @@ class MusicPlaybackService : MediaSessionService() {
         
         // UX: Mostrar estado de "Cargando"
         isLoading = true
+        if (isServiceDestroyed) return
         updateWidget()
         
-        // 1. Capturar Estado Actual
+        // 1. Capturar Estado Actual y Cola Completa
+        val queueItems = (0 until player.mediaItemCount).map { player.getMediaItemAt(it) }
+        val currentIndex = player.currentMediaItemIndex.coerceAtLeast(0)
         val currentItem = player.currentMediaItem
         val currentPos = player.currentPosition
         val oldPlayer = player
@@ -903,8 +912,8 @@ class MusicPlaybackService : MediaSessionService() {
                 android.util.Log.e("MusicPlaybackService", "ERROR FATAL ZOMBIE: ${error.message}")
                 android.util.Log.e("MusicPlaybackService", "   - Nombre Error: ${error.errorCodeName}")
                 android.util.Log.e("MusicPlaybackService", "   - URI: ${player.currentMediaItem?.localConfiguration?.uri}")
-                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                     recreatePlayerPreservingSession()
+                mainHandler.post {
+                     if (!isServiceDestroyed) recreatePlayerPreservingSession()
                 }
             }
 
@@ -956,7 +965,6 @@ class MusicPlaybackService : MediaSessionService() {
 
         // 5. Re-envolver con "Truco SimpMusic" (Versión Base)
         val forwardingPlayer = object : androidx.media3.common.ForwardingPlayer(player) {
-            private val notificationScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
             private var lastArtworkUri: String? = null
             private var localArtworkFile: java.io.File? = null
 
@@ -967,7 +975,8 @@ class MusicPlaybackService : MediaSessionService() {
                 if (artworkUri != null && artworkUri.startsWith("http")) {
                     if (artworkUri != lastArtworkUri) {
                         lastArtworkUri = artworkUri
-                        notificationScope.launch {
+                        localArtworkFile = null
+                        serviceScope.launch(Dispatchers.IO) {
                             try {
                                 val bitmap = downloadBitmap(artworkUri)
                                 if (bitmap != null) {
@@ -978,22 +987,19 @@ class MusicPlaybackService : MediaSessionService() {
                                             val timestamp = file.name.substringAfter("notif_cover_").substringBefore(".").toLongOrNull()
                                             if (timestamp != null && (currentTime - timestamp) > 600_000) {
                                                 file.delete()
-                                                android.util.Log.d("MusicPlaybackService", "Borrada portada vieja (Ventana Segura): ${file.name}")
                                             }
-                                        } catch (e: Exception) {
-                                            android.util.Log.w("MusicPlaybackService", "Fallo al parsear/borrar ${file.name} (Resurrección)", e)
-                                        }
+                                        } catch (_: Exception) {}
                                     }
                                     
-                                    val fileName = "notif_cover_${System.currentTimeMillis()}.png"
+                                    val fileName = "notif_cover_${System.currentTimeMillis()}.jpg"
                                     val file = java.io.File(cacheDir, fileName)
                                     java.io.FileOutputStream(file).use { out ->
-                                        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                                        bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
                                     }
                                     localArtworkFile = file
-                                    android.util.Log.d("MusicPlaybackService", "Artwork cacheado (Bust/Resurrección): $fileName")
-                                    
-                                    mediaSession?.setCustomLayout(emptyList()) 
+                                    withContext(Dispatchers.Main) {
+                                        mediaSession?.setCustomLayout(emptyList())
+                                    }
                                 }
                             } catch (e: Exception) {
                                 android.util.Log.e("MusicPlaybackService", "Fallo al cachear artwork", e)
@@ -1032,12 +1038,19 @@ class MusicPlaybackService : MediaSessionService() {
         // 6. Actualizar Sesión
         mediaSession?.player = forwardingPlayer
         
-        // 7. Restaurar Contenido
+        // 7. Restaurar Contenido preservando la cola completa
         serviceScope.launch {
+            if (isServiceDestroyed) return@launch
             val repairedItem = repairMediaItemIfBroken(currentItem)
             if (repairedItem != null) {
-                player.setMediaItem(repairedItem)
-                player.seekTo(currentPos)
+                if (queueItems.isNotEmpty() && currentIndex in queueItems.indices) {
+                    val restoredQueue = queueItems.toMutableList()
+                    restoredQueue[currentIndex] = repairedItem
+                    player.setMediaItems(restoredQueue, currentIndex, currentPos)
+                } else {
+                    player.setMediaItem(repairedItem)
+                    player.seekTo(currentPos)
+                }
                 player.prepare()
                 player.play()
             } else {

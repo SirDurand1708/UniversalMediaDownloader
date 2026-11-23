@@ -154,6 +154,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
      * Si se encuentra un video válido, se habilitan los controles de conmutación manual.
      */
     private fun handleVideoResult(result: Pair<String, Long>?, song: Song?) {
+        if (song != null && currentSong?.id != song.id) return
         if (result != null) {
             val (url, _) = result
             youtubeVideoUrl = url
@@ -878,9 +879,9 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         _recentlyPlayed.removeAll { it.id == song.id }
         // Add to front
         _recentlyPlayed.add(0, song)
-        // Keep only last 50 items
+        // Keep only last 50 items (safe for API < 35)
         while (_recentlyPlayed.size > 50) {
-            _recentlyPlayed.removeLast()
+            _recentlyPlayed.removeAt(_recentlyPlayed.lastIndex)
         }
         // Save to persistence
         saveHistory()
@@ -1163,9 +1164,8 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                 if (!isAutoLoad) {
                     userWantsVideo = true // El usuario solicitó explícitamente el video
                 }
-                videoState = VideoState.CHECKING
-
                 if (!userWantsVideo) return@launch
+                videoState = VideoState.CHECKING
                 
                    Log.d("PlaybackViewModel", "URL de video localizada. Reemplazando MediaItem en Media3.")
                    
@@ -1195,6 +1195,9 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                             .build()
 
                        val currentIndex = controller.currentMediaItemIndex
+                       if (currentIndex < 0 || currentIndex >= controller.mediaItemCount) {
+                           return@launch
+                       }
                        controller.replaceMediaItem(currentIndex, videoItem)
                        
                        // Restauramos la posición exacta de reproducción para evitar saltos temporales
@@ -1202,7 +1205,8 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                        controller.prepare()
                         if (isPlaying) controller.play()
                         
-                        // El estado se mantiene en CHECKING hasta que se confirme renderizado físico
+                        // Esperar brevemente a que los callbacks IPC de seek/replace se procesen antes de bajar el escudo
+                        kotlinx.coroutines.delay(350)
                       }
             } catch (e: Exception) {
                 Log.e("PlaybackViewModel", "Error crítico en toggleVideoMode", e)
@@ -1215,6 +1219,8 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    private var sleepTimerInitialVolume: Float? = null
+
     fun startSleepTimer(minutes: Int) {
         cancelSleepTimer()
         
@@ -1223,6 +1229,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         val durationMillis = minutes * 60 * 1000L
         sleepTimerDuration = durationMillis
         isSleepTimerRunning = true
+        sleepTimerInitialVolume = try { mediaController?.volume } catch (_: Exception) { null }
         
         sleepTimerJob = viewModelScope.launch {
             val startTime = System.currentTimeMillis()
@@ -1232,9 +1239,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             val fadeDuration = 30_000L
             var isFading = false
             
-            // Store initial volume to restore later if needed (though usually we stop)
-            // Note: getting volume might be async or property, we try to get current
-            var startVolume = mediaController?.volume ?: 1f
+            var startVolume = sleepTimerInitialVolume ?: 1f
             
             while (isActive) {
                 val currentTime = System.currentTimeMillis()
@@ -1249,12 +1254,10 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                 if (remaining <= fadeDuration) {
                     if (!isFading) {
                         isFading = true
-                        startVolume = mediaController?.volume ?: 1f
+                        startVolume = mediaController?.volume ?: sleepTimerInitialVolume ?: 1f
+                        sleepTimerInitialVolume = startVolume
                     }
                     
-                    // Calculate volume based on remaining time
-                    // remaining: 30000 -> 1.0 * startVolume
-                    // remaining: 0     -> 0.0
                     val progress = remaining.toFloat() / fadeDuration
                     val newVolume = progress * startVolume
                     
@@ -1269,11 +1272,6 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             }
             
             mediaController?.pause()
-            // Restore volume for next time (optional, but good practice if user resumes manually)
-            try {
-                mediaController?.volume = startVolume
-            } catch (e: Exception) { }
-            
             cancelSleepTimer()
         }
     }
@@ -1283,6 +1281,12 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         sleepTimerJob = null
         isSleepTimerRunning = false
         sleepTimerDuration = null
+        sleepTimerInitialVolume?.let { vol ->
+            try {
+                mediaController?.volume = vol
+            } catch (_: Exception) {}
+        }
+        sleepTimerInitialVolume = null
     }
 
     // Lyrics Management
@@ -1322,13 +1326,14 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     }
 
 
+    private var lyricsLoadJob: kotlinx.coroutines.Job? = null
+
     private fun loadLyrics(song: Song) {
-        viewModelScope.launch {
+        lyricsLoadJob?.cancel()
+        lyricsLoadJob = viewModelScope.launch {
             // Clear old lyrics immediately to avoid showing stale content
             lyrics = null
             lyricsSource = null
-            lyricsLoadingState = LyricsLoadingState.Loading
-            
             lyricsLoadingState = LyricsLoadingState.Loading
             
             // Always parse and clean title, even for local songs
@@ -1351,7 +1356,9 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                 artist = finalArtist
             )
             
-            when (val result = lyricsRepository.getLyrics(searchSong)) {
+            val result = lyricsRepository.getLyrics(searchSong)
+            if (currentSong?.id != song.id) return@launch
+            when (result) {
                 is LyricsResult.Success -> {
                     if (result.source == "None") {
                         lyrics = null

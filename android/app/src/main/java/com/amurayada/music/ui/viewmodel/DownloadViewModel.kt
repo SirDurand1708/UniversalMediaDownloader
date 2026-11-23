@@ -48,10 +48,7 @@ class DownloadViewModel(
         .map { list ->
             list.filterNot { song ->
                 val lower = song.path.lowercase()
-                val mime = if (song.path.startsWith("content://")) {
-                    try { context.contentResolver.getType(Uri.parse(song.path)) } catch (_: Exception) { null }
-                } else null
-                mime?.startsWith("video/", ignoreCase = true) == true ||
+                song.mimeType?.startsWith("video/", ignoreCase = true) == true ||
                     song.album.equals("Video", ignoreCase = true) ||
                     song.path.contains("/video/", ignoreCase = true) ||
                     lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".webm")
@@ -218,8 +215,13 @@ class DownloadViewModel(
     }
 
     fun downloadSong(song: Song) {
-        // Use universal downloader directly
-        val sourceUrl = if (song.path.startsWith("http")) song.path else "https://music.youtube.com/watch?v=${song.path}"
+        val raw = song.path.trim()
+        if (raw.isBlank() || raw.startsWith("/") || raw.startsWith("content://")) return
+        val sourceUrl = if (raw.startsWith("http://", ignoreCase = true) || raw.startsWith("https://", ignoreCase = true)) {
+            raw
+        } else {
+            "https://music.youtube.com/watch?v=$raw"
+        }
         startUniversalDownload(sourceUrl, MediaFormat.M4A)
     }
 

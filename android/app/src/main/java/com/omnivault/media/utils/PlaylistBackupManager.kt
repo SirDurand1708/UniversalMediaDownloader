@@ -85,9 +85,11 @@ object PlaylistBackupManager {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
         val collection = MediaStore.Files.getContentUri("external")
         val projection = arrayOf(MediaStore.MediaColumns._ID)
-        val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND ${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
-        val args = arrayOf(fileName, "%$BACKUP_SUBDIR%")
-        context.contentResolver.query(collection, projection, selection, args, null)?.use { cursor ->
+        val baseName = fileName.substringBeforeLast(".")
+        val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ? AND ${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
+        val args = arrayOf("${baseName}%.json", "%$BACKUP_SUBDIR%")
+        val sortOrder = "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+        context.contentResolver.query(collection, projection, selection, args, sortOrder)?.use { cursor ->
             if (cursor.moveToFirst()) {
                 val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID))
                 return ContentUris.withAppendedId(collection, id)

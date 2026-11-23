@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.amurayada.music.R
 import com.amurayada.music.ui.viewmodel.SettingsViewModel
+import kotlinx.coroutines.launch
 
 // Quick preset colors
 private val PresetColors = listOf(
@@ -58,12 +59,17 @@ fun PersonalizationScreen(
     var showPlayerColorDialog by remember { mutableStateOf(false) }
 
     // Image Picker for Background
+    val coroutineScope = rememberCoroutineScope()
     val bgImagePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
-            val path = settingsViewModel.copyImageToInternalStorage(context, it)
-            settingsViewModel.setCustomBackgroundImage(path)
+            coroutineScope.launch {
+                val path = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    settingsViewModel.copyImageToInternalStorage(context, it)
+                }
+                settingsViewModel.setCustomBackgroundImage(path)
+            }
         }
     }
 

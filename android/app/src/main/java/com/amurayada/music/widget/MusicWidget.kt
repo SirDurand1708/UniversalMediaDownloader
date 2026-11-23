@@ -103,7 +103,7 @@ class MusicWidget : GlanceAppWidget() {
                 .background(Color(0xFF0E141E))
                 .cornerRadius(containerCornerRadius)
                 .padding(spacerSize)
-                .clickable(actionRunCallback<OpenAppActionCallback>()),
+                .clickable(androidx.glance.action.actionStartActivity<com.amurayada.music.MainActivity>()),
             verticalAlignment = Alignment.Vertical.CenterVertically
         ) {
             // Cover Art
@@ -226,11 +226,23 @@ class MusicWidget : GlanceAppWidget() {
     private fun loadBitmapFromUri(context: Context, uriString: String): android.graphics.Bitmap? {
         return try {
             val uri = android.net.Uri.parse(uriString)
-            val inputStream = context.contentResolver.openInputStream(uri)
-            val originalBitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
-            inputStream?.close()
-            
-            // Resize to avoid IPC transaction limit (approx 200x200 is safe and good quality for widget)
+            val boundsOpts = android.graphics.BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                android.graphics.BitmapFactory.decodeStream(stream, null, boundsOpts)
+            }
+            var sampleSize = 1
+            val reqSize = 200
+            while (boundsOpts.outHeight / sampleSize > reqSize * 2 && boundsOpts.outWidth / sampleSize > reqSize * 2) {
+                sampleSize *= 2
+            }
+            val decodeOpts = android.graphics.BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+            }
+            val originalBitmap = context.contentResolver.openInputStream(uri)?.use { stream ->
+                android.graphics.BitmapFactory.decodeStream(stream, null, decodeOpts)
+            }
             if (originalBitmap != null) {
                 val scaledBitmap = android.graphics.Bitmap.createScaledBitmap(originalBitmap, 200, 200, true)
                 if (scaledBitmap != originalBitmap) {

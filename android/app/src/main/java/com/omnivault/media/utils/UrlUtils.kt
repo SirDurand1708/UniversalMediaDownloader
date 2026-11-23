@@ -73,15 +73,16 @@ object UrlUtils {
         val cleaned = cleanUrl(rawUrl.trim())
         return try {
             val uri = java.net.URI(cleaned)
-            val query = uri.query ?: return cleaned
-            val isVideoWatch = uri.path?.contains("/watch") == true || uri.host?.contains("youtu.be") == true
+            val query = uri.rawQuery ?: return cleaned
+            val isVideoWatch = uri.rawPath?.contains("/watch") == true || uri.host?.contains("youtu.be") == true
             if (!isVideoWatch) return cleaned
             val filtered = query.split("&").filterNot { param ->
                 val k = param.substringBefore("=").lowercase()
                 k in listOf("list", "index", "t", "pp", "start_radio")
             }
             val newQuery = if (filtered.isNotEmpty()) "?" + filtered.joinToString("&") else ""
-            "${uri.scheme}://${uri.host}${if (uri.port != -1) ":${uri.port}" else ""}${uri.path}$newQuery"
+            val frag = uri.rawFragment?.let { "#$it" } ?: ""
+            "${uri.scheme}://${uri.host}${if (uri.port != -1) ":${uri.port}" else ""}${uri.rawPath ?: ""}$newQuery$frag"
         } catch (_: Exception) {
             cleaned
         }
@@ -104,7 +105,7 @@ object UrlUtils {
     fun cleanUrl(rawUrl: String): String {
         return try {
             val uri = java.net.URI(rawUrl)
-            val query = uri.query
+            val query = uri.rawQuery
             if (query == null) return rawUrl
 
             // Filtrar parametros de rastreo comunes
@@ -115,7 +116,8 @@ object UrlUtils {
                 }
 
             val newQuery = if (filteredParams.isNotEmpty()) "?" + filteredParams.joinToString("&") else ""
-            "${uri.scheme}://${uri.host}${if (uri.port != -1) ":${uri.port}" else ""}${uri.path}$newQuery"
+            val frag = uri.rawFragment?.let { "#$it" } ?: ""
+            "${uri.scheme}://${uri.host}${if (uri.port != -1) ":${uri.port}" else ""}${uri.rawPath ?: ""}$newQuery$frag"
         } catch (e: Exception) {
             rawUrl
         }

@@ -66,11 +66,12 @@ class MediaDownloadService : Service() {
 
         /** Cancela una descarga activa */
         fun cancelDownload(context: Context, taskId: String) {
-            val intent = Intent(context, MediaDownloadService::class.java).apply {
-                action = ACTION_CANCEL_DOWNLOAD
-                putExtra(EXTRA_TASK_ID, taskId)
-            }
-            context.startService(intent)
+            try {
+                UniversalDownloadEngine.getInstance(context).cancelDownload(taskId)
+            } catch (_: Exception) {}
+            try {
+                DownloadManager.getInstance(context).cancelDownload(taskId)
+            } catch (_: Exception) {}
         }
     }
 

@@ -220,8 +220,12 @@ object AudioEffectsManager {
     }
 
     fun getPresets(): List<String> {
-        val count = equalizer?.numberOfPresets?.toInt() ?: 0
-        return (0 until count).map { equalizer?.getPresetName(it.toShort()) ?: "Preset $it" }
+        return try {
+            val count = equalizer?.numberOfPresets?.toInt() ?: 0
+            (0 until count).map { equalizer?.getPresetName(it.toShort()) ?: "Preset $it" }
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     fun usePreset(presetIndex: Int, context: Context) {
@@ -247,13 +251,14 @@ object AudioEffectsManager {
     }
     
     fun release() {
-        equalizer?.release()
+        try { equalizer?.release() } catch (_: Exception) {}
         equalizer = null
-        bassBoost?.release()
+        try { bassBoost?.release() } catch (_: Exception) {}
         bassBoost = null
-        virtualizer?.release()
+        try { virtualizer?.release() } catch (_: Exception) {}
         virtualizer = null
-        loudnessEnhancer?.release()
+        try { loudnessEnhancer?.release() } catch (_: Exception) {}
         loudnessEnhancer = null
+        audioSessionId = 0
     }
 }

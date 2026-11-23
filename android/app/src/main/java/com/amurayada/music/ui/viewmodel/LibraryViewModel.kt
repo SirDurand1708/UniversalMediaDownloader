@@ -372,13 +372,96 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun deleteSong(song: Song, context: android.content.Context, onComplete: () -> Unit = {}) {
-        // Excluir inmediatamente de estado y preferencias persistentes para que desaparezca al instante de la UI
-        markSongDeleted(song)
-        songs = songs.filter { it.id != song.id && (song.path.isBlank() || it.path != song.path) }
-
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // 1. Eliminar registros en bases de datos internas de descargas e historial
+                // 1. Intentar eliminar primero de MediaStore y almacenamiento físico
+                val mediaUri = resolveMediaStoreAudioUri(context, song)
+                var securityException: SecurityException? = null
+                var deletedRows = 0
+
+                try {
+                    deletedRows = context.contentResolver.delete(mediaUri, null, null)
+                } catch (se: SecurityException) {
+                    securityException = se
+                    android.util.Log.w("LibraryViewModel", "SecurityException eliminando URI $mediaUri: ${se.message}")
+                } catch (e: Exception) {
+                    android.util.Log.w("LibraryViewModel", "Error eliminando de MediaStore por URI: ${e.message}")
+                }
+
+                val isContentUri = song.path.startsWith("content://")
+                var fileDeleted = deletedRows > 0
+                if (song.path.isNotBlank() && !isContentUri) {
+                    if (!fileDeleted) {
+                        try {
+                            deletedRows = context.contentResolver.delete(
+                                android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                                "${android.provider.MediaStore.Audio.Media.DATA} = ?",
+                                arrayOf(song.path)
+                            )
+                            fileDeleted = deletedRows > 0
+                        } catch (se: SecurityException) {
+                            if (securityException == null) securityException = se
+                        } catch (e: Exception) {
+                            android.util.Log.w("LibraryViewModel", "Error eliminando de MediaStore por DATA: ${e.message}")
+                        }
+                    }
+
+                    val file = java.io.File(song.path)
+                    if (file.exists()) {
+                        try {
+                            if (file.delete()) fileDeleted = true
+                        } catch (_: Exception) {}
+                    } else if (!fileDeleted && securityException == null) {
+                        fileDeleted = true
+                    }
+                }
+
+                val stillExists = if (isContentUri) {
+                    !fileDeleted && securityException != null
+                } else if (song.path.isNotBlank()) {
+                    java.io.File(song.path).exists()
+                } else {
+                    !fileDeleted
+                }
+
+                var requestedSystemPermission = false
+                if (stillExists && securityException != null) {
+                    try {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                            val pendingIntent = android.provider.MediaStore.createDeleteRequest(
+                                context.contentResolver,
+                                listOf(mediaUri)
+                            )
+                            requestedSystemPermission = true
+                            _permissionEvent.postValue(
+                                androidx.activity.result.IntentSenderRequest.Builder(pendingIntent.intentSender).build()
+                            )
+                        } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q &&
+                            securityException is android.app.RecoverableSecurityException
+                        ) {
+                            requestedSystemPermission = true
+                            _permissionEvent.postValue(
+                                androidx.activity.result.IntentSenderRequest.Builder(
+                                    securityException.userAction.actionIntent.intentSender
+                                ).build()
+                            )
+                        }
+                    } catch (reqEx: Exception) {
+                        android.util.Log.w("LibraryViewModel", "No se pudo emitir solicitud de eliminación: ${reqEx.message}")
+                    }
+                }
+
+                if (requestedSystemPermission) {
+                    // Esperar confirmación del sistema; no destruir BD/archivos auxiliares si el usuario cancela
+                    return@launch
+                }
+
+                // 2. Solo tras confirmar eliminación física (o inexistencia real), limpiar BD, caché y estado UI
+                markSongDeleted(song)
+                withContext(Dispatchers.Main) {
+                    songs = songs.filter { it.id != song.id && (song.path.isBlank() || it.path != song.path) }
+                }
+
                 try {
                     downloadDatabase.downloadDao().deleteDownloadById(song.id)
                     if (song.path.isNotBlank()) {
@@ -391,101 +474,24 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                 if (song.path.isNotBlank()) {
                     try {
                         com.omnivault.media.downloader.DownloadManager.getInstance(context).removeHistoryByPath(song.path)
-                    } catch (e: Exception) {
-                        android.util.Log.w("LibraryViewModel", "Error eliminando de DownloadManager: ${e.message}")
-                    }
+                    } catch (_: Exception) {}
 
                     try {
                         com.omnivault.media.data.AppDatabase.getInstance(context).trackDao().deleteByPath(song.path)
-                    } catch (e: Exception) {
-                        android.util.Log.w("LibraryViewModel", "Error eliminando de AppDatabase: ${e.message}")
-                    }
-
-                    // 2. Eliminar archivos complementarios (.lrc y .jpg) en la misma carpeta
-                    try {
-                        val audioFile = java.io.File(song.path)
-                        val parentDir = audioFile.parentFile
-                        if (parentDir != null && parentDir.exists()) {
-                            val baseName = audioFile.nameWithoutExtension
-                            val lrcFile = java.io.File(parentDir, "$baseName.lrc")
-                            val jpgFile = java.io.File(parentDir, "$baseName.jpg")
-                            if (lrcFile.exists()) lrcFile.delete()
-                            if (jpgFile.exists()) jpgFile.delete()
-                        }
                     } catch (_: Exception) {}
-                }
 
-                // 3. Eliminar de MediaStore y almacenamiento físico
-                val mediaUri = resolveMediaStoreAudioUri(context, song)
-                var securityException: SecurityException? = null
-
-                try {
-                    context.contentResolver.delete(mediaUri, null, null)
-                } catch (se: SecurityException) {
-                    securityException = se
-                    android.util.Log.w("LibraryViewModel", "SecurityException eliminando URI $mediaUri: ${se.message}")
-                } catch (e: Exception) {
-                    android.util.Log.w("LibraryViewModel", "Error eliminando de MediaStore por URI: ${e.message}")
-                }
-
-                if (song.path.isNotBlank()) {
-                    try {
-                        context.contentResolver.delete(
-                            android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                            "${android.provider.MediaStore.Audio.Media.DATA} = ?",
-                            arrayOf(song.path)
-                        )
-                    } catch (se: SecurityException) {
-                        if (securityException == null) securityException = se
-                    } catch (e: Exception) {
-                        android.util.Log.w("LibraryViewModel", "Error eliminando de MediaStore por DATA: ${e.message}")
-                    }
-
-                    val file = java.io.File(song.path)
-                    if (file.exists()) {
+                    if (!isContentUri) {
                         try {
-                            file.delete()
-                        } catch (_: Exception) {}
-                    }
-
-                    var requestedSystemPermission = false
-                    // 4. Solo re-escanear si el archivo ya fue borrado; si sigue protegido por Scoped Storage, solicitar permiso del sistema
-                    if (!file.exists()) {
-                        android.media.MediaScannerConnection.scanFile(context, arrayOf(song.path), null, null)
-                    } else if (securityException != null) {
-                        try {
-                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                                val pendingIntent = android.provider.MediaStore.createDeleteRequest(
-                                    context.contentResolver,
-                                    listOf(mediaUri)
-                                )
-                                requestedSystemPermission = true
-                                _permissionEvent.postValue(
-                                    androidx.activity.result.IntentSenderRequest.Builder(pendingIntent.intentSender).build()
-                                )
-                            } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q &&
-                                securityException is android.app.RecoverableSecurityException
-                            ) {
-                                requestedSystemPermission = true
-                                _permissionEvent.postValue(
-                                    androidx.activity.result.IntentSenderRequest.Builder(
-                                        securityException.userAction.actionIntent.intentSender
-                                    ).build()
-                                )
+                            val audioFile = java.io.File(song.path)
+                            val parentDir = audioFile.parentFile
+                            if (parentDir != null && parentDir.exists()) {
+                                val baseName = audioFile.nameWithoutExtension
+                                java.io.File(parentDir, "$baseName.lrc").takeIf { it.exists() }?.delete()
+                                java.io.File(parentDir, "$baseName.jpg").takeIf { it.exists() }?.delete()
                             }
-                        } catch (reqEx: Exception) {
-                            android.util.Log.w("LibraryViewModel", "No se pudo emitir solicitud de eliminación: ${reqEx.message}")
-                        }
+                        } catch (_: Exception) {}
+                        android.media.MediaScannerConnection.scanFile(context, arrayOf(song.path), null, null)
                     }
-
-                    // 5. Recargar biblioteca local y notificar término solo si se eliminó directamente
-                    if (!requestedSystemPermission) {
-                        loadLibrary()
-                        withContext(Dispatchers.Main) {
-                            onComplete()
-                        }
-                    }
-                    return@launch
                 }
 
                 // 5. Recargar biblioteca local y notificar término

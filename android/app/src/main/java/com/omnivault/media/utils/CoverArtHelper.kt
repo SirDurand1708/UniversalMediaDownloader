@@ -204,10 +204,18 @@ object CoverArtHelper {
             }
 
             if (tempOutput.exists() && tempOutput.length() > mp3File.length() / 2) {
-                mp3File.delete()
-                tempOutput.renameTo(mp3File)
-                Log.i(TAG, "Carátula ID3v2.3 incrustada exitosamente en ${mp3File.name}")
-                true
+                val replaced = tempOutput.renameTo(mp3File) || run {
+                    mp3File.delete()
+                    tempOutput.renameTo(mp3File) || try {
+                        tempOutput.copyTo(mp3File, overwrite = true)
+                        tempOutput.delete()
+                        true
+                    } catch (_: Exception) { false }
+                }
+                if (replaced) {
+                    Log.i(TAG, "Carátula ID3v2.3 incrustada exitosamente en ${mp3File.name}")
+                }
+                replaced
             } else {
                 tempOutput.delete()
                 false
@@ -337,10 +345,18 @@ object CoverArtHelper {
             }
 
             if (tempFile.exists() && tempFile.length() > fileLength) {
-                mediaFile.delete()
-                tempFile.renameTo(mediaFile)
-                Log.i(TAG, "Carátula 'covr' incrustada con éxito (streaming) en ${mediaFile.name} (${fileLength / (1024 * 1024)} MB)")
-                true
+                val replaced = tempFile.renameTo(mediaFile) || run {
+                    mediaFile.delete()
+                    tempFile.renameTo(mediaFile) || try {
+                        tempFile.copyTo(mediaFile, overwrite = true)
+                        tempFile.delete()
+                        true
+                    } catch (_: Exception) { false }
+                }
+                if (replaced) {
+                    Log.i(TAG, "Carátula 'covr' incrustada con éxito (streaming) en ${mediaFile.name} (${fileLength / (1024 * 1024)} MB)")
+                }
+                replaced
             } else {
                 tempFile.delete()
                 false

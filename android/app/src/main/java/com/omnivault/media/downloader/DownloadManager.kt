@@ -494,9 +494,10 @@ class DownloadManager private constructor(private val context: Context) {
                     tempDownloadFile.delete()
                     tempAudioFile.delete()
                 } else {
-                    tempDownloadFile.copyTo(stagedFile, overwrite = true)
                     tempDownloadFile.delete()
                     tempAudioFile.delete()
+                    stagedFile.delete()
+                    throw Exception("Error al combinar video y audio (muxing fallido)")
                 }
                 finalMimeType = "video/mp4"
             } else if (item.format.isAudio) {
@@ -642,6 +643,8 @@ class DownloadManager private constructor(private val context: Context) {
             item.errorReason = e.localizedMessage ?: "Error de descarga"
             activeTasks.remove(item.id)
             notifyUpdate(item)
+        } finally {
+            activeJobs.remove(item.id)
         }
     }
 
@@ -1084,33 +1087,36 @@ class DownloadManager private constructor(private val context: Context) {
     }
 
     private fun addToHistory(item: DownloadItem) {
-        synchronized(historyList) {
+        val snapshot = synchronized(historyList) {
             historyList.add(0, item)
+            historyList.toList()
         }
         saveHistory()
-        onHistoryUpdatedListener?.invoke(historyList.toList())
+        onHistoryUpdatedListener?.invoke(snapshot)
     }
 
     fun removeHistoryItem(item: DownloadItem) {
-        synchronized(historyList) {
+        val snapshot = synchronized(historyList) {
             historyList.removeAll { it.id == item.id }
+            historyList.toList()
         }
         // Eliminar archivo si existe
         item.localFilePath?.let { File(it).delete() }
         saveHistory()
-        onHistoryUpdatedListener?.invoke(historyList.toList())
+        onHistoryUpdatedListener?.invoke(snapshot)
     }
 
     fun removeHistoryByPath(path: String) {
         if (path.isBlank()) return
         val targetName = File(path).name
         var removed = false
-        synchronized(historyList) {
+        val snapshot = synchronized(historyList) {
             removed = historyList.removeAll { item ->
                 val itemPath = item.localFilePath ?: return@removeAll false
                 itemPath.equals(path, ignoreCase = true) ||
                     (targetName.isNotBlank() && File(itemPath).name.equals(targetName, ignoreCase = true))
             }
+            if (removed) historyList.toList() else emptyList()
         }
         try {
             val file = File(path)
@@ -1118,7 +1124,7 @@ class DownloadManager private constructor(private val context: Context) {
         } catch (_: Exception) {}
         if (removed) {
             saveHistory()
-            onHistoryUpdatedListener?.invoke(historyList.toList())
+            onHistoryUpdatedListener?.invoke(snapshot)
         }
     }
 
@@ -1127,7 +1133,7 @@ class DownloadManager private constructor(private val context: Context) {
             historyList.clear()
         }
         saveHistory()
-        onHistoryUpdatedListener?.invoke(historyList.toList())
+        onHistoryUpdatedListener?.invoke(emptyList())
     }
 
     suspend fun syncWithDeviceMedia(context: Context): Pair<Int, Int> = withContext(Dispatchers.IO) {
@@ -1141,28 +1147,33 @@ class DownloadManager private constructor(private val context: Context) {
         val newVideos = videos.filter { it.localFilePath !in existingPaths }
 
         if (newAudios.isNotEmpty() || newVideos.isNotEmpty()) {
-            synchronized(historyList) {
+            val snapshot = synchronized(historyList) {
                 historyList.addAll(newAudios)
                 historyList.addAll(newVideos)
+                historyList.toList()
             }
             withContext(Dispatchers.Main) {
-                onHistoryUpdatedListener?.invoke(historyList.toList())
+                onHistoryUpdatedListener?.invoke(snapshot)
             }
         }
         Pair(audios.size, videos.size)
     }
 
     fun recordPlay(item: DownloadItem) {
-        val target = historyList.firstOrNull { it.id == item.id || it.localFilePath == item.localFilePath }
-        if (target != null) {
-            target.playCount++
-            saveHistory()
+        val updated = synchronized(historyList) {
+            val target = historyList.firstOrNull { it.id == item.id || it.localFilePath == item.localFilePath }
+            if (target != null) {
+                target.playCount++
+                true
+            } else false
         }
+        if (updated) saveHistory()
     }
 
     fun standardizeAllLibrary(): Int {
         var count = 0
-        for (item in historyList) {
+        val snapshot = synchronized(historyList) { historyList.toList() }
+        for (item in snapshot) {
             val renamed = com.omnivault.media.utils.FilenameStandardizer.standardizeItemFile(item)
             val cleanTitle = com.omnivault.media.utils.FilenameStandardizer.standardizeTitle(item.title)
             if (renamed || cleanTitle != item.title) {
@@ -1172,14 +1183,16 @@ class DownloadManager private constructor(private val context: Context) {
         }
         if (count > 0) {
             saveHistory()
-            onHistoryUpdatedListener?.invoke(historyList)
+            onHistoryUpdatedListener?.invoke(snapshot)
         }
         return count
     }
 
     private fun saveHistory() {
         // Guardar solo las descargas realizadas desde la app para mantener SharedPreferences ultraligero (< 50 KB)
-        val downloadsOnly = historyList.filter { !it.id.startsWith("local_") }
+        val downloadsOnly = synchronized(historyList) {
+            historyList.filter { !it.id.startsWith("local_") }
+        }
         val json = gson.toJson(downloadsOnly)
         prefs.edit().putString("download_history", json).apply()
     }

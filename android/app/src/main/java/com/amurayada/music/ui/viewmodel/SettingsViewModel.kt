@@ -171,6 +171,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                                         lastReportedPct = pct
                                         _updateStatus.value = UpdateStatus.Downloading(progress)
                                     }
+                                } else {
+                                    // Sin Content-Length: reportar progreso estimado creciente en lugar de quedarse en 0%
+                                    val approxPct = ((downloaded / 1_048_576L).toInt() * 3).coerceIn(5, 95)
+                                    if (approxPct != lastReportedPct) {
+                                        lastReportedPct = approxPct
+                                        _updateStatus.value = UpdateStatus.Downloading(approxPct / 100f)
+                                    }
                                 }
                             }
                             output.flush()
@@ -288,12 +295,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
      */
     fun copyImageToInternalStorage(context: Context, uri: android.net.Uri): String? {
         return try {
+            context.filesDir.listFiles { _, name -> name.startsWith("custom_bg_") && name.endsWith(".jpg") }
+                ?.forEach { it.delete() }
             val inputStream = context.contentResolver.openInputStream(uri)
             val fileName = "custom_bg_${System.currentTimeMillis()}.jpg"
             val file = java.io.File(context.filesDir, fileName)
-            val outputStream = java.io.FileOutputStream(file)
-            inputStream?.use { input ->
-                outputStream.use { output ->
+            java.io.FileOutputStream(file).use { output ->
+                inputStream?.use { input ->
                     input.copyTo(output)
                 }
             }
@@ -358,6 +366,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _playerBackgroundType.value = "auto"
         _playerBackgroundColor.value = null
         _playerAlbumArtScale.value = 1.0f
+
+        try {
+            getApplication<Application>().filesDir
+                .listFiles { _, name -> name.startsWith("custom_bg_") && name.endsWith(".jpg") }
+                ?.forEach { it.delete() }
+        } catch (_: Exception) {}
         
         prefs.edit().apply {
             remove("custom_primary_color")

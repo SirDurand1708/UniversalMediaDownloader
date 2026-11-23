@@ -183,14 +183,18 @@ class DownloadRepositoryImpl(
     override suspend fun deleteDownload(songId: Long): Unit = withContext(Dispatchers.IO) {
         val download = downloadDao.getDownload(songId)
         download?.let {
-            // Delete file
             it.localPath?.let { path ->
-                val file = File(path)
-                if (file.exists()) {
-                    file.delete()
-                }
+                try {
+                    if (path.startsWith("content://")) {
+                        context.contentResolver.delete(Uri.parse(path), null, null)
+                    } else {
+                        val file = File(path)
+                        if (file.exists()) {
+                            file.delete()
+                        }
+                    }
+                } catch (_: Exception) {}
             }
-            // Delete from database
             downloadDao.deleteDownloadById(songId)
         }
     }

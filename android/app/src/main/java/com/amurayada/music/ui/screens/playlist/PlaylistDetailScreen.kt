@@ -691,21 +691,24 @@ fun PlaylistDetailScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "Esta playlist está vacía",
+                                text = if (searchQuery.isNotBlank()) "No se encontraron canciones" else "Esta playlist está vacía",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = Color.Gray
                             )
-                            Spacer(Modifier.height(14.dp))
-                            Button(onClick = { showAddSongDialog = true }) {
-                                Icon(Icons.Rounded.Add, contentDescription = null)
-                                Spacer(Modifier.width(8.dp))
-                                Text("Agregar canciones")
+                            if (!isReadOnly && searchQuery.isBlank()) {
+                                Spacer(Modifier.height(14.dp))
+                                Button(onClick = { showAddSongDialog = true }) {
+                                    Icon(Icons.Rounded.Add, contentDescription = null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Agregar canciones")
+                                }
                             }
                         }
                     }
                 } else {
-                    itemsIndexed(displayedSongs, key = { _, song -> song.id }) { index, song ->
+                    itemsIndexed(displayedSongs, key = { index, song -> "${song.id}_$index" }) { index, song ->
                         val currentIndex by rememberUpdatedState(index)
+                        val currentLastIndex by rememberUpdatedState(displayedSongs.lastIndex)
                         val isDragging = index == draggingIndex
                         val isCurrent = currentSong?.id == song.id
                         val isSelected = song.id in selectedIds
@@ -729,7 +732,7 @@ fun PlaylistDetailScreen(
                                         pointerViewportY += dragAmount.y
                                         val curIdx = draggingIndex
                                         if (curIdx >= 0) {
-                                            if (draggingOffsetY > itemHeightPx * 0.65f && curIdx < displayedSongs.lastIndex) {
+                                            if (draggingOffsetY > itemHeightPx * 0.65f && curIdx < currentLastIndex) {
                                                 onMoveSong?.invoke(curIdx, curIdx + 1)
                                                 draggingIndex = curIdx + 1
                                                 draggingOffsetY -= itemHeightPx

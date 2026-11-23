@@ -440,44 +440,49 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         var albumsList = emptyList<Album>()
         var playlistsList = emptyList<Playlist>()
 
-        val jobSongs = viewModelScope.launch {
-            try {
-                songsList = searchRepository.searchSongs(query)
-                // Progressive update
-                state = state.copy(songs = songsList)
-            } catch (e: Exception) {
-                e.printStackTrace()
+        kotlinx.coroutines.coroutineScope {
+            val jobSongs = launch {
+                try {
+                    songsList = searchRepository.searchSongs(query)
+                    state = state.copy(songs = songsList)
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    e.printStackTrace()
+                }
             }
-        }
-        
-        val jobArtists = viewModelScope.launch {
-            try {
-                artistsList = searchRepository.searchArtists(query)
-                state = state.copy(artists = artistsList)
-            } catch (e: Exception) {
-                e.printStackTrace()
+
+            val jobArtists = launch {
+                try {
+                    artistsList = searchRepository.searchArtists(query)
+                    state = state.copy(artists = artistsList)
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    e.printStackTrace()
+                }
             }
-        }
-        
-        val jobAlbums = viewModelScope.launch {
-            try {
-                albumsList = searchRepository.searchAlbums(query)
-                state = state.copy(albums = albumsList)
-            } catch (e: Exception) {
-                e.printStackTrace()
+
+            val jobAlbums = launch {
+                try {
+                    albumsList = searchRepository.searchAlbums(query)
+                    state = state.copy(albums = albumsList)
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    e.printStackTrace()
+                }
             }
-        }
-        
-        val jobPlaylists = viewModelScope.launch {
-            try {
-                playlistsList = searchRepository.searchPlaylists(query)
-                state = state.copy(playlists = playlistsList)
-            } catch (e: Exception) {
-                e.printStackTrace()
+
+            val jobPlaylists = launch {
+                try {
+                    playlistsList = searchRepository.searchPlaylists(query)
+                    state = state.copy(playlists = playlistsList)
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    e.printStackTrace()
+                }
             }
+
+            joinAll(jobSongs, jobArtists, jobAlbums, jobPlaylists)
         }
-        
-        joinAll(jobSongs, jobArtists, jobAlbums, jobPlaylists)
         
         state = state.copy(
             isLoading = false,

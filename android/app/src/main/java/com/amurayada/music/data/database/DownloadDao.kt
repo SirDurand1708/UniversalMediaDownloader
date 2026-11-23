@@ -23,6 +23,9 @@ interface DownloadDao {
     @Query("UPDATE downloads SET title = :title, artist = :artist, album = :album WHERE localPath = :localPath")
     suspend fun updateDownloadMetadataByPath(localPath: String, title: String, artist: String, album: String)
 
+    @Query("UPDATE downloads SET localPath = :newPath, title = :newTitle WHERE localPath = :oldPath")
+    suspend fun updateDownloadPathAndTitle(oldPath: String, newPath: String, newTitle: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDownload(download: DownloadEntity)
     

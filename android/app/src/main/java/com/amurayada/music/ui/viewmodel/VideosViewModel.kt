@@ -291,7 +291,7 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
                     merged.add(item)
                 }
                 _rawVideos.value = merged
-                if (merged.isNotEmpty()) {
+                if (deviceVideos.isNotEmpty() && merged.isNotEmpty()) {
                     pruneMissingVideosFromPlaylists(merged.mapTo(HashSet()) { it.id })
                 }
             } catch (e: Exception) {
@@ -584,8 +584,11 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val playlistWriteDispatcher = Dispatchers.IO.limitedParallelism(1)
+
     private fun persistVideoPlaylists(list: List<VideoPlaylist>) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(playlistWriteDispatcher) {
             synchronized(playlistLock) {
                 try {
                     val arr = JSONArray()

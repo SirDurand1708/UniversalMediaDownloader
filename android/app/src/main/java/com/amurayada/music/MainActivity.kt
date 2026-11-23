@@ -80,6 +80,7 @@ import com.amurayada.music.ui.screens.videos.VideoPlayerScreen
 import com.amurayada.music.ui.screens.downloads.OmniVaultDownloaderScreen
 import androidx.compose.ui.zIndex
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 
 class MainActivity : ComponentActivity() {
@@ -140,7 +141,18 @@ class MainActivity : ComponentActivity() {
             com.omnivault.media.utils.NotificationHelper.createNotificationChannels(this)
         } catch (_: Exception) {}
         setupFullScreen()
-        handleSharedIntent(intent)
+        if (savedInstanceState != null) {
+            val hasAlbumId = savedInstanceState.containsKey("pending_album_id")
+            if (hasAlbumId) {
+                val aid = savedInstanceState.getLong("pending_album_id")
+                val atitle = savedInstanceState.getString("pending_album_title") ?: ""
+                val aartist = savedInstanceState.getString("pending_album_artist") ?: ""
+                pendingAlbumUpdate = Triple(aid, atitle, aartist)
+                pendingAlbumArt = savedInstanceState.getString("pending_album_art")?.let { android.net.Uri.parse(it) }
+            }
+        } else {
+            handleSharedIntent(intent)
+        }
 
         libraryViewModel.permissionEvent.observe(this) { request ->
             if (request != null) {
@@ -183,17 +195,18 @@ class MainActivity : ComponentActivity() {
                 customPrimaryColor = customPrimaryColor,
                 isCustomBackground = customBgUri != null
             ) {
+                val coreAudioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    Manifest.permission.READ_MEDIA_AUDIO
+                } else {
+                    Manifest.permission.READ_EXTERNAL_STORAGE
+                }
                 val permissionsToRequest = remember {
                     buildList {
+                        add(coreAudioPermission)
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            add(Manifest.permission.READ_MEDIA_AUDIO)
                             add(Manifest.permission.READ_MEDIA_VIDEO)
                             add(Manifest.permission.POST_NOTIFICATIONS)
-                        } else {
-                            add(Manifest.permission.READ_EXTERNAL_STORAGE)
                         }
-                        
-                        // Agregar permisos de Bluetooth Connect para Android 12+ (S) para prevenir crashes de WebView
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                             add(Manifest.permission.BLUETOOTH_CONNECT)
                         }
@@ -201,8 +214,11 @@ class MainActivity : ComponentActivity() {
                 }
                 
                 val permissionsState = rememberMultiplePermissionsState(permissionsToRequest)
+                val coreAudioGranted = permissionsState.permissions
+                    .firstOrNull { it.permission == coreAudioPermission }
+                    ?.status?.isGranted == true
                 
-                if (permissionsState.allPermissionsGranted) {
+                if (coreAudioGranted) {
                     LaunchedEffect(Unit) {
                         val intent = Intent(this@MainActivity, MusicPlaybackService::class.java)
 
@@ -240,7 +256,16 @@ class MainActivity : ComponentActivity() {
                     )
                 } else {
                     PermissionRequestScreen(
-                        onRequestPermissions = { permissionsState.launchMultiplePermissionRequest() }
+                        onRequestPermissions = { permissionsState.launchMultiplePermissionRequest() },
+                        onOpenSettings = {
+                            try {
+                                val settingsIntent = Intent(
+                                    android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    android.net.Uri.fromParts("package", packageName, null)
+                                )
+                                startActivity(settingsIntent)
+                            } catch (_: Exception) {}
+                        }
                     )
                 }
             }
@@ -283,14 +308,27 @@ class MainActivity : ComponentActivity() {
         handleSharedIntent(intent)
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        pendingAlbumUpdate?.let { (aid, atitle, aartist) ->
+            outState.putLong("pending_album_id", aid)
+            outState.putString("pending_album_title", atitle)
+            outState.putString("pending_album_artist", aartist)
+        }
+        pendingAlbumArt?.let { outState.putString("pending_album_art", it.toString()) }
+    }
+
     private fun handleSharedIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
             val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
-            val url = com.omnivault.media.utils.UrlUtils.extractUrlFromText(text) ?: text
-            if (url.isNotBlank()) {
-                downloadViewModel.urlInput.value = url
-                downloadViewModel.analyzeUrl(url)
+            val extracted = com.omnivault.media.utils.UrlUtils.extractUrlFromText(text)?.trim()
+            if (!extracted.isNullOrBlank() &&
+                (extracted.startsWith("http://", ignoreCase = true) || extracted.startsWith("https://", ignoreCase = true))
+            ) {
+                downloadViewModel.urlInput.value = extracted
+                downloadViewModel.analyzeUrl(extracted)
                 pendingSharedDownloadsNav = true
+                intent.action = null
             }
         }
     }
@@ -1783,6 +1821,7 @@ fun MusicPlayerApp(
 @Composable
 fun PermissionRequestScreen(
     onRequestPermissions: () -> Unit,
+    onOpenSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -1841,6 +1880,17 @@ fun PermissionRequestScreen(
                     Text(
                         text = "Conceder permisos",
                         modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = onOpenSettings,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = "Abrir ajustes de la app",
+                        modifier = Modifier.padding(vertical = 6.dp)
                     )
                 }
             }

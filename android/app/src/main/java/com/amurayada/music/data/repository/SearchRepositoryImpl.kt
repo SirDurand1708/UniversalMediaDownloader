@@ -47,12 +47,12 @@ class SearchRepositoryImpl(private val context: android.content.Context) : Searc
         val timestamp: Long
     )
     
-    private val songCache = mutableMapOf<String, CacheEntry<List<Song>>>()    // LRU Cache for search results
-    private val artistCache = mutableMapOf<String, CacheEntry<List<Artist>>>()
-    private val albumCache = mutableMapOf<String, CacheEntry<List<Album>>>()
-    private val playlistCache = mutableMapOf<String, CacheEntry<List<com.amurayada.music.data.model.Playlist>>>()
-    private val albumDetailsCache = mutableMapOf<String, CacheEntry<List<Song>>>()
-    private val artistDetailsCache = mutableMapOf<String, CacheEntry<ArtistDetails>>()
+    private val songCache = java.util.Collections.synchronizedMap(mutableMapOf<String, CacheEntry<List<Song>>>())    // LRU Cache for search results
+    private val artistCache = java.util.Collections.synchronizedMap(mutableMapOf<String, CacheEntry<List<Artist>>>())
+    private val albumCache = java.util.Collections.synchronizedMap(mutableMapOf<String, CacheEntry<List<Album>>>())
+    private val playlistCache = java.util.Collections.synchronizedMap(mutableMapOf<String, CacheEntry<List<com.amurayada.music.data.model.Playlist>>>())
+    private val albumDetailsCache = java.util.Collections.synchronizedMap(mutableMapOf<String, CacheEntry<List<Song>>>())
+    private val artistDetailsCache = java.util.Collections.synchronizedMap(mutableMapOf<String, CacheEntry<ArtistDetails>>())
     
     // UNIFIED cache - key: query, value: all results (songs, artists, albums)
     private data class UnifiedSearchResult(
@@ -60,7 +60,7 @@ class SearchRepositoryImpl(private val context: android.content.Context) : Searc
         val artists: List<Artist>,
         val albums: List<Album>
     )
-    private val unifiedCache = mutableMapOf<String, CacheEntry<UnifiedSearchResult>>()
+    private val unifiedCache = java.util.Collections.synchronizedMap(mutableMapOf<String, CacheEntry<UnifiedSearchResult>>())
     
     private val CACHE_TTL = 30 * 60 * 1000L // 30 minutes
     private val maxCacheSize = 50
@@ -71,10 +71,11 @@ class SearchRepositoryImpl(private val context: android.content.Context) : Searc
     
     // Trim caches
     private fun <T> trimCache(cache: MutableMap<String, CacheEntry<T>>) {
-        if (cache.size > maxCacheSize) {
-            // Remove oldest entry
-            val oldestKey = cache.minByOrNull { it.value.timestamp }?.key
-            oldestKey?.let { cache.remove(it) }
+        synchronized(cache) {
+            if (cache.size > maxCacheSize) {
+                val oldestKey = cache.entries.minByOrNull { it.value.timestamp }?.key
+                oldestKey?.let { cache.remove(it) }
+            }
         }
     }
     
@@ -846,9 +847,6 @@ class SearchRepositoryImpl(private val context: android.content.Context) : Searc
             val cookies = authHeaders["Cookie"] ?: ""
             val authorization = authHeaders["Authorization"] ?: ""
             android.util.Log.d("SearchRepository", "Auth state: isLoggedIn=${YouTubeMusicClient.isLoggedIn()}, hasCookies=${cookies.isNotEmpty()}, hasAuth=${authorization.isNotEmpty()}")
-            if (cookies.isNotEmpty()) {
-                android.util.Log.d("SearchRepository", "Cookie preview: ${cookies.take(50)}...")
-            }
             
             val request = okhttp3.Request.Builder()
                 .url(apiUrl)
@@ -1601,8 +1599,8 @@ class SearchRepositoryImpl(private val context: android.content.Context) : Searc
                     },
                     "racyCheckOk": true,
                     "contentCheckOk": true,
-                    "query": "$query",
-                    "params": "$params"
+                    "query": ${org.json.JSONObject.quote(query)},
+                    "params": ${org.json.JSONObject.quote(params)}
                 }
             """.trimIndent()
             
@@ -2113,7 +2111,7 @@ class SearchRepositoryImpl(private val context: android.content.Context) : Searc
                             album = s.optString("album"),
                             duration = s.optLong("duration"),
                             albumArtUri = if (s.has("art")) Uri.parse(s.optString("art")) else null,
-                            path = "", 
+                            path = s.optString("path", ""), 
                             dateAdded = 0
                         ))
                     }
@@ -2178,6 +2176,7 @@ class SearchRepositoryImpl(private val context: android.content.Context) : Searc
                     s.put("artist", song.artist)
                     s.put("album", song.album)
                     s.put("duration", song.duration)
+                    if (song.path.isNotBlank()) s.put("path", song.path)
                     if (song.albumArtUri != null) s.put("art", song.albumArtUri.toString())
                     songsArray.put(s)
                 }

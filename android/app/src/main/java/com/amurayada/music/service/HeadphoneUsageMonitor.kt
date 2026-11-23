@@ -75,7 +75,12 @@ class HeadphoneUsageMonitor(private val context: Context, private val onPauseReq
             addAction(Intent.ACTION_HEADSET_PLUG)
             addAction(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED)
         }
-        context.registerReceiver(headsetReceiver, filter)
+        androidx.core.content.ContextCompat.registerReceiver(
+            context,
+            headsetReceiver,
+            filter,
+            androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+        )
         
         // Initial check
         updateHeadphoneState(isWiredHeadsetConnected() || isBluetoothHeadsetConnected())

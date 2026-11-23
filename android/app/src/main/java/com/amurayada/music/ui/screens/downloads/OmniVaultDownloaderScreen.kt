@@ -112,13 +112,13 @@ fun OmniVaultDownloaderScreen(
     val filteredCompletedSongs = remember(downloadedSongs, completedFilter, completedSearchQuery) {
         val query = completedSearchQuery.trim()
         downloadedSongs.filter { song ->
-            val mimeType = if (song.path.startsWith("content://")) {
-                try { context.contentResolver.getType(android.net.Uri.parse(song.path)) } catch (_: Exception) { null }
-            } else null
+            val mimeType = song.mimeType
             val isVideo = mimeType?.startsWith("video/") == true ||
                 song.album.contains("Video", ignoreCase = true) ||
                 song.path.contains("/video/", ignoreCase = true) ||
-                song.path.endsWith(".mp4", ignoreCase = true)
+                song.path.endsWith(".mp4", ignoreCase = true) ||
+                song.path.endsWith(".mkv", ignoreCase = true) ||
+                song.path.endsWith(".webm", ignoreCase = true)
 
             val matchesTab = when (completedFilter) {
                 1 -> !isVideo
@@ -242,8 +242,11 @@ fun OmniVaultDownloaderScreen(
                         )
                     }
 
-                    val isYtLoggedIn = remember {
-                        try { com.amurayada.music.data.auth.YouTubeAuthManager.getInstance(context).isLoggedIn() } catch (_: Exception) { false }
+                    var isYtLoggedIn by remember { mutableStateOf(false) }
+                    LaunchedEffect(clipboardTick) {
+                        isYtLoggedIn = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            try { com.amurayada.music.data.auth.YouTubeAuthManager.getInstance(context).isLoggedIn() } catch (_: Exception) { false }
+                        }
                     }
                     IconButton(onClick = onOpenYouTubeLogin) {
                         Icon(
@@ -1107,15 +1110,12 @@ fun OmniVaultDownloaderScreen(
             }
         } else {
             items(filteredCompletedSongs, key = { it.id }) { song ->
-                val mimeType = remember(song.path) {
-                    if (song.path.startsWith("content://")) {
-                        try { context.contentResolver.getType(android.net.Uri.parse(song.path)) } catch (_: Exception) { null }
-                    } else null
-                }
-                val isVideoSong = mimeType?.startsWith("video/") == true ||
+                val isVideoSong = song.mimeType?.startsWith("video/") == true ||
                     song.album.contains("Video", ignoreCase = true) ||
                     song.path.contains("/video/", ignoreCase = true) ||
-                    song.path.endsWith(".mp4", ignoreCase = true)
+                    song.path.endsWith(".mp4", ignoreCase = true) ||
+                    song.path.endsWith(".mkv", ignoreCase = true) ||
+                    song.path.endsWith(".webm", ignoreCase = true)
 
                 CompletedDownloadSongCard(
                     song = song,

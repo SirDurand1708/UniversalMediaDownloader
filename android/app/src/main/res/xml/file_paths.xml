@@ -2,7 +2,7 @@
 <paths>
     <!-- Allow sharing of all audio files from internal storage -->
     <external-path name="external_files" path="." />
-    <root-path name="root" path="." />
+    <external-files-path name="external_app_files" path="." />
     <files-path name="files" path="." />
     <cache-path name="cache" path="." />
 </paths>
