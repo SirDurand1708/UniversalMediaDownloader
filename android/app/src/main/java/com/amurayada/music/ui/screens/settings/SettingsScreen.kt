@@ -847,6 +847,110 @@ fun SettingsScreen(
                             Toast.makeText(context, "Diagnóstico copiado al portapapeles", Toast.LENGTH_SHORT).show()
                         }
                     )
+                    var showCrashLogDialog by remember { mutableStateOf(false) }
+                    var crashLogText by remember { mutableStateOf("") }
+                    var crashLogSizeKb by remember { mutableStateOf(0L) }
+                    LaunchedEffect(showCrashLogDialog) {
+                        val sizeBytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            com.omnivault.media.utils.LocalCrashLogger.getLogSizeBytes(context)
+                        }
+                        crashLogSizeKb = (sizeBytes + 1023L) / 1024L
+                        if (showCrashLogDialog) {
+                            crashLogText = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                com.omnivault.media.utils.LocalCrashLogger.readLogs(context)
+                            }
+                        }
+                    }
+                    SettingsItem(
+                        title = "Registro de errores",
+                        subtitle = if (crashLogSizeKb > 0L) {
+                            "Últimos registros disponibles ($crashLogSizeKb KB)"
+                        } else {
+                            "Sin errores registrados"
+                        },
+                        icon = Icons.Rounded.Article,
+                        showChevron = true,
+                        onClick = { showCrashLogDialog = true }
+                    )
+                    if (showCrashLogDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showCrashLogDialog = false },
+                            title = { Text("Registro de errores local") },
+                            text = {
+                                if (crashLogText.isBlank()) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 12.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.CheckCircle,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(36.dp)
+                                        )
+                                        Text(
+                                            text = "No se han registrado errores ni cierres inesperados.",
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                    }
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(max = 320.dp)
+                                            .verticalScroll(rememberScrollState())
+                                    ) {
+                                        Text(
+                                            text = crashLogText,
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                                fontSize = 11.sp
+                                            )
+                                        )
+                                    }
+                                }
+                            },
+                            confirmButton = {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (crashLogText.isNotBlank()) {
+                                        TextButton(
+                                            onClick = {
+                                                com.omnivault.media.utils.LocalCrashLogger.clearLogs(context)
+                                                crashLogText = ""
+                                                crashLogSizeKb = 0L
+                                                Toast.makeText(context, "Registro limpiado", Toast.LENGTH_SHORT).show()
+                                            }
+                                        ) {
+                                            Text("Limpiar")
+                                        }
+                                        Button(
+                                            onClick = {
+                                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                                cm.setPrimaryClip(android.content.ClipData.newPlainText("AuraPlayerCrashLog", crashLogText))
+                                                Toast.makeText(context, "Log copiado al portapapeles", Toast.LENGTH_SHORT).show()
+                                            }
+                                        ) {
+                                            Text("Copiar")
+                                        }
+                                    } else {
+                                        Button(onClick = { showCrashLogDialog = false }) {
+                                            Text("Cerrar")
+                                        }
+                                    }
+                                }
+                            },
+                            dismissButton = if (crashLogText.isNotBlank()) {
+                                {
+                                    TextButton(onClick = { showCrashLogDialog = false }) {
+                                        Text("Cerrar")
+                                    }
+                                }
+                            } else null
+                        )
+                    }
                     SettingsItem(
                         title = "Licencia",
                         subtitle = "Código Abierto (GPL-3.0)",

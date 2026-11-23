@@ -360,7 +360,9 @@ class UniversalDownloadEngine private constructor(context: Context) {
                         .commit()
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            com.omnivault.media.utils.LocalCrashLogger.logError("DownloadEngine", "Error en unmarkDeletedFromPrefs", e)
+        }
     }
 
     suspend fun markFallbackCompleted(processId: String) {
@@ -885,6 +887,7 @@ class UniversalDownloadEngine private constructor(context: Context) {
                 }
             } catch (e: Exception) {
                 android.util.Log.w("UniversalDownloadEngine", "MediaStore export failed, falling back to StorageHelper: ${e.message}")
+                com.omnivault.media.utils.LocalCrashLogger.logError("DownloadEngine", "MediaStore export failed", e)
             }
         }
 

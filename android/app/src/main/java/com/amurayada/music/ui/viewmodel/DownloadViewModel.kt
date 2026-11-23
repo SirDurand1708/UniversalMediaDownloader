@@ -77,18 +77,10 @@ class DownloadViewModel(
     val batchFeedbackMessage = MutableStateFlow<String?>(null)
     private var analyzeJob: Job? = null
     private var activeAnalyzeProcessId: String? = null
-    private var omniListener: ((DownloadItem) -> Unit)? = null
-
-    private val _omniActiveDownloads = MutableStateFlow<List<DownloadItem>>(emptyList())
-    val omniActiveDownloads: StateFlow<List<DownloadItem>> = _omniActiveDownloads.asStateFlow()
-
-    private val _omniHistory = MutableStateFlow<List<DownloadItem>>(emptyList())
-    val omniHistory: StateFlow<List<DownloadItem>> = _omniHistory.asStateFlow()
     
     init {
         observeDownloadedSongs()
         observeActiveDownloads()
-        initOmniVaultListener()
         restorePersistedQueue()
     }
 
@@ -102,32 +94,16 @@ class DownloadViewModel(
                         val fmt = MediaFormat.entries.firstOrNull { it.name == item.formatName } ?: MediaFormat.MP3_320
                         try {
                             MediaDownloadService.startDownload(getApplication(), item.url, fmt)
-                        } catch (_: Exception) {
+                        } catch (e: Exception) {
+                            com.omnivault.media.utils.LocalCrashLogger.logError("DownloadVM", "Fallback enqueue en restorePersistedQueue", e)
                             omniDownloadManager.enqueueDownload(item.url, fmt)
                         }
                     }
                 }
-            } catch (_: Exception) {}
-        }
-    }
-
-    private fun initOmniVaultListener() {
-        _omniActiveDownloads.value = omniDownloadManager.getActiveDownloads()
-        _omniHistory.value = omniDownloadManager.getHistory()
-
-        val listener: (DownloadItem) -> Unit = {
-            viewModelScope.launch(Dispatchers.Main) {
-                _omniActiveDownloads.value = omniDownloadManager.getActiveDownloads()
-                _omniHistory.value = omniDownloadManager.getHistory()
+            } catch (e: Exception) {
+                com.omnivault.media.utils.LocalCrashLogger.logError("DownloadVM", "Error restaurando cola persistida", e)
             }
         }
-        omniListener = listener
-        omniDownloadManager.addDownloadListener(listener)
-    }
-
-    override fun onCleared() {
-        omniListener?.let { omniDownloadManager.removeDownloadListener(it) }
-        super.onCleared()
     }
     
     private fun observeDownloadedSongs() {

@@ -62,6 +62,7 @@ class MusicApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        com.omnivault.media.utils.LocalCrashLogger.init(this)
         
         // 0. Initialize notification channels for background downloads and playback
         try {

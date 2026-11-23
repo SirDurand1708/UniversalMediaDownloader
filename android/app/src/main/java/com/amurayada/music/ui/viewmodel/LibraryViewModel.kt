@@ -80,43 +80,14 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         localSongs: List<Song>,
         downloadedSongs: List<Song>
     ): List<Song> {
-        val result = ArrayList<Song>(localSongs.size + downloadedSongs.size)
-        val seenPaths = HashSet<String>(localSongs.size * 2)
-        val seenMediaStoreUris = HashSet<String>(localSongs.size * 2)
-        val seenNameAndSize = HashSet<Pair<String, Long>>(localSongs.size * 2)
-
-        for (song in localSongs) {
-            val normPath = song.path.trim().lowercase()
-            if (normPath.isNotEmpty() && !seenPaths.add(normPath)) continue
-
-            if (song.id > 0L) {
-                val msUri = ContentUris.withAppendedId(
-                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                    song.id
-                ).toString()
-                seenMediaStoreUris.add(msUri)
-            }
-            if (song.fileSize > 0L && song.path.startsWith("/")) {
-                val fileName = java.io.File(song.path).name.lowercase()
-                if (fileName.isNotEmpty()) {
-                    seenNameAndSize.add(fileName to song.fileSize)
-                }
-            }
-            result.add(song)
-        }
-
         val resolver = getApplication<Application>().contentResolver
-        for (song in downloadedSongs) {
-            val rawPath = song.path.trim()
-            val normPath = rawPath.lowercase()
-            if (normPath.isNotEmpty() && seenPaths.contains(normPath)) continue
-            if (rawPath.isNotEmpty() && seenMediaStoreUris.contains(rawPath)) continue
-
-            var isDuplicate = false
-            var resolvedDataPath: String? = null
-            var resolvedDisplayName: String? = null
-
-            if (rawPath.startsWith("content://")) {
+        return com.omnivault.media.utils.LibraryExclusionHelper.mergeSongsDeduplicated(
+            localSongs = localSongs,
+            downloadedSongs = downloadedSongs,
+            keySelector = { s -> com.omnivault.media.utils.SongKey(s.id, s.title, s.path, s.fileSize) },
+            contentUriResolver = { rawPath ->
+                var resolvedDataPath: String? = null
+                var resolvedDisplayName: String? = null
                 try {
                     resolver.query(
                         Uri.parse(rawPath),
@@ -127,46 +98,15 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                     )?.use { cursor ->
                         if (cursor.moveToFirst()) {
                             val dataIdx = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
-                            if (dataIdx != -1) {
-                                resolvedDataPath = cursor.getString(dataIdx)?.trim()
-                            }
+                            if (dataIdx != -1) resolvedDataPath = cursor.getString(dataIdx)?.trim()
                             val nameIdx = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
-                            if (nameIdx != -1) {
-                                resolvedDisplayName = cursor.getString(nameIdx)?.trim()
-                            }
+                            if (nameIdx != -1) resolvedDisplayName = cursor.getString(nameIdx)?.trim()
                         }
                     }
                 } catch (_: Exception) {}
-
-                val normResolved = resolvedDataPath?.lowercase()
-                if (!normResolved.isNullOrEmpty() && seenPaths.contains(normResolved)) {
-                    isDuplicate = true
-                }
-                if (!isDuplicate && song.fileSize > 0L && !resolvedDisplayName.isNullOrEmpty()) {
-                    if (seenNameAndSize.contains(resolvedDisplayName!!.lowercase() to song.fileSize)) {
-                        isDuplicate = true
-                    }
-                }
-            } else if (song.fileSize > 0L && rawPath.startsWith("/")) {
-                val fileName = java.io.File(rawPath).name.lowercase()
-                if (fileName.isNotEmpty() && seenNameAndSize.contains(fileName to song.fileSize)) {
-                    isDuplicate = true
-                }
+                resolvedDataPath to resolvedDisplayName
             }
-
-            if (isDuplicate) continue
-
-            if (normPath.isNotEmpty()) seenPaths.add(normPath)
-            if (rawPath.startsWith("content://")) seenMediaStoreUris.add(rawPath)
-            resolvedDataPath?.lowercase()?.takeIf { it.isNotEmpty() }?.let { seenPaths.add(it) }
-            val nameForKey = resolvedDisplayName ?: if (rawPath.startsWith("/")) java.io.File(rawPath).name else null
-            if (song.fileSize > 0L && !nameForKey.isNullOrBlank()) {
-                seenNameAndSize.add(nameForKey.lowercase() to song.fileSize)
-            }
-            result.add(song)
-        }
-
-        return result
+        )
     }
 
     override fun onCleared() {
@@ -511,6 +451,7 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                 }
             } catch (e: Exception) {
                 android.util.Log.e("LibraryViewModel", "Error eliminando canción: ${e.message}")
+                com.omnivault.media.utils.LocalCrashLogger.logError("LibraryVM", "Error eliminando canción ${song.title}", e)
                 withContext(Dispatchers.Main) {
                     onComplete()
                 }
@@ -617,51 +558,24 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                         com.omnivault.media.downloader.UniversalDownloadEngine.EXCLUSION_PREFS_LOCK
                     ) {
                         val hIds = omniPrefs.getStringSet("hidden_song_ids", emptySet())
-                            ?.mapNotNull { it.toLongOrNull() }?.toMutableSet() ?: mutableSetOf()
+                            ?.mapNotNull { it.toLongOrNull() }?.toSet() ?: emptySet()
                         val dPaths = omniPrefs.getStringSet("deleted_song_paths", emptySet())
-                            ?.toMutableSet() ?: mutableSetOf()
+                            ?.toSet() ?: emptySet()
 
                         val mergedPreview = mergeSongsDeduplicated(localSongs, downloadedSongs)
-                        if (dPaths.isNotEmpty() && downloadedSongs.isNotEmpty()) {
-                            val downloadedIds = downloadedSongs.mapTo(HashSet()) { it.id }
-                            val downloadedPathsNorm = downloadedSongs.mapNotNullTo(HashSet()) {
-                                it.path.trim().takeIf { p -> p.isNotBlank() }?.lowercase()
-                            }
-                            val downloadedContentMediaIds = downloadedSongs.mapNotNullTo(HashSet()) { s ->
-                                s.path.takeIf { it.startsWith("content://") }?.substringAfterLast("/")?.toLongOrNull()
-                            }
-                            val downloadedNameSizes = downloadedSongs.mapNotNullTo(HashSet()) { s ->
-                                if (s.fileSize > 0L) s.title.lowercase() to s.fileSize else null
-                            }
-
-                            val dPathsNorm = dPaths.mapTo(HashSet()) { it.lowercase() }
-                            var prefsChanged = false
-                            for (song in mergedPreview) {
-                                val songPathNorm = song.path.trim().lowercase()
-                                if (songPathNorm.isBlank() || !dPathsNorm.contains(songPathNorm)) continue
-
-                                val isInDownloads = downloadedIds.contains(song.id) ||
-                                    downloadedContentMediaIds.contains(song.id) ||
-                                    downloadedPathsNorm.contains(songPathNorm) ||
-                                    (song.fileSize > 0L && downloadedNameSizes.contains(song.title.lowercase() to song.fileSize))
-
-                                if (isInDownloads) {
-                                    if (dPaths.removeAll { it.equals(song.path, ignoreCase = true) }) {
-                                        prefsChanged = true
-                                    }
-                                    if (hIds.remove(song.id)) {
-                                        prefsChanged = true
-                                    }
-                                }
-                            }
-                            if (prefsChanged) {
-                                omniPrefs.edit()
-                                    .putStringSet("hidden_song_ids", hIds.mapTo(HashSet()) { it.toString() })
-                                    .putStringSet("deleted_song_paths", HashSet(dPaths))
-                                    .commit()
-                            }
+                        val reconciled = com.omnivault.media.utils.LibraryExclusionHelper.reconcileRedownloadedExclusions(
+                            mergedSongs = mergedPreview.map { com.omnivault.media.utils.SongKey(it.id, it.title, it.path, it.fileSize) },
+                            downloadedSongs = downloadedSongs.map { com.omnivault.media.utils.SongKey(it.id, it.title, it.path, it.fileSize) },
+                            deletedPaths = dPaths,
+                            hiddenIds = hIds
+                        )
+                        if (reconciled.changed) {
+                            omniPrefs.edit()
+                                .putStringSet("hidden_song_ids", reconciled.cleanedHiddenIds.mapTo(HashSet()) { it.toString() })
+                                .putStringSet("deleted_song_paths", HashSet(reconciled.cleanedDeletedPaths))
+                                .commit()
                         }
-                        hIds.toSet() to dPaths.toSet()
+                        reconciled.cleanedHiddenIds to reconciled.cleanedDeletedPaths
                     }
                     withContext(Dispatchers.Main) {
                         hiddenSongIds = freshHiddenIds
