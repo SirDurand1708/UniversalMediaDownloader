@@ -429,7 +429,12 @@ class DownloadViewModel(
         playlistEntries.value = emptyList()
     }
 
-    fun startUniversalDownload(url: String, format: MediaFormat, forceDuplicate: Boolean = false) {
+    fun startUniversalDownload(
+        url: String,
+        format: MediaFormat,
+        forceDuplicate: Boolean = false,
+        onDispatched: () -> Unit = {}
+    ) {
         val trimmed = url.trim()
         if (trimmed.isBlank()) return
 
@@ -439,6 +444,7 @@ class DownloadViewModel(
                 return@launch
             }
             dispatchSingleDownload(trimmed, format)
+            onDispatched()
         }
     }
 
@@ -458,7 +464,12 @@ class DownloadViewModel(
         batchUrls.value = emptyList()
     }
 
-    fun enqueueBatch(urls: List<String>, format: MediaFormat, skipDuplicates: Boolean = true) {
+    fun enqueueBatch(
+        urls: List<String>,
+        format: MediaFormat,
+        skipDuplicates: Boolean = true,
+        onDispatched: () -> Unit = {}
+    ) {
         val unique = urls.map { it.trim() }.filter { it.isNotBlank() }.distinct()
         if (unique.isEmpty()) return
 
@@ -488,6 +499,9 @@ class DownloadViewModel(
             batchFeedbackMessage.value = buildString {
                 append("Encoladas $enqueued descargas")
                 if (skipped > 0) append(" ($skipped duplicadas omitidas)")
+            }
+            if (enqueued > 0) {
+                onDispatched()
             }
         }
     }

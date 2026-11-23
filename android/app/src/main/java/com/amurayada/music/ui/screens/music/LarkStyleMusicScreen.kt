@@ -117,6 +117,7 @@ fun LarkStyleMusicScreen(
         libraryViewModel.deletedSongPaths,
         libraryViewModel.filterShortAudio
     ) {
+        val normDeletedPaths = libraryViewModel.deletedSongPaths.mapTo(HashSet()) { it.lowercase() }
         libraryViewModel.songs.filter {
             val lower = it.path.lowercase()
             val isVideo = it.mimeType?.startsWith("video/", ignoreCase = true) == true ||
@@ -127,7 +128,7 @@ fun LarkStyleMusicScreen(
             !isVideo &&
                 passesDuration &&
                 !libraryViewModel.hiddenSongIds.contains(it.id) &&
-                (it.path.isBlank() || !libraryViewModel.deletedSongPaths.contains(it.path))
+                (it.path.isBlank() || !normDeletedPaths.contains(lower))
         }
     }
     val playlists by playlistViewModel.playlists.collectAsState()

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
@@ -138,6 +139,10 @@ fun OmniVaultDownloaderScreen(
     val cardBg = Color(0xFF141923)
     val borderCol = Color(0xFF263248)
     var selectedDownloadTab by remember { mutableIntStateOf(0) } // 0 = Nuevo, 1 = Completadas
+    val listState = rememberLazyListState()
+    LaunchedEffect(selectedDownloadTab) {
+        listState.scrollToItem(0)
+    }
     var isAudioFormatTab by remember(selectedFormat) { mutableStateOf(selectedFormat.isAudio) }
 
     var detectedClipboardUrl by remember { mutableStateOf<String?>(null) }
@@ -194,6 +199,7 @@ fun OmniVaultDownloaderScreen(
     }
 
     LazyColumn(
+        state = listState,
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding(),
@@ -272,7 +278,6 @@ fun OmniVaultDownloaderScreen(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         val isNewTab = selectedDownloadTab == 0
-                        val newLabel = if (activeDownloadList.isNotEmpty()) "Nuevo (${activeDownloadList.size})" else "Nuevo"
                         Surface(
                             onClick = { selectedDownloadTab = 0 },
                             shape = RoundedCornerShape(20.dp),
@@ -280,7 +285,7 @@ fun OmniVaultDownloaderScreen(
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
-                                text = newLabel,
+                                text = "Nuevo",
                                 fontSize = 14.sp,
                                 fontWeight = if (isNewTab) FontWeight.Bold else FontWeight.Medium,
                                 color = if (isNewTab) darkOnAccent else Color.White.copy(alpha = 0.68f),
@@ -802,7 +807,9 @@ fun OmniVaultDownloaderScreen(
                 Button(
                     onClick = {
                         if (batchUrls.size > 1) {
-                            downloadViewModel.enqueueBatch(batchUrls, selectedFormat)
+                            downloadViewModel.enqueueBatch(batchUrls, selectedFormat) {
+                                selectedDownloadTab = 1
+                            }
                         } else {
                             val targetUrl = mediaPreview?.originalUrl?.takeIf { it.isNotBlank() } ?: urlInput
                             if (targetUrl.isBlank()) {
@@ -810,7 +817,9 @@ fun OmniVaultDownloaderScreen(
                             } else if (com.omnivault.media.utils.UrlUtils.isDirectPlaylistUrl(targetUrl)) {
                                 downloadViewModel.analyzeUrl(targetUrl, forcePlaylist = true)
                             } else {
-                                downloadViewModel.startUniversalDownload(targetUrl, selectedFormat)
+                                downloadViewModel.startUniversalDownload(targetUrl, selectedFormat) {
+                                    selectedDownloadTab = 1
+                                }
                             }
                         }
                     },
@@ -838,7 +847,52 @@ fun OmniVaultDownloaderScreen(
             }
         }
 
-        // 4. Controles globales de cola y Descargas Activas / Pausadas / Error
+        // Aviso rápido en "Nuevo" si hay descargas activas, pausadas o con error en "Completadas"
+        val pendingQueueCount = activeDownloadList.size + pausedDownloadList.size + failedDownloadList.size
+        if (pendingQueueCount > 0) {
+            item {
+                Surface(
+                    onClick = { selectedDownloadTab = 1 },
+                    color = cardBg,
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, accentColor.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = buildString {
+                                val parts = mutableListOf<String>()
+                                if (activeDownloadList.isNotEmpty()) parts.add("${activeDownloadList.size} descargando")
+                                if (pausedDownloadList.isNotEmpty()) parts.add("${pausedDownloadList.size} en pausa")
+                                if (failedDownloadList.isNotEmpty()) parts.add("${failedDownloadList.size} con error")
+                                append(parts.joinToString(" • "))
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "Ver →",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = accentColor
+                        )
+                    }
+                }
+            }
+        }
+
+        } else {
+        // 4. Controles globales de cola y Descargas Activas / Pausadas / Error (en Completadas)
         if (activeDownloadList.isNotEmpty() || pausedDownloadList.isNotEmpty() || failedDownloadList.isNotEmpty()) {
             item {
                 Row(
@@ -995,7 +1049,6 @@ fun OmniVaultDownloaderScreen(
             }
         }
 
-        } else {
         // 5. Sección de Descargas Completadas (sub-pestaña Completadas)
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1178,7 +1231,9 @@ fun OmniVaultDownloaderScreen(
                 Button(
                     onClick = {
                         downloadViewModel.duplicateWarning.value = null
-                        downloadViewModel.startUniversalDownload(dupUrl, dupFormat, forceDuplicate = true)
+                        downloadViewModel.startUniversalDownload(dupUrl, dupFormat, forceDuplicate = true) {
+                            selectedDownloadTab = 1
+                        }
                     }
                 ) {
                     Text("Descargar copia")
@@ -1269,7 +1324,9 @@ fun OmniVaultDownloaderScreen(
                     enabled = selectedIndices.isNotEmpty(),
                     onClick = {
                         val urls = selectedIndices.sorted().map { playlistEntries[it].url }
-                        downloadViewModel.enqueueBatch(urls, selectedFormat)
+                        downloadViewModel.enqueueBatch(urls, selectedFormat) {
+                            selectedDownloadTab = 1
+                        }
                     }
                 ) {
                     Text("Descargar (${selectedIndices.size})")

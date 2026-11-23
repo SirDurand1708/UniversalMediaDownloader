@@ -260,6 +260,7 @@ class UniversalDownloadEngine private constructor(context: Context) {
 
     companion object {
         private const val PUBLIC_FOLDER_NAME = "OmniVault"
+        val EXCLUSION_PREFS_LOCK = Any()
 
         @Volatile
         private var INSTANCE: UniversalDownloadEngine? = null
@@ -282,22 +283,82 @@ class UniversalDownloadEngine private constructor(context: Context) {
         }
     }
 
+    private fun resolvePhysicalPathFromUri(uriString: String?): String? {
+        if (uriString.isNullOrBlank() || !uriString.startsWith("content://")) return null
+        return try {
+            appContext.contentResolver.query(
+                Uri.parse(uriString),
+                arrayOf(MediaStore.MediaColumns.DATA),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idx = cursor.getColumnIndex(MediaStore.MediaColumns.DATA)
+                    if (idx != -1) cursor.getString(idx)?.trim()?.takeIf { it.isNotBlank() } else null
+                } else null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun resolveMediaStoreIdFromPath(physicalPath: String?): Long? {
+        if (physicalPath.isNullOrBlank() || physicalPath.startsWith("content://")) return null
+        return try {
+            appContext.contentResolver.query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.Audio.Media._ID),
+                "${MediaStore.Audio.Media.DATA} = ?",
+                arrayOf(physicalPath),
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idx = cursor.getColumnIndex(MediaStore.Audio.Media._ID)
+                    if (idx != -1) cursor.getLong(idx) else null
+                } else null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     /**
-     * Cancela en caliente el proceso nativo de `yt-dlp` / `FFmpeg` asociado al `processId`.
+     * Limpia rutas e IDs previamente marcados como eliminados cuando la misma canción vuelve a descargarse.
      */
     fun unmarkDeletedFromPrefs(songId: Long, savedPath: String?, physicalPath: String? = null) {
         try {
-            val prefs = appContext.getSharedPreferences("omnivault_prefs", Context.MODE_PRIVATE)
-            val hiddenIds = prefs.getStringSet("hidden_song_ids", emptySet())?.toMutableSet() ?: mutableSetOf()
-            val deletedPaths = prefs.getStringSet("deleted_song_paths", emptySet())?.toMutableSet() ?: mutableSetOf()
-            var changed = hiddenIds.remove(songId.toString())
-            if (!savedPath.isNullOrBlank() && deletedPaths.remove(savedPath)) changed = true
-            if (!physicalPath.isNullOrBlank() && deletedPaths.remove(physicalPath)) changed = true
-            if (changed) {
-                prefs.edit()
-                    .putStringSet("hidden_song_ids", hiddenIds)
-                    .putStringSet("deleted_song_paths", deletedPaths)
-                    .apply()
+            val resolvedPhysical = physicalPath?.takeIf { it.isNotBlank() } ?: resolvePhysicalPathFromUri(savedPath)
+            val contentMediaId = savedPath?.takeIf { it.startsWith("content://") }?.substringAfterLast("/")?.toLongOrNull()
+            val mediaStoreId = contentMediaId ?: resolveMediaStoreIdFromPath(resolvedPhysical)
+
+            val candidates = listOfNotNull(
+                savedPath?.trim()?.takeIf { it.isNotBlank() },
+                resolvedPhysical?.trim()?.takeIf { it.isNotBlank() }
+            )
+
+            synchronized(EXCLUSION_PREFS_LOCK) {
+                val prefs = appContext.getSharedPreferences("omnivault_prefs", Context.MODE_PRIVATE)
+                val hiddenIds = prefs.getStringSet("hidden_song_ids", emptySet())?.toMutableSet() ?: mutableSetOf()
+                val deletedPaths = prefs.getStringSet("deleted_song_paths", emptySet())?.toMutableSet() ?: mutableSetOf()
+
+                var changed = hiddenIds.remove(songId.toString())
+                if (mediaStoreId != null && hiddenIds.remove(mediaStoreId.toString())) {
+                    changed = true
+                }
+                if (candidates.isNotEmpty()) {
+                    val removedPath = deletedPaths.removeAll { existing ->
+                        candidates.any { candidate -> existing.equals(candidate, ignoreCase = true) }
+                    }
+                    if (removedPath) changed = true
+                }
+
+                if (changed) {
+                    prefs.edit()
+                        .putStringSet("hidden_song_ids", HashSet(hiddenIds))
+                        .putStringSet("deleted_song_paths", HashSet(deletedPaths))
+                        .commit()
+                }
             }
         } catch (_: Exception) {}
     }
@@ -677,11 +738,11 @@ class UniversalDownloadEngine private constructor(context: Context) {
                 isVideo = !format.isAudio,
                 mimeType = finalMimeType
             )
-            downloadDao.insertDownload(entity)
-            downloadQueueDao.deleteById(processId)
             if (format.isAudio) {
                 unmarkDeletedFromPrefs(entitySongId, exported.first, exported.second?.absolutePath)
             }
+            downloadDao.insertDownload(entity)
+            downloadQueueDao.deleteById(processId)
 
             currentState = currentState.copy(
                 progress = 1f,

@@ -221,9 +221,11 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         private set
 
     fun hideSong(songId: Long) {
-        val updated = hiddenSongIds + songId
-        hiddenSongIds = updated
-        omniPrefs.edit().putStringSet("hidden_song_ids", updated.map { it.toString() }.toHashSet()).apply()
+        synchronized(com.omnivault.media.downloader.UniversalDownloadEngine.EXCLUSION_PREFS_LOCK) {
+            val updated = hiddenSongIds + songId
+            hiddenSongIds = updated
+            omniPrefs.edit().putStringSet("hidden_song_ids", updated.map { it.toString() }.toHashSet()).apply()
+        }
         loadLibrary()
     }
 
@@ -261,18 +263,23 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     private var pendingTagEdit: PendingTagEdit? = null
 
     fun unhideSong(songId: Long) {
-        val updated = hiddenSongIds - songId
-        hiddenSongIds = updated
-        omniPrefs.edit().putStringSet("hidden_song_ids", updated.map { it.toString() }.toHashSet()).apply()
+        synchronized(com.omnivault.media.downloader.UniversalDownloadEngine.EXCLUSION_PREFS_LOCK) {
+            val updated = hiddenSongIds - songId
+            hiddenSongIds = updated
+            omniPrefs.edit().putStringSet("hidden_song_ids", updated.map { it.toString() }.toHashSet()).apply()
+        }
         loadLibrary()
     }
 
     fun unhideAllSongs() {
-        val keepDeletedIds = deletedSongPaths.let { delPaths ->
-            hiddenSongs.filter { delPaths.contains(it.path) }.map { it.id }.toSet()
+        synchronized(com.omnivault.media.downloader.UniversalDownloadEngine.EXCLUSION_PREFS_LOCK) {
+            val keepDeletedIds = deletedSongPaths.let { delPaths ->
+                val normDel = delPaths.mapTo(HashSet()) { it.lowercase() }
+                hiddenSongs.filter { normDel.contains(it.path.lowercase()) }.map { it.id }.toSet()
+            }
+            hiddenSongIds = keepDeletedIds
+            omniPrefs.edit().putStringSet("hidden_song_ids", keepDeletedIds.map { it.toString() }.toHashSet()).apply()
         }
-        hiddenSongIds = keepDeletedIds
-        omniPrefs.edit().putStringSet("hidden_song_ids", keepDeletedIds.map { it.toString() }.toHashSet()).apply()
         loadLibrary()
     }
 
@@ -329,14 +336,16 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun markSongDeleted(song: Song) {
-        val updatedIds = hiddenSongIds + song.id
-        hiddenSongIds = updatedIds
-        val updatedPaths = if (song.path.isNotBlank()) deletedSongPaths + song.path else deletedSongPaths
-        deletedSongPaths = updatedPaths
-        omniPrefs.edit()
-            .putStringSet("hidden_song_ids", updatedIds.map { it.toString() }.toHashSet())
-            .putStringSet("deleted_song_paths", updatedPaths.toHashSet())
-            .apply()
+        synchronized(com.omnivault.media.downloader.UniversalDownloadEngine.EXCLUSION_PREFS_LOCK) {
+            val updatedIds = hiddenSongIds + song.id
+            hiddenSongIds = updatedIds
+            val updatedPaths = if (song.path.isNotBlank()) deletedSongPaths + song.path else deletedSongPaths
+            deletedSongPaths = updatedPaths
+            omniPrefs.edit()
+                .putStringSet("hidden_song_ids", updatedIds.map { it.toString() }.toHashSet())
+                .putStringSet("deleted_song_paths", updatedPaths.toHashSet())
+                .apply()
+        }
     }
 
     fun clearPermissionEvent() {
@@ -516,8 +525,9 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         private set
     
     val filteredSongs: List<Song> by derivedStateOf {
+        val normDeletedPaths = deletedSongPaths.mapTo(HashSet()) { it.lowercase() }
         val visibleSongs = songs.filter {
-            !hiddenSongIds.contains(it.id) && (it.path.isBlank() || !deletedSongPaths.contains(it.path))
+            !hiddenSongIds.contains(it.id) && (it.path.isBlank() || !normDeletedPaths.contains(it.path.lowercase()))
         }
         if (searchQuery.isEmpty()) {
             visibleSongs
@@ -602,23 +612,69 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                     val downloadedSongs = downloadRepository.getDownloadedSongs()
                     android.util.Log.d("LibraryViewModel", "Found ${downloadedSongs.size} downloaded songs")
                     
-                    // Refrescar listas de exclusión desde SharedPreferences (por si se re-descargó una canción borrada)
-                    val freshHiddenIds = omniPrefs.getStringSet("hidden_song_ids", emptySet())
-                        ?.mapNotNull { it.toLongOrNull() }?.toSet() ?: emptySet()
-                    val freshDeletedPaths = omniPrefs.getStringSet("deleted_song_paths", emptySet())
-                        ?.toSet() ?: emptySet()
+                    // Refrescar listas de exclusión desde SharedPreferences y desbloquear descargas re-descargadas
+                    val (freshHiddenIds, freshDeletedPaths) = synchronized(
+                        com.omnivault.media.downloader.UniversalDownloadEngine.EXCLUSION_PREFS_LOCK
+                    ) {
+                        val hIds = omniPrefs.getStringSet("hidden_song_ids", emptySet())
+                            ?.mapNotNull { it.toLongOrNull() }?.toMutableSet() ?: mutableSetOf()
+                        val dPaths = omniPrefs.getStringSet("deleted_song_paths", emptySet())
+                            ?.toMutableSet() ?: mutableSetOf()
+
+                        val mergedPreview = mergeSongsDeduplicated(localSongs, downloadedSongs)
+                        if (dPaths.isNotEmpty() && downloadedSongs.isNotEmpty()) {
+                            val downloadedIds = downloadedSongs.mapTo(HashSet()) { it.id }
+                            val downloadedPathsNorm = downloadedSongs.mapNotNullTo(HashSet()) {
+                                it.path.trim().takeIf { p -> p.isNotBlank() }?.lowercase()
+                            }
+                            val downloadedContentMediaIds = downloadedSongs.mapNotNullTo(HashSet()) { s ->
+                                s.path.takeIf { it.startsWith("content://") }?.substringAfterLast("/")?.toLongOrNull()
+                            }
+                            val downloadedNameSizes = downloadedSongs.mapNotNullTo(HashSet()) { s ->
+                                if (s.fileSize > 0L) s.title.lowercase() to s.fileSize else null
+                            }
+
+                            val dPathsNorm = dPaths.mapTo(HashSet()) { it.lowercase() }
+                            var prefsChanged = false
+                            for (song in mergedPreview) {
+                                val songPathNorm = song.path.trim().lowercase()
+                                if (songPathNorm.isBlank() || !dPathsNorm.contains(songPathNorm)) continue
+
+                                val isInDownloads = downloadedIds.contains(song.id) ||
+                                    downloadedContentMediaIds.contains(song.id) ||
+                                    downloadedPathsNorm.contains(songPathNorm) ||
+                                    (song.fileSize > 0L && downloadedNameSizes.contains(song.title.lowercase() to song.fileSize))
+
+                                if (isInDownloads) {
+                                    if (dPaths.removeAll { it.equals(song.path, ignoreCase = true) }) {
+                                        prefsChanged = true
+                                    }
+                                    if (hIds.remove(song.id)) {
+                                        prefsChanged = true
+                                    }
+                                }
+                            }
+                            if (prefsChanged) {
+                                omniPrefs.edit()
+                                    .putStringSet("hidden_song_ids", hIds.mapTo(HashSet()) { it.toString() })
+                                    .putStringSet("deleted_song_paths", HashSet(dPaths))
+                                    .commit()
+                            }
+                        }
+                        hIds.toSet() to dPaths.toSet()
+                    }
                     withContext(Dispatchers.Main) {
                         hiddenSongIds = freshHiddenIds
                         deletedSongPaths = freshDeletedPaths
                     }
                     val excludedIds = freshHiddenIds
-                    val excludedPaths = freshDeletedPaths
+                    val excludedPathsNorm = freshDeletedPaths.mapTo(HashSet()) { it.lowercase() }
                     val mergedAll = mergeSongsDeduplicated(localSongs, downloadedSongs)
                     val hiddenFound = mergedAll.filter {
-                        excludedIds.contains(it.id) && (it.path.isBlank() || !excludedPaths.contains(it.path))
+                        excludedIds.contains(it.id) && (it.path.isBlank() || !excludedPathsNorm.contains(it.path.lowercase()))
                     }
                     val allSongs = mergedAll
-                        .filter { !excludedIds.contains(it.id) && (it.path.isBlank() || !excludedPaths.contains(it.path)) }
+                        .filter { !excludedIds.contains(it.id) && (it.path.isBlank() || !excludedPathsNorm.contains(it.path.lowercase())) }
                     val sortedSongs = allSongs.sortedBy { it.title }
 
                     // Pre-indexar archivos .lrc en IO (O(1) para UI Thread y compatible con content://)
