@@ -243,12 +243,20 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _isAmoledMode = MutableStateFlow(prefs.getBoolean("amoled_mode", false))
     val isAmoledMode: StateFlow<Boolean> = _isAmoledMode.asStateFlow()
 
-    private val _filterShortAudio = MutableStateFlow(prefs.getBoolean("filter_short_audio", true))
+    private val _filterShortAudio = MutableStateFlow(
+        application.getSharedPreferences("omnivault_prefs", Context.MODE_PRIVATE).let { op ->
+            if (op.contains("filter_short_audio")) op.getBoolean("filter_short_audio", true)
+            else prefs.getBoolean("filter_short_audio", true)
+        }
+    )
     val filterShortAudio: StateFlow<Boolean> = _filterShortAudio.asStateFlow()
 
     fun setFilterShortAudio(enabled: Boolean) {
         _filterShortAudio.value = enabled
         prefs.edit().putBoolean("filter_short_audio", enabled).apply()
+        getApplication<Application>()
+            .getSharedPreferences("omnivault_prefs", Context.MODE_PRIVATE)
+            .edit().putBoolean("filter_short_audio", enabled).apply()
     }
     
     fun setSleepTimer(minutes: Int) {

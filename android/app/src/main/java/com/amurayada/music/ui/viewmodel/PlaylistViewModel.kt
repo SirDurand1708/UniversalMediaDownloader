@@ -18,9 +18,9 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun createPlaylist(name: String) {
+    fun createPlaylist(name: String, initialSongIds: List<Long> = emptyList()) {
         viewModelScope.launch {
-            repository.createPlaylist(name)
+            repository.createPlaylist(name, initialSongIds)
         }
     }
 

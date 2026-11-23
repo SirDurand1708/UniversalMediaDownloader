@@ -111,7 +111,16 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     var currentPosition by mutableStateOf(0L)
         private set
     
-    var playbackMode by mutableStateOf(PlaybackMode())
+    var playbackMode by mutableStateOf(
+        PlaybackMode(
+            isShuffleEnabled = prefs.getBoolean("shuffle_enabled", false),
+            repeatMode = try {
+                RepeatMode.valueOf(prefs.getString("repeat_mode", RepeatMode.OFF.name) ?: RepeatMode.OFF.name)
+            } catch (_: Exception) {
+                RepeatMode.OFF
+            }
+        )
+    )
         private set
 
     private var _playbackSpeed by mutableStateOf(1.0f)
@@ -414,6 +423,12 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     
     private fun syncWithController() {
         mediaController?.let { controller ->
+            controller.shuffleModeEnabled = playbackMode.isShuffleEnabled
+            controller.repeatMode = when (playbackMode.repeatMode) {
+                RepeatMode.OFF -> Player.REPEAT_MODE_OFF
+                RepeatMode.ALL -> Player.REPEAT_MODE_ALL
+                RepeatMode.ONE -> Player.REPEAT_MODE_ONE
+            }
             val item = controller.currentMediaItem
             if (item != null) {
                 val metadata = item.mediaMetadata
@@ -548,6 +563,12 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                             // Determinamos el estado inicial según el origen de la pista
                             val isOnline = newSong.path.startsWith("http")
                             videoState = if (isOnline) VideoState.AUDIO_ONLY else VideoState.DISABLED
+
+                            // Registrar historial, conteo de reproducciones y letras en transición automática
+                            addToHistory(newSong)
+                            playCountMap[newSong.id] = (playCountMap[newSong.id] ?: 0) + 1
+                            savePlayCounts()
+                            loadLyrics(newSong)
                             
                             // VERIFICACIÓN PROACTIVA: Buscamos streams de video compatibles para canciones online
                             if (isOnline && !unsupportedVideoIds.contains(newSong.path)) {
@@ -924,6 +945,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         val newMode = playbackMode.copy(isShuffleEnabled = !playbackMode.isShuffleEnabled)
         playbackMode = newMode
         mediaController?.shuffleModeEnabled = newMode.isShuffleEnabled
+        prefs.edit().putBoolean("shuffle_enabled", newMode.isShuffleEnabled).apply()
     }
     
     fun toggleRepeatMode() {
@@ -933,6 +955,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             RepeatMode.ONE -> RepeatMode.OFF
         }
         playbackMode = playbackMode.copy(repeatMode = newRepeatMode)
+        prefs.edit().putString("repeat_mode", newRepeatMode.name).apply()
         
         mediaController?.repeatMode = when (newRepeatMode) {
             RepeatMode.OFF -> Player.REPEAT_MODE_OFF

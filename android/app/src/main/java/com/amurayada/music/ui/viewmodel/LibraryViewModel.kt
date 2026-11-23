@@ -224,6 +224,7 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         val updated = hiddenSongIds + songId
         hiddenSongIds = updated
         omniPrefs.edit().putStringSet("hidden_song_ids", updated.map { it.toString() }.toHashSet()).apply()
+        loadLibrary()
     }
 
     var hiddenSongs by mutableStateOf<List<Song>>(emptyList())
@@ -601,9 +602,17 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                     val downloadedSongs = downloadRepository.getDownloadedSongs()
                     android.util.Log.d("LibraryViewModel", "Found ${downloadedSongs.size} downloaded songs")
                     
-                    // Combine and deduplicate by physical file / MediaStore URI (avoids content:// vs /storage/... duplicates)
-                    val excludedIds = hiddenSongIds
-                    val excludedPaths = deletedSongPaths
+                    // Refrescar listas de exclusión desde SharedPreferences (por si se re-descargó una canción borrada)
+                    val freshHiddenIds = omniPrefs.getStringSet("hidden_song_ids", emptySet())
+                        ?.mapNotNull { it.toLongOrNull() }?.toSet() ?: emptySet()
+                    val freshDeletedPaths = omniPrefs.getStringSet("deleted_song_paths", emptySet())
+                        ?.toSet() ?: emptySet()
+                    withContext(Dispatchers.Main) {
+                        hiddenSongIds = freshHiddenIds
+                        deletedSongPaths = freshDeletedPaths
+                    }
+                    val excludedIds = freshHiddenIds
+                    val excludedPaths = freshDeletedPaths
                     val mergedAll = mergeSongsDeduplicated(localSongs, downloadedSongs)
                     val hiddenFound = mergedAll.filter {
                         excludedIds.contains(it.id) && (it.path.isBlank() || !excludedPaths.contains(it.path))
@@ -766,7 +775,8 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     }
     
     fun getSongsByArtist(artistName: String): List<Song> {
-        return songs.filter { it.artist == artistName }
+        val target = artistName.trim()
+        return songs.filter { it.artist.trim().equals(target, ignoreCase = true) }
     }
 
     suspend fun getSongsByGenre(genreId: Long): List<Song> {

@@ -1,19 +1,19 @@
 {
-  "version": "2.5.55",
-  "version_code": 305,
-  "release_date": "2026-11-22",
-  "title": "OmniVault v2.5.55 — Windows PC & Android",
-  "changelog": "🛡️ Mega-parche de estabilidad y seguridad Android (50+ bugs críticos corregidos): Estabilidad en Media3/ExoPlayer, Scoped Storage y Room, FGS Android 15/16, Widget BAL/OOM, Search/Lyrics/TikWM JsonNull, Eq/Canvas/Gestos y reglas ProGuard",
+  "version": "2.5.56",
+  "version_code": 306,
+  "release_date": "2026-11-23",
+  "title": "OmniVault v2.5.56 — Windows PC & Android",
+  "changelog": "✨ Android Funcionalidad: Re-descarga de canciones borradas visible al instante en Canciones, carpeta OmniVault/compartir content:// reparados, historial/letras en transición automática, Shuffle/Repeat persistentes, creación de playlist con pistas y notificaciones sin duplicados",
   "android": {
-    "version": "2.5.55",
-    "version_code": 305,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.55/OmniVault-v2.5.55-Android.apk",
+    "version": "2.5.56",
+    "version_code": 306,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.56/OmniVault-v2.5.56-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.55",
-    "version_code": 305,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.55/OmniVault-v2.5.55-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.55/OmniVault-v2.5.55-Windows-x64-Portable.zip"
+    "version": "2.5.56",
+    "version_code": 306,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.56/OmniVault-v2.5.56-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.56/OmniVault-v2.5.56-Windows-x64-Portable.zip"
   }
 }

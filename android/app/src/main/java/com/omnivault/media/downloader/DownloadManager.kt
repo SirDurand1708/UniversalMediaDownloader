@@ -255,10 +255,12 @@ class DownloadManager private constructor(private val context: Context) {
                     if (state.thumbnailUrl.isNotBlank()) {
                         item.thumbnailUrl = state.thumbnailUrl
                     }
-                    item.status = state.status
                     item.progress = (state.progress * 100f).toInt().coerceIn(0, 100)
                     item.speedText = state.speedText
-                    notifyUpdate(item)
+                    if (state.status != DownloadStatus.COMPLETED) {
+                        item.status = state.status
+                        notifyUpdate(item)
+                    }
                 }
 
                 item.title = result.metadata.title
@@ -604,9 +606,10 @@ class DownloadManager private constructor(private val context: Context) {
             StorageHelper.scanMediaFile(context, finalOutputFile, finalMimeType)
             try {
                 val downloadDao = com.amurayada.music.data.database.DownloadDatabase.getDatabase(context).downloadDao()
+                val fallbackSongId = Math.abs(item.url.hashCode().toLong())
                 downloadDao.insertDownload(
                     com.amurayada.music.data.database.DownloadEntity(
-                        songId = Math.abs(item.url.hashCode().toLong()),
+                        songId = fallbackSongId,
                         title = item.title,
                         artist = item.artist?.takeIf { it.isNotBlank() } ?: "OmniVault",
                         album = if (item.format.isAudio) (item.artist?.takeIf { it.isNotBlank() } ?: "OmniVault") else "Video",
@@ -619,6 +622,11 @@ class DownloadManager private constructor(private val context: Context) {
                         mimeType = finalMimeType
                     )
                 )
+                val engine = UniversalDownloadEngine.getInstance(context)
+                engine.markFallbackCompleted(item.id)
+                if (item.format.isAudio) {
+                    engine.unmarkDeletedFromPrefs(fallbackSongId, finalOutputFile.absolutePath)
+                }
             } catch (dbErr: Exception) {
                 android.util.Log.w("DownloadManager", "Room insert warning: ${dbErr.message}")
             }

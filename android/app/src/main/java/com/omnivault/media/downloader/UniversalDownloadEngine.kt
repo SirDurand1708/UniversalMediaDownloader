@@ -285,6 +285,33 @@ class UniversalDownloadEngine private constructor(context: Context) {
     /**
      * Cancela en caliente el proceso nativo de `yt-dlp` / `FFmpeg` asociado al `processId`.
      */
+    fun unmarkDeletedFromPrefs(songId: Long, savedPath: String?, physicalPath: String? = null) {
+        try {
+            val prefs = appContext.getSharedPreferences("omnivault_prefs", Context.MODE_PRIVATE)
+            val hiddenIds = prefs.getStringSet("hidden_song_ids", emptySet())?.toMutableSet() ?: mutableSetOf()
+            val deletedPaths = prefs.getStringSet("deleted_song_paths", emptySet())?.toMutableSet() ?: mutableSetOf()
+            var changed = hiddenIds.remove(songId.toString())
+            if (!savedPath.isNullOrBlank() && deletedPaths.remove(savedPath)) changed = true
+            if (!physicalPath.isNullOrBlank() && deletedPaths.remove(physicalPath)) changed = true
+            if (changed) {
+                prefs.edit()
+                    .putStringSet("hidden_song_ids", hiddenIds)
+                    .putStringSet("deleted_song_paths", deletedPaths)
+                    .apply()
+            }
+        } catch (_: Exception) {}
+    }
+
+    suspend fun markFallbackCompleted(processId: String) {
+        try {
+            downloadQueueDao.deleteById(processId)
+            val current = _downloadsState.value.toMutableMap()
+            if (current.remove(processId) != null) {
+                _downloadsState.value = current
+            }
+        } catch (_: Exception) {}
+    }
+
     fun cancelDownload(processId: String) {
         try {
             YoutubeDL.getInstance().destroyProcessById(processId)
@@ -652,6 +679,9 @@ class UniversalDownloadEngine private constructor(context: Context) {
             )
             downloadDao.insertDownload(entity)
             downloadQueueDao.deleteById(processId)
+            if (format.isAudio) {
+                unmarkDeletedFromPrefs(entitySongId, exported.first, exported.second?.absolutePath)
+            }
 
             currentState = currentState.copy(
                 progress = 1f,

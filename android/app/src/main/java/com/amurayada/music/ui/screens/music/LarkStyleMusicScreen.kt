@@ -451,35 +451,49 @@ fun LarkStyleMusicScreen(
                         songsToDeleteBatch = songsBatch
                     },
                     onStandardize = { song ->
-                        val f = File(song.path)
-                        if (f.exists()) {
-                            val clean = FilenameStandardizer.standardizeTitle(f.nameWithoutExtension)
-                            if (clean != f.nameWithoutExtension) {
-                                val target = File(f.parentFile, "$clean.${f.extension}")
-                                if (f.renameTo(target)) {
-                                    MediaScannerConnection.scanFile(context, arrayOf(f.absolutePath, target.absolutePath), null, null)
-                                    libraryViewModel.loadLibrary()
-                                    Toast.makeText(context, "Nombre estandarizado: $clean", Toast.LENGTH_SHORT).show()
+                        if (song.path.startsWith("content://")) {
+                            Toast.makeText(context, "Usa 'Estandarizar nombres' en Ajustes para archivos MediaStore", Toast.LENGTH_SHORT).show()
+                        } else {
+                            val f = File(song.path)
+                            if (f.exists()) {
+                                val clean = FilenameStandardizer.standardizeTitle(f.nameWithoutExtension)
+                                if (clean != f.nameWithoutExtension) {
+                                    val target = File(f.parentFile, "$clean.${f.extension}")
+                                    if (f.renameTo(target)) {
+                                        MediaScannerConnection.scanFile(context, arrayOf(f.absolutePath, target.absolutePath), null, null)
+                                        libraryViewModel.loadLibrary()
+                                        Toast.makeText(context, "Nombre estandarizado: $clean", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "No se pudo renombrar el archivo", Toast.LENGTH_SHORT).show()
+                                    }
+                                } else {
+                                    Toast.makeText(context, "El nombre ya está estandarizado", Toast.LENGTH_SHORT).show()
                                 }
                             } else {
-                                Toast.makeText(context, "El nombre ya está estandarizado", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Archivo no encontrado", Toast.LENGTH_SHORT).show()
                             }
                         }
                     },
                     onShare = { song ->
-                        val file = File(song.path)
-                        if (file.exists()) {
-                            try {
-                                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "audio/*"
-                                    putExtra(Intent.EXTRA_STREAM, uri)
-                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        try {
+                            val uri = if (song.path.startsWith("content://")) {
+                                android.net.Uri.parse(song.path)
+                            } else {
+                                val file = File(song.path)
+                                if (!file.exists()) {
+                                    Toast.makeText(context, "Archivo no encontrado", Toast.LENGTH_SHORT).show()
+                                    return@SongsListContent
                                 }
-                                context.startActivity(Intent.createChooser(shareIntent, "Compartir canción"))
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "Error al compartir: ${e.message}", Toast.LENGTH_SHORT).show()
+                                FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                             }
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "audio/*"
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "Compartir canción"))
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Error al compartir: ${e.message}", Toast.LENGTH_SHORT).show()
                         }
                     },
                     onHide = { song ->
@@ -575,10 +589,14 @@ fun LarkStyleMusicScreen(
                     folderGroups = folderGroups,
                     searchQuery = searchQuery,
                     onFolderClick = { folderName, songs ->
-                        val folderPath = songs.firstOrNull()?.path?.let { p ->
-                            val idx = p.lastIndexOf('/')
-                            if (idx > 0) p.substring(0, idx) else folderName
-                        } ?: folderName
+                        val folderPath = if (folderName.equals("OmniVault", ignoreCase = true)) {
+                            "OmniVault"
+                        } else {
+                            songs.firstOrNull { it.path.startsWith("/") }?.path?.let { p ->
+                                val idx = p.lastIndexOf('/')
+                                if (idx > 0) p.substring(0, idx) else folderName
+                            } ?: folderName
+                        }
                         onFolderClick(folderPath)
                     }
                 )
@@ -695,24 +713,24 @@ fun LarkStyleMusicScreen(
     }
 
     // Diálogo para añadir canción a playlist
-    songForPlaylist?.let { song ->
+    if (songForPlaylist != null && !showCreatePlaylistDialog) {
+        val targetSong = songForPlaylist!!
         AddToPlaylistSheet(
             playlists = playlists,
             onDismiss = { songForPlaylist = null },
             onPlaylistSelected = { playlist ->
-                playlistViewModel.addSongToPlaylist(playlist.id, song.id)
+                playlistViewModel.addSongToPlaylist(playlist.id, targetSong.id)
                 songForPlaylist = null
                 Toast.makeText(context, "Añadido a ${playlist.name}", Toast.LENGTH_SHORT).show()
             },
             onCreateNewPlaylist = {
-                songForPlaylist = null
                 showCreatePlaylistDialog = true
             }
         )
     }
 
     // Diálogo para añadir múltiples canciones a playlist
-    if (songsForPlaylist.isNotEmpty()) {
+    if (songsForPlaylist.isNotEmpty() && !showCreatePlaylistDialog) {
         AddToPlaylistSheet(
             playlists = playlists,
             onDismiss = { songsForPlaylist = emptyList() },
@@ -723,7 +741,6 @@ fun LarkStyleMusicScreen(
                 Toast.makeText(context, "$count canciones añadidas a ${playlist.name}", Toast.LENGTH_SHORT).show()
             },
             onCreateNewPlaylist = {
-                songsForPlaylist = emptyList()
                 showCreatePlaylistDialog = true
             }
         )
@@ -750,10 +767,21 @@ fun LarkStyleMusicScreen(
                 TextButton(
                     onClick = {
                         if (newPlaylistName.isNotBlank()) {
-                            playlistViewModel.createPlaylist(newPlaylistName.trim())
+                            val pendingIds = buildList {
+                                songForPlaylist?.let { add(it.id) }
+                                addAll(songsForPlaylist.map { it.id })
+                            }.distinct()
+                            playlistViewModel.createPlaylist(newPlaylistName.trim(), pendingIds)
+                            songForPlaylist = null
+                            songsForPlaylist = emptyList()
                             libraryViewModel.loadLibrary()
                             showCreatePlaylistDialog = false
-                            Toast.makeText(context, "Playlist \"$newPlaylistName\" creada", Toast.LENGTH_SHORT).show()
+                            val msg = if (pendingIds.isNotEmpty()) {
+                                "Playlist \"$newPlaylistName\" creada con ${pendingIds.size} ${if (pendingIds.size == 1) "canción" else "canciones"}"
+                            } else {
+                                "Playlist \"$newPlaylistName\" creada"
+                            }
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                             newPlaylistName = ""
                         }
                     }

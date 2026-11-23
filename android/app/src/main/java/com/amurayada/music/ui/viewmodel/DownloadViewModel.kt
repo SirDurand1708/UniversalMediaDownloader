@@ -144,7 +144,9 @@ class DownloadViewModel(
                             albumArtUri = entity.thumbnailUrl?.let { Uri.parse(it) },
                             path = entity.localPath ?: entity.youtubeUrl,
                             dateAdded = entity.downloadedAt,
-                            albumId = entity.album.hashCode().toLong()
+                            albumId = entity.album.hashCode().toLong(),
+                            mimeType = entity.mimeType ?: if (entity.isVideo) "video/mp4" else null,
+                            fileSize = entity.fileSize
                         )
                     }
                 }

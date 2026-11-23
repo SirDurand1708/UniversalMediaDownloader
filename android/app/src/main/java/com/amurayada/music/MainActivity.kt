@@ -1209,9 +1209,12 @@ fun MusicPlayerApp(
                             val matchesFolder = if (folderPath.startsWith("/")) {
                                 val lastSlash = song.path.lastIndexOf('/')
                                 lastSlash > 0 && song.path.substring(0, lastSlash) == folderPath
+                            } else if (folderPath.equals("OmniVault", ignoreCase = true)) {
+                                song.path.startsWith("content://") ||
+                                    (song.path.startsWith("/") && song.path.substringBeforeLast('/').substringAfterLast('/').equals("OmniVault", ignoreCase = true))
                             } else {
-                                song.path.substringBeforeLast('/').substringAfterLast('/').ifBlank { "Música" } == folderPath ||
-                                    (!song.path.startsWith("/") && folderPath == "Música")
+                                song.path.substringBeforeLast('/').substringAfterLast('/').ifBlank { "Almacenamiento Interno" } == folderPath ||
+                                    (!song.path.startsWith("/") && folderPath == "Almacenamiento Interno")
                             }
                             matchesFolder && !isVideo &&
                                 !libraryViewModel.hiddenSongIds.contains(song.id) &&

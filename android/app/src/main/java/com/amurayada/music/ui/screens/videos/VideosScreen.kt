@@ -592,23 +592,25 @@ fun VideosScreen(
                 },
                 onShare = { video ->
                     val path = video.localFilePath ?: return@VideoMediaCollection
-                    val file = File(path)
-                    if (file.exists()) {
-                        try {
-                            val uri = FileProvider.getUriForFile(
-                                context,
-                                "${context.packageName}.fileprovider",
-                                file
-                            )
-                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                type = "video/*"
-                                putExtra(Intent.EXTRA_STREAM, uri)
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    try {
+                        val uri = if (path.startsWith("content://")) {
+                            Uri.parse(path)
+                        } else {
+                            val file = File(path)
+                            if (!file.exists()) {
+                                Toast.makeText(context, "Archivo de video no encontrado", Toast.LENGTH_SHORT).show()
+                                return@VideoMediaCollection
                             }
-                            context.startActivity(Intent.createChooser(shareIntent, "Compartir video"))
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "Error al compartir: ${e.message}", Toast.LENGTH_SHORT).show()
+                            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                         }
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "video/*"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(shareIntent, "Compartir video"))
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Error al compartir: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
                 },
                 onDelete = { video ->
@@ -865,23 +867,25 @@ fun VideosScreen(
                         },
                         onShare = { video ->
                             val path = video.localFilePath ?: return@VideoMediaCollection
-                            val file = File(path)
-                            if (file.exists()) {
-                                try {
-                                    val uri = FileProvider.getUriForFile(
-                                        context,
-                                        "${context.packageName}.fileprovider",
-                                        file
-                                    )
-                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "video/*"
-                                        putExtra(Intent.EXTRA_STREAM, uri)
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            try {
+                                val uri = if (path.startsWith("content://")) {
+                                    Uri.parse(path)
+                                } else {
+                                    val file = File(path)
+                                    if (!file.exists()) {
+                                        Toast.makeText(context, "Archivo de video no encontrado", Toast.LENGTH_SHORT).show()
+                                        return@VideoMediaCollection
                                     }
-                                    context.startActivity(Intent.createChooser(shareIntent, "Compartir video"))
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "Error al compartir: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                                 }
+                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "video/*"
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(Intent.createChooser(shareIntent, "Compartir video"))
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Error al compartir: ${e.message}", Toast.LENGTH_SHORT).show()
                             }
                         },
                         onDelete = { video ->

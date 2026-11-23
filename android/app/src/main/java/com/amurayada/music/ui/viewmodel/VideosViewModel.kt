@@ -309,6 +309,12 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
             if (success) {
                 val newPath = item.localFilePath
                 if (oldPath != null && newPath != null) {
+                    try {
+                        com.amurayada.music.data.database.DownloadDatabase
+                            .getDatabase(getApplication())
+                            .downloadDao()
+                            .updateDownloadPathAndTitle(oldPath, newPath, item.title)
+                    } catch (_: Exception) {}
                     MediaScannerConnection.scanFile(
                         getApplication(),
                         arrayOf(oldPath, newPath),
@@ -325,20 +331,27 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
 
     private suspend fun removeVideoFromDb(item: DownloadItem) {
         val ctx = getApplication<Application>()
+        val dao = com.amurayada.music.data.database.DownloadDatabase.getDatabase(ctx).downloadDao()
         val path = item.localFilePath
         if (item.id.startsWith("db_video_")) {
             val songId = item.id.removePrefix("db_video_").toLongOrNull()
             if (songId != null) {
-                com.amurayada.music.data.database.DownloadDatabase
-                    .getDatabase(ctx)
-                    .downloadDao()
-                    .deleteDownloadById(songId)
+                dao.deleteDownloadById(songId)
             }
-        } else if (!path.isNullOrBlank()) {
-            com.amurayada.music.data.database.DownloadDatabase
-                .getDatabase(ctx)
-                .downloadDao()
-                .deleteDownloadByPath(path)
+        } else {
+            if (!path.isNullOrBlank()) {
+                dao.deleteDownloadByPath(path)
+            }
+            try {
+                val dbVideos = dao.getDownloadsByType(true)
+                val targetName = path?.let { java.io.File(it).name }
+                dbVideos.filter { entity ->
+                    (item.fileSizeBytes > 0L && entity.fileSize == item.fileSizeBytes && entity.title.equals(item.title, ignoreCase = true)) ||
+                        (!targetName.isNullOrBlank() && entity.localPath?.endsWith("/$targetName", ignoreCase = true) == true)
+                }.forEach { entity ->
+                    dao.deleteDownloadById(entity.songId)
+                }
+            } catch (_: Exception) {}
         }
         purgeVideoFromPlaylists(item.id)
     }

@@ -127,10 +127,11 @@ class PlaylistRepository(private val context: Context) {
         savePlaylists()
     }
 
-    suspend fun createPlaylist(name: String) {
+    suspend fun createPlaylist(name: String, initialSongIds: List<Long> = emptyList()) {
         val newPlaylist = Playlist(
             id = System.currentTimeMillis(),
-            name = name
+            name = name,
+            songIds = initialSongIds.distinct()
         )
         _playlists.value = _playlists.value + newPlaylist
         savePlaylists()
