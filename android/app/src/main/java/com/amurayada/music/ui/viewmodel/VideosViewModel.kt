@@ -291,7 +291,7 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
                     merged.add(item)
                 }
                 _rawVideos.value = merged
-                if (deviceVideos.isNotEmpty() && merged.isNotEmpty()) {
+                if (scanned.isNotEmpty() && merged.isNotEmpty()) {
                     pruneMissingVideosFromPlaylists(merged.mapTo(HashSet()) { it.id })
                 }
             } catch (e: Exception) {
