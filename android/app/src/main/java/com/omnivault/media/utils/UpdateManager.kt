@@ -32,8 +32,8 @@ data class UpdateInfo(
 
 object UpdateManager {
     private const val TAG = "UpdateManager"
-    const val CURRENT_VERSION_NAME = "2.5.56"
-    const val CURRENT_VERSION_CODE = 306
+    val CURRENT_VERSION_NAME: String get() = com.amurayada.music.BuildConfig.VERSION_NAME
+    val CURRENT_VERSION_CODE: Int get() = com.amurayada.music.BuildConfig.VERSION_CODE
     private const val UPDATE_URL = "https://raw.githubusercontent.com/SirDurand1708/UniversalMediaDownloader/main/version.json"
 
     private val client = OkHttpClient.Builder()

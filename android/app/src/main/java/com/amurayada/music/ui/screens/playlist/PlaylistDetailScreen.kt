@@ -210,15 +210,15 @@ fun PlaylistDetailScreen(
                 Surface(
                     onClick = onBackClick,
                     shape = CircleShape,
-                    color = Color(0xFF1A202C).copy(alpha = 0.85f),
-                    border = BorderStroke(1.dp, Color(0xFF2D3748)),
+                    color = com.amurayada.music.ui.theme.LocalAuraPalette.current.cardBg.copy(alpha = 0.9f),
+                    border = BorderStroke(1.dp, com.amurayada.music.ui.theme.LocalAuraPalette.current.border),
                     modifier = Modifier.size(42.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             Icons.AutoMirrored.Rounded.ArrowBack,
                             contentDescription = "Atrás",
-                            tint = Color.White,
+                            tint = com.amurayada.music.ui.theme.LocalAuraPalette.current.textPrimary,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -226,8 +226,8 @@ fun PlaylistDetailScreen(
 
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = Color(0xFF1A202C).copy(alpha = 0.85f),
-                    border = BorderStroke(1.dp, Color(0xFF2D3748))
+                    color = com.amurayada.music.ui.theme.LocalAuraPalette.current.cardBg.copy(alpha = 0.9f),
+                    border = BorderStroke(1.dp, com.amurayada.music.ui.theme.LocalAuraPalette.current.border)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -243,7 +243,7 @@ fun PlaylistDetailScreen(
                             Icon(
                                 if (isSearchActive) Icons.Rounded.Close else Icons.Rounded.Search,
                                 contentDescription = "Buscar en playlist",
-                                tint = if (isSearchActive) Color(0xFF00E5FF) else Color.White,
+                                tint = if (isSearchActive) com.amurayada.music.ui.theme.LocalAuraPalette.current.accent else com.amurayada.music.ui.theme.LocalAuraPalette.current.textPrimary,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -257,7 +257,7 @@ fun PlaylistDetailScreen(
                                 Icon(
                                     Icons.Rounded.Sort,
                                     contentDescription = "Ordenar playlist",
-                                    tint = Color.White,
+                                    tint = com.amurayada.music.ui.theme.LocalAuraPalette.current.textPrimary,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -275,7 +275,7 @@ fun PlaylistDetailScreen(
                                         },
                                         leadingIcon = {
                                             if (currentSort == option) {
-                                                Icon(Icons.Rounded.Check, contentDescription = null, tint = Color(0xFF00E5FF))
+                                                Icon(Icons.Rounded.Check, contentDescription = null, tint = com.amurayada.music.ui.theme.LocalAuraPalette.current.accent)
                                             }
                                         },
                                         onClick = {
@@ -297,7 +297,7 @@ fun PlaylistDetailScreen(
                                 Icon(
                                     Icons.Rounded.MoreVert,
                                     contentDescription = "Más opciones",
-                                    tint = Color.White,
+                                    tint = com.amurayada.music.ui.theme.LocalAuraPalette.current.textPrimary,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -390,7 +390,7 @@ fun PlaylistDetailScreen(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
                     placeholder = { Text("Buscar en ${playlist.name}...", style = MaterialTheme.typography.bodySmall) },
-                    leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null, tint = Color(0xFF00E5FF)) },
+                    leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null, tint = com.amurayada.music.ui.theme.LocalAuraPalette.current.accent) },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { searchQuery = "" }) {
@@ -408,9 +408,9 @@ fun PlaylistDetailScreen(
 
             if (inSelectionMode) {
                 Surface(
-                    color = Color(0xFF141923),
+                    color = com.amurayada.music.ui.theme.LocalAuraPalette.current.cardBg,
                     shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.5f)),
+                    border = BorderStroke(1.dp, com.amurayada.music.ui.theme.LocalAuraPalette.current.accent.copy(alpha = 0.5f)),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 4.dp)
@@ -420,13 +420,13 @@ fun PlaylistDetailScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(onClick = { selectedIds.clear() }, modifier = Modifier.size(34.dp)) {
-                            Icon(Icons.Rounded.Close, contentDescription = "Cancelar", tint = Color.White, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Rounded.Close, contentDescription = "Cancelar", tint = com.amurayada.music.ui.theme.LocalAuraPalette.current.textPrimary, modifier = Modifier.size(18.dp))
                         }
                         Text(
                             text = "${selectedIds.size}",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF00E5FF)
+                            color = com.amurayada.music.ui.theme.LocalAuraPalette.current.accent
                         )
                         Spacer(Modifier.weight(1f))
                         if (onAddToQueue != null) {
@@ -439,7 +439,7 @@ fun PlaylistDetailScreen(
                                 },
                                 modifier = Modifier.size(36.dp)
                             ) {
-                                Icon(Icons.Rounded.QueueMusic, contentDescription = "Añadir a la cola", tint = Color.White, modifier = Modifier.size(20.dp))
+                                Icon(Icons.Rounded.QueueMusic, contentDescription = "Añadir a la cola", tint = com.amurayada.music.ui.theme.LocalAuraPalette.current.textPrimary, modifier = Modifier.size(20.dp))
                             }
                         }
                         if (!isReadOnly) {
@@ -469,7 +469,7 @@ fun PlaylistDetailScreen(
                             },
                             modifier = Modifier.size(36.dp)
                         ) {
-                            Icon(Icons.Rounded.SelectAll, contentDescription = "Seleccionar todo", tint = Color(0xFF00E5FF), modifier = Modifier.size(20.dp))
+                            Icon(Icons.Rounded.SelectAll, contentDescription = "Seleccionar todo", tint = com.amurayada.music.ui.theme.LocalAuraPalette.current.accent, modifier = Modifier.size(20.dp))
                         }
                     }
                 }
@@ -490,8 +490,8 @@ fun PlaylistDetailScreen(
                     ) {
                         Surface(
                             shape = RoundedCornerShape(20.dp),
-                            color = Color(0xFF141923),
-                            border = BorderStroke(1.dp, Color(0xFF263248)),
+                            color = com.amurayada.music.ui.theme.LocalAuraPalette.current.cardBg,
+                            border = BorderStroke(1.dp, com.amurayada.music.ui.theme.LocalAuraPalette.current.border),
                             modifier = Modifier
                                 .size(164.dp)
                                 .then(
@@ -512,7 +512,7 @@ fun PlaylistDetailScreen(
                                     Icon(
                                         Icons.Rounded.MusicNote,
                                         contentDescription = null,
-                                        tint = Color(0xFF00E5FF),
+                                        tint = com.amurayada.music.ui.theme.LocalAuraPalette.current.accent,
                                         modifier = Modifier.size(64.dp)
                                     )
                                 }
@@ -530,7 +530,7 @@ fun PlaylistDetailScreen(
                                 text = playlist.name,
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = Color.White,
+                                color = com.amurayada.music.ui.theme.LocalAuraPalette.current.textPrimary,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                                 textAlign = TextAlign.Center
@@ -547,7 +547,7 @@ fun PlaylistDetailScreen(
                                     Icon(
                                         Icons.Rounded.Edit,
                                         contentDescription = "Renombrar playlist",
-                                        tint = Color.White.copy(alpha = 0.8f),
+                                        tint = com.amurayada.music.ui.theme.LocalAuraPalette.current.textPrimary.copy(alpha = 0.8f),
                                         modifier = Modifier.size(18.dp)
                                     )
                                 }
@@ -559,7 +559,7 @@ fun PlaylistDetailScreen(
                         Text(
                             text = if (songs.isNotEmpty()) "${songs.size} Canciones • $totalDurationText" else "0 Canciones",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.65f)
+                            color = com.amurayada.music.ui.theme.LocalAuraPalette.current.textPrimary.copy(alpha = 0.65f)
                         )
 
                         Spacer(Modifier.height(18.dp))
@@ -581,8 +581,8 @@ fun PlaylistDetailScreen(
                                 },
                                 enabled = displayedSongs.isNotEmpty(),
                                 shape = RoundedCornerShape(50),
-                                color = Color(0xFF1E2430),
-                                border = BorderStroke(1.dp, Color(0xFF2D3748)),
+                                color = com.amurayada.music.ui.theme.LocalAuraPalette.current.cardBg,
+                                border = BorderStroke(1.dp, com.amurayada.music.ui.theme.LocalAuraPalette.current.border),
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(48.dp)
@@ -601,7 +601,7 @@ fun PlaylistDetailScreen(
                                     Spacer(Modifier.width(6.dp))
                                     Text(
                                         text = "Reproducir",
-                                        color = Color.White,
+                                        color = com.amurayada.music.ui.theme.LocalAuraPalette.current.textPrimary,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 14.sp,
                                         maxLines = 1,
@@ -614,8 +614,8 @@ fun PlaylistDetailScreen(
                                 onClick = onShuffle,
                                 enabled = displayedSongs.isNotEmpty(),
                                 shape = RoundedCornerShape(50),
-                                color = Color(0xFF1E2430),
-                                border = BorderStroke(1.dp, Color(0xFF2D3748)),
+                                color = com.amurayada.music.ui.theme.LocalAuraPalette.current.cardBg,
+                                border = BorderStroke(1.dp, com.amurayada.music.ui.theme.LocalAuraPalette.current.border),
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(48.dp)
@@ -634,7 +634,7 @@ fun PlaylistDetailScreen(
                                     Spacer(Modifier.width(6.dp))
                                     Text(
                                         text = "Aleatorio",
-                                        color = Color.White,
+                                        color = com.amurayada.music.ui.theme.LocalAuraPalette.current.textPrimary,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 14.sp,
                                         maxLines = 1,
@@ -647,9 +647,9 @@ fun PlaylistDetailScreen(
                         if (!isReadOnly && currentSort == PlaylistSort.MANUAL && searchQuery.isBlank() && !inSelectionMode && displayedSongs.size > 1) {
                             Spacer(Modifier.height(12.dp))
                             Surface(
-                                color = Color(0xFF00E5FF).copy(alpha = 0.12f),
+                                color = com.amurayada.music.ui.theme.LocalAuraPalette.current.accent.copy(alpha = 0.12f),
                                 shape = RoundedCornerShape(10.dp),
-                                border = BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.35f))
+                                border = BorderStroke(1.dp, com.amurayada.music.ui.theme.LocalAuraPalette.current.accent.copy(alpha = 0.35f))
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -658,14 +658,14 @@ fun PlaylistDetailScreen(
                                     Icon(
                                         Icons.Rounded.DragHandle,
                                         contentDescription = null,
-                                        tint = Color(0xFF00E5FF),
+                                        tint = com.amurayada.music.ui.theme.LocalAuraPalette.current.accent,
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(Modifier.width(6.dp))
                                     Text(
                                         text = "Arrastra desde ☰ para ordenar • Mantén en una fila para opciones",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFF00E5FF)
+                                        color = com.amurayada.music.ui.theme.LocalAuraPalette.current.accent
                                     )
                                 }
                             }
@@ -674,7 +674,7 @@ fun PlaylistDetailScreen(
                             Text(
                                 text = "Mantén presionada una canción para ver opciones",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.45f)
+                                color = com.amurayada.music.ui.theme.LocalAuraPalette.current.textPrimary.copy(alpha = 0.45f)
                             )
                         }
 
@@ -768,9 +768,9 @@ fun PlaylistDetailScreen(
                                 }
                                 .background(
                                     when {
-                                        isDragging -> Color(0xFF1E293B)
-                                        isSelected -> Color(0xFF00E5FF).copy(alpha = 0.20f)
-                                        isCurrent -> Color(0xFF00E5FF).copy(alpha = 0.12f)
+                                        isDragging -> com.amurayada.music.ui.theme.LocalAuraPalette.current.cardBgActive
+                                        isSelected -> com.amurayada.music.ui.theme.LocalAuraPalette.current.accent.copy(alpha = 0.20f)
+                                        isCurrent -> com.amurayada.music.ui.theme.LocalAuraPalette.current.accent.copy(alpha = 0.12f)
                                         else -> Color.Transparent
                                     }
                                 )
@@ -807,12 +807,13 @@ fun PlaylistDetailScreen(
                                 modifier = Modifier
                                     .size(48.dp)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFF141923)),
+                                    .background(com.amurayada.music.ui.theme.LocalAuraPalette.current.cardBg),
                                 contentAlignment = Alignment.Center
                             ) {
-                                if (song.albumArtUri != null) {
+                                val songArt = com.amurayada.music.ui.utils.toArtModel(song)
+                                if (songArt != null) {
                                     AsyncImage(
-                                        model = song.albumArtUri,
+                                        model = songArt,
                                         contentDescription = null,
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier.fillMaxSize()
@@ -821,7 +822,7 @@ fun PlaylistDetailScreen(
                                     Icon(
                                         Icons.Rounded.MusicNote,
                                         contentDescription = null,
-                                        tint = Color(0xFF00E5FF),
+                                        tint = com.amurayada.music.ui.theme.LocalAuraPalette.current.accent,
                                         modifier = Modifier.size(22.dp)
                                     )
                                 }
@@ -833,7 +834,7 @@ fun PlaylistDetailScreen(
                                         Icon(
                                             Icons.Rounded.GraphicEq,
                                             contentDescription = "Reproduciendo",
-                                            tint = Color(0xFF00E5FF),
+                                            tint = com.amurayada.music.ui.theme.LocalAuraPalette.current.accent,
                                             modifier = Modifier.size(22.dp)
                                         )
                                     }
@@ -847,7 +848,7 @@ fun PlaylistDetailScreen(
                                     text = song.title,
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isCurrent) Color(0xFF00E5FF) else Color.White,
+                                    color = if (isCurrent) com.amurayada.music.ui.theme.LocalAuraPalette.current.accent else com.amurayada.music.ui.theme.LocalAuraPalette.current.textPrimary,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -855,7 +856,7 @@ fun PlaylistDetailScreen(
                                 Text(
                                     text = song.artist,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Color.White.copy(alpha = 0.6f),
+                                    color = com.amurayada.music.ui.theme.LocalAuraPalette.current.textPrimary.copy(alpha = 0.6f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -871,7 +872,7 @@ fun PlaylistDetailScreen(
                                     Icon(
                                         Icons.Rounded.DragHandle,
                                         contentDescription = "Arrastrar para ordenar",
-                                        tint = Color.White.copy(alpha = 0.65f)
+                                        tint = com.amurayada.music.ui.theme.LocalAuraPalette.current.textPrimary.copy(alpha = 0.65f)
                                     )
                                 }
                             }

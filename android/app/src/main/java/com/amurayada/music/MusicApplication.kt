@@ -29,6 +29,8 @@ class MusicApplication : Application(), ImageLoaderFactory {
             }
             .components {
                 add(coil.decode.VideoFrameDecoder.Factory())
+                add(com.amurayada.music.ui.utils.SongArtKeyer())
+                add(com.amurayada.music.ui.utils.SongArtFetcher.Factory(this@MusicApplication))
             }
             .crossfade(true)
             .respectCacheHeaders(false)

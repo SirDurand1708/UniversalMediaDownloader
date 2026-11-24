@@ -21,7 +21,7 @@ object ShareUtils {
             val newFile = File(imagePath, "share_image.png")
             val contentUri: Uri = FileProvider.getUriForFile(
                 context,
-                "com.amurayada.music.fileprovider",
+                "${context.packageName}.fileprovider",
                 newFile
             )
 

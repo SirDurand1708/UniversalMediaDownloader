@@ -120,7 +120,7 @@ fun MiniPlayer(
                         tonalElevation = 2.dp
                     ) {
                         AsyncImage(
-                            model = currentSong.albumArtUri,
+                            model = com.amurayada.music.ui.utils.toArtModel(currentSong),
                             contentDescription = "Portada",
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop

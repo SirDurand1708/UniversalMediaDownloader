@@ -41,8 +41,8 @@ fun FavoritesScreen(
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
+                    .statusBarsPadding()
                     .padding(horizontal = 24.dp, vertical = 16.dp)
-                    .padding(top = 24.dp)
             )
 
             if (favoriteSongs.isNotEmpty()) {

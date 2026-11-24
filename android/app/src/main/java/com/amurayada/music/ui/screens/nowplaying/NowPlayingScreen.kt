@@ -189,15 +189,12 @@ fun NowPlayingScreen(
     
     // Dynamic colors from album art
     var gradientColors by remember { mutableStateOf(Color.Black to Color.Black) }
-    val imageLoader = remember(context) { ImageLoader(context) }
-    DisposableEffect(imageLoader) {
-        onDispose { imageLoader.shutdown() }
-    }
+    val imageLoader = remember(context) { coil.Coil.imageLoader(context) }
     
-    LaunchedEffect(currentSong.albumArtUri) {
+    LaunchedEffect(currentSong.id, currentSong.path, currentSong.albumArtUri) {
         try {
             val request = ImageRequest.Builder(context)
-                .data(currentSong.albumArtUri)
+                .data(com.amurayada.music.ui.utils.toArtModel(currentSong))
                 .allowHardware(false)
                 .memoryCachePolicy(CachePolicy.ENABLED)
                 .build()

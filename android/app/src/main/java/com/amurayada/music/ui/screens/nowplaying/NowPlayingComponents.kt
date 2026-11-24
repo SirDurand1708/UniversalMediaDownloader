@@ -108,7 +108,7 @@ fun NowPlayingBackground(
             if (!isAmoledMode && !isInVideoMode && !isCanvasEnabled) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(currentSong.albumArtUri)
+                        .data(com.amurayada.music.ui.utils.toArtModel(currentSong))
                         .crossfade(300)
                         .memoryCachePolicy(CachePolicy.ENABLED)
                         .diskCachePolicy(CachePolicy.ENABLED)
@@ -848,7 +848,7 @@ fun NowPlayingContent(
                                     elevation = CardDefaults.cardElevation(defaultElevation = 24.dp)
                                 ) {
                                     AsyncImage(
-                                        model = currentSong.albumArtUri,
+                                        model = com.amurayada.music.ui.utils.toArtModel(currentSong),
                                         contentDescription = "Portada del álbum",
                                         modifier = Modifier.fillMaxSize(),
                                         contentScale = ContentScale.Crop
@@ -877,7 +877,7 @@ fun NowPlayingContent(
                                 elevation = CardDefaults.cardElevation(defaultElevation = 24.dp)
                             ) {
                                 AsyncImage(
-                                    model = currentSong.albumArtUri,
+                                    model = com.amurayada.music.ui.utils.toArtModel(currentSong),
                                     contentDescription = "Portada del álbum",
                                     modifier = Modifier.fillMaxSize(),
                                     contentScale = ContentScale.Crop

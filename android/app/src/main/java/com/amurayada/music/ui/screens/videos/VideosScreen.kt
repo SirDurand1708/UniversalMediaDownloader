@@ -54,11 +54,15 @@ import com.omnivault.media.utils.StandardizeCandidate
 import kotlinx.coroutines.launch
 import java.io.File
 
-private val VideoNeonCyan = Color(0xFF00E5FF)
-private val VideoNeonGreen = Color(0xFF00E676)
-private val VideoTitaniumCard = Color(0xFF141923)
-private val VideoBorderSlate = Color(0xFF263248)
-private val VideoTextSecondary = Color(0xFF9AA4AF)
+import com.amurayada.music.ui.theme.LocalAuraPalette
+
+private val VideoNeonCyan @Composable get() = LocalAuraPalette.current.accent
+private val VideoNeonGreen @Composable get() = LocalAuraPalette.current.accentGreen
+private val VideoTitaniumCard @Composable get() = LocalAuraPalette.current.cardBg
+private val VideoBorderSlate @Composable get() = LocalAuraPalette.current.border
+private val VideoTextSecondary @Composable get() = LocalAuraPalette.current.textSecondary
+private val VideoTextPrimary @Composable get() = LocalAuraPalette.current.textPrimary
+private val VideoOnAccent @Composable get() = LocalAuraPalette.current.onAccent
 private val VideoDangerRed = Color(0xFFFF5252)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -229,7 +233,7 @@ fun VideosScreen(
                     text = "VIDEOS",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.ExtraBold,
-                    color = Color.White,
+                    color = VideoTextPrimary,
                     maxLines = 1,
                     softWrap = false
                 )
@@ -264,7 +268,7 @@ fun VideosScreen(
                         Icon(
                             imageVector = if (showSearchBar || searchQuery.isNotEmpty()) Icons.Rounded.SearchOff else Icons.Rounded.Search,
                             contentDescription = "Buscar videos",
-                            tint = if (showSearchBar || searchQuery.isNotEmpty()) VideoNeonCyan else Color.White
+                            tint = if (showSearchBar || searchQuery.isNotEmpty()) VideoNeonCyan else VideoTextPrimary
                         )
                     }
                 }
@@ -276,7 +280,7 @@ fun VideosScreen(
                     Icon(
                         imageVector = if (isGridView) Icons.Rounded.ViewList else Icons.Rounded.GridView,
                         contentDescription = if (isGridView) "Vista en lista" else "Vista en cuadrícula",
-                        tint = Color.White
+                        tint = VideoTextPrimary
                     )
                 }
                 Box {
@@ -284,7 +288,7 @@ fun VideosScreen(
                         Icon(
                             imageVector = Icons.Rounded.MoreVert,
                             contentDescription = "Más opciones",
-                            tint = Color.White
+                            tint = VideoTextPrimary
                         )
                     }
                     DropdownMenu(
@@ -359,7 +363,7 @@ fun VideosScreen(
                     text = "Todos los videos",
                     fontSize = 13.sp,
                     fontWeight = if (allSelected) FontWeight.Bold else FontWeight.Medium,
-                    color = if (allSelected) Color.Black else VideoTextSecondary,
+                    color = if (allSelected) VideoOnAccent else VideoTextSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
@@ -380,7 +384,7 @@ fun VideosScreen(
                     text = "Playlists (${videoPlaylists.size})",
                     fontSize = 13.sp,
                     fontWeight = if (playlistsSelected) FontWeight.Bold else FontWeight.Medium,
-                    color = if (playlistsSelected) Color.Black else VideoTextSecondary,
+                    color = if (playlistsSelected) VideoOnAccent else VideoTextSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
@@ -416,8 +420,8 @@ fun VideosScreen(
                     unfocusedBorderColor = VideoBorderSlate,
                     focusedContainerColor = VideoTitaniumCard,
                     unfocusedContainerColor = VideoTitaniumCard,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
+                    focusedTextColor = VideoTextPrimary,
+                    unfocusedTextColor = VideoTextPrimary,
                     cursorColor = VideoNeonCyan
                 )
             )
@@ -487,7 +491,7 @@ fun VideosScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = { selectedVideoIds.clear() }, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Rounded.Close, contentDescription = "Cancelar selección", tint = Color.White, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Rounded.Close, contentDescription = "Cancelar selección", tint = VideoTextPrimary, modifier = Modifier.size(18.dp))
                     }
                     Text(
                         text = "${selectedVideoIds.size} seleccionados",
@@ -666,7 +670,7 @@ fun VideosScreen(
                                 }
                                 Spacer(Modifier.width(12.dp))
                                 Column {
-                                    Text("Nueva playlist de videos", fontWeight = FontWeight.Bold, color = Color.White)
+                                    Text("Nueva playlist de videos", fontWeight = FontWeight.Bold, color = VideoTextPrimary)
                                     Text("Organiza tus videos en carpetas virtuales", style = MaterialTheme.typography.bodySmall, color = VideoTextSecondary)
                                 }
                             }
@@ -738,7 +742,7 @@ fun VideosScreen(
                                 }
                                 Spacer(Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(pl.name, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(pl.name, fontWeight = FontWeight.SemiBold, color = VideoTextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Text(
                                         "${plVideos.size} ${if (plVideos.size == 1) "video" else "videos"}",
                                         style = MaterialTheme.typography.bodySmall,
@@ -784,10 +788,10 @@ fun VideosScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = { openedPlaylistId = null }) {
-                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Volver a playlists", tint = Color.White)
+                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Volver a playlists", tint = VideoTextPrimary)
                     }
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(openedPlaylist.name, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(openedPlaylist.name, fontWeight = FontWeight.Bold, color = VideoTextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(
                             "${plVideos.size} ${if (plVideos.size == 1) "video" else "videos"}",
                             style = MaterialTheme.typography.bodySmall,
@@ -795,7 +799,7 @@ fun VideosScreen(
                         )
                     }
                     IconButton(onClick = { renameTargetPlaylist = openedPlaylist }) {
-                        Icon(Icons.Rounded.Edit, contentDescription = "Renombrar playlist", tint = Color.White)
+                        Icon(Icons.Rounded.Edit, contentDescription = "Renombrar playlist", tint = VideoTextPrimary)
                     }
                     if (plVideos.isNotEmpty()) {
                         FilledTonalButton(
@@ -805,7 +809,7 @@ fun VideosScreen(
                             },
                             colors = ButtonDefaults.filledTonalButtonColors(
                                 containerColor = VideoNeonCyan,
-                                contentColor = Color.Black
+                                contentColor = VideoOnAccent
                             ),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                             modifier = Modifier.height(36.dp)
@@ -915,8 +919,8 @@ fun VideosScreen(
         AlertDialog(
             onDismissRequest = { showSortDialog = false },
             containerColor = VideoTitaniumCard,
-            titleContentColor = Color.White,
-            textContentColor = Color.White,
+            titleContentColor = VideoTextPrimary,
+            textContentColor = VideoTextPrimary,
             title = { Text("Ordenar videos por", fontWeight = FontWeight.Bold) },
             text = {
                 Column {
@@ -962,8 +966,8 @@ fun VideosScreen(
         AlertDialog(
             onDismissRequest = { videoStandardizeCandidates = null },
             containerColor = VideoTitaniumCard,
-            titleContentColor = Color.White,
-            textContentColor = Color.White,
+            titleContentColor = VideoTextPrimary,
+            textContentColor = VideoTextPrimary,
             icon = { Icon(Icons.Rounded.AutoFixHigh, contentDescription = null, tint = VideoNeonCyan) },
             title = { Text("Estandarizar videos", fontWeight = FontWeight.Bold) },
             text = {
@@ -999,7 +1003,7 @@ fun VideosScreen(
                             }
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = VideoNeonCyan, contentColor = Color.Black)
+                    colors = ButtonDefaults.buttonColors(containerColor = VideoNeonCyan, contentColor = VideoOnAccent)
                 ) {
                     Text("Estandarizar (${candidates.size})", fontWeight = FontWeight.Bold)
                 }
@@ -1021,8 +1025,8 @@ fun VideosScreen(
         AlertDialog(
             onDismissRequest = { videoIdsPendingPlaylist = null },
             containerColor = VideoTitaniumCard,
-            titleContentColor = Color.White,
-            textContentColor = Color.White,
+            titleContentColor = VideoTextPrimary,
+            textContentColor = VideoTextPrimary,
             title = { Text("Añadir a playlist", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1074,7 +1078,7 @@ fun VideosScreen(
                                     ) {
                                         Icon(Icons.Rounded.Folder, contentDescription = null, tint = VideoNeonCyan)
                                         Spacer(Modifier.width(10.dp))
-                                        Text(pl.name, modifier = Modifier.weight(1f), fontWeight = FontWeight.Medium, color = Color.White)
+                                        Text(pl.name, modifier = Modifier.weight(1f), fontWeight = FontWeight.Medium, color = VideoTextPrimary)
                                         Text("$validCount", style = MaterialTheme.typography.labelMedium, color = VideoTextSecondary)
                                     }
                                 }
@@ -1102,8 +1106,8 @@ fun VideosScreen(
                 pendingPlaylistInitialVideos = emptyList()
             },
             containerColor = VideoTitaniumCard,
-            titleContentColor = Color.White,
-            textContentColor = Color.White,
+            titleContentColor = VideoTextPrimary,
+            textContentColor = VideoTextPrimary,
             title = { Text("Nueva playlist de videos", fontWeight = FontWeight.Bold) },
             text = {
                 OutlinedTextField(
@@ -1116,8 +1120,8 @@ fun VideosScreen(
                         unfocusedBorderColor = VideoBorderSlate,
                         focusedLabelColor = VideoNeonCyan,
                         unfocusedLabelColor = VideoTextSecondary,
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
+                        focusedTextColor = VideoTextPrimary,
+                        unfocusedTextColor = VideoTextPrimary,
                         cursorColor = VideoNeonCyan
                     ),
                     modifier = Modifier.fillMaxWidth()
@@ -1134,7 +1138,7 @@ fun VideosScreen(
                         pendingPlaylistInitialVideos = emptyList()
                     },
                     enabled = newName.isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(containerColor = VideoNeonCyan, contentColor = Color.Black)
+                    colors = ButtonDefaults.buttonColors(containerColor = VideoNeonCyan, contentColor = VideoOnAccent)
                 ) {
                     Text("Crear", fontWeight = FontWeight.Bold)
                 }
@@ -1158,8 +1162,8 @@ fun VideosScreen(
         AlertDialog(
             onDismissRequest = { renameTargetPlaylist = null },
             containerColor = VideoTitaniumCard,
-            titleContentColor = Color.White,
-            textContentColor = Color.White,
+            titleContentColor = VideoTextPrimary,
+            textContentColor = VideoTextPrimary,
             title = { Text("Renombrar playlist", fontWeight = FontWeight.Bold) },
             text = {
                 OutlinedTextField(
@@ -1172,8 +1176,8 @@ fun VideosScreen(
                         unfocusedBorderColor = VideoBorderSlate,
                         focusedLabelColor = VideoNeonCyan,
                         unfocusedLabelColor = VideoTextSecondary,
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
+                        focusedTextColor = VideoTextPrimary,
+                        unfocusedTextColor = VideoTextPrimary,
                         cursorColor = VideoNeonCyan
                     ),
                     modifier = Modifier.fillMaxWidth()
@@ -1186,7 +1190,7 @@ fun VideosScreen(
                         renameTargetPlaylist = null
                     },
                     enabled = updatedName.isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(containerColor = VideoNeonCyan, contentColor = Color.Black)
+                    colors = ButtonDefaults.buttonColors(containerColor = VideoNeonCyan, contentColor = VideoOnAccent)
                 ) {
                     Text("Guardar", fontWeight = FontWeight.Bold)
                 }
@@ -1206,7 +1210,7 @@ fun VideosScreen(
         AlertDialog(
             onDismissRequest = { deleteTargetPlaylist = null },
             containerColor = VideoTitaniumCard,
-            titleContentColor = Color.White,
+            titleContentColor = VideoTextPrimary,
             textContentColor = VideoTextSecondary,
             title = { Text("Eliminar playlist", fontWeight = FontWeight.Bold) },
             text = { Text("¿Eliminar \"${target.name}\"? Solo se eliminará la lista virtual; tus videos seguirán en tu dispositivo.") },
@@ -1256,7 +1260,7 @@ private fun SortOptionRow(label: String, selected: Boolean, onSelect: () -> Unit
             text = label,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) VideoNeonCyan else Color.White
+            color = if (selected) VideoNeonCyan else VideoTextPrimary
         )
     }
 }
@@ -1435,7 +1439,7 @@ fun VideoListRow(
                 Text(
                     text = video.title,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White,
+                    color = VideoTextPrimary,
                     fontSize = 13.5.sp,
                     lineHeight = 17.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -1632,7 +1636,7 @@ fun VideoGridCard(
                     Text(
                         text = video.title,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White,
+                        color = VideoTextPrimary,
                         fontSize = 12.sp,
                         lineHeight = 16.sp,
                         fontWeight = FontWeight.SemiBold,

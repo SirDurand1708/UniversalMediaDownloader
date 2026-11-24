@@ -31,16 +31,21 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Orange40,
+    primary = Color(0xFF0097A7),
     secondary = DeepPurple40,
     tertiary = Teal40,
     background = SurfaceLight,
-    surface = SurfaceLight,
+    surface = Color.White,
+    surfaceVariant = Color(0xFFEBF0F7),
+    surfaceContainer = Color.White,
+    surfaceContainerLow = SurfaceLight,
+    surfaceContainerHigh = Color(0xFFEFF3F9),
     onPrimary = Color.White,
     onSecondary = Color.White,
     onTertiary = Color.White,
-    onBackground = Color.Black,
-    onSurface = Color.Black,
+    onBackground = Color(0xFF0F172A),
+    onSurface = Color(0xFF0F172A),
+    onSurfaceVariant = Color(0xFF526071)
 )
 
 @Composable
@@ -119,13 +124,18 @@ fun MusicTheme(
             val window = (view.context as Activity).window
             window.statusBarColor = Color.Transparent.toArgb()
             window.navigationBarColor = Color.Transparent.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            val controller = WindowCompat.getInsetsController(window, view)
+            controller.isAppearanceLightStatusBars = !effectiveDarkTheme
+            controller.isAppearanceLightNavigationBars = !effectiveDarkTheme
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    val auraPalette = if (effectiveDarkTheme) DarkAuraPalette else LightAuraPalette
+    androidx.compose.runtime.CompositionLocalProvider(LocalAuraPalette provides auraPalette) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
 }

@@ -277,6 +277,7 @@ fun SettingsScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Ajustes", fontWeight = FontWeight.Bold) },
+                modifier = Modifier.statusBarsPadding(),
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,

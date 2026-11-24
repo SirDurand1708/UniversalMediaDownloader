@@ -24,6 +24,15 @@ class DownloadWorker(
     
     private val notificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        createNotificationChannel()
+        val title = inputData.getString("title") ?: "Descargando audio"
+        val songId = inputData.getLong("songId", -1L)
+        val rawId = songId.toInt()
+        val notificationId = if (rawId == 0 || songId == -1L) 1001 else kotlin.math.abs(rawId)
+        return createForegroundInfo(title, 0, notificationId)
+    }
     
     override suspend fun doWork(): Result {
         val songId = inputData.getLong("songId", -1)

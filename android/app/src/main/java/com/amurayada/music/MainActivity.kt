@@ -22,6 +22,8 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import coil.compose.AsyncImage
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -32,6 +34,7 @@ import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -203,9 +206,15 @@ class MainActivity : ComponentActivity() {
                 val permissionsToRequest = remember {
                     buildList {
                         add(coreAudioPermission)
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                            add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                        }
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                             add(Manifest.permission.READ_MEDIA_VIDEO)
                             add(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
                         }
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                             add(Manifest.permission.BLUETOOTH_CONNECT)
@@ -224,13 +233,8 @@ class MainActivity : ComponentActivity() {
 
                         try {
                             startService(intent)
-                        } catch (e: Exception) {
-                            // Fallback por si el inicio en segundo plano falla (raro cuando la Activity es visible)
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                startForegroundService(intent)
-                            } else {
-                                startService(intent)
-                            }
+                        } catch (_: Exception) {
+                            // En Android 12+ si la Activity aún está transicionando a background, MediaController vinculará el servicio al reproducir
                         }
                         libraryViewModel.loadLibrary()
                     }
@@ -629,8 +633,8 @@ fun MusicPlayerApp(
     val applyBackgroundToPlayer by settingsViewModel.applyBackgroundToPlayer.collectAsState()
 
     
-    var isPlayerExpanded by remember { mutableStateOf(false) }
-    var isMiniPlayerDismissed by remember { mutableStateOf(false) }
+    var isPlayerExpanded by rememberSaveable { mutableStateOf(false) }
+    var isMiniPlayerDismissed by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(currentSong?.id) {
         if (currentSong != null) {
@@ -871,7 +875,14 @@ fun MusicPlayerApp(
                                             }
                                         },
                                         icon = { if (selected) item.selectedIcon() else item.unselectedIcon() },
-                                        label = { Text(item.title, style = MaterialTheme.typography.labelSmall) },
+                                        label = {
+                                            Text(
+                                                item.title,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                maxLines = 1,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                            )
+                                        },
                                         colors = if (customBgUri != null) {
                                             NavigationBarItemDefaults.colors(
                                                 indicatorColor = MaterialTheme.colorScheme.primaryContainer,
@@ -1579,20 +1590,22 @@ fun MusicPlayerApp(
                                     } else {
                                         android.widget.Toast.makeText(context, "No se pudo actualizar", android.widget.Toast.LENGTH_SHORT).show()
                                     }
-                                } catch (e: com.amurayada.music.data.repository.MediaRepository.RequiresPermissionException) {
-                                    onRequestPermission(albumId, title, artist, imageUri, e.intentSender)
-                                } catch (e: android.app.RecoverableSecurityException) {
-                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                } catch (e: Exception) {
+                                    if (e is com.amurayada.music.data.repository.MediaRepository.RequiresPermissionException) {
+                                        onRequestPermission(albumId, title, artist, imageUri, e.intentSender)
+                                    } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q &&
+                                        e is android.app.RecoverableSecurityException
+                                    ) {
                                         try {
                                             onRequestPermission(albumId, title, artist, imageUri, e.userAction.actionIntent.intentSender)
                                         } catch (ex: Exception) {
                                             ex.printStackTrace()
                                         }
+                                    } else {
+                                        val msg = e.message ?: "Error al actualizar"
+                                        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                                        e.printStackTrace()
                                     }
-                                } catch (e: Exception) {
-                                    val msg = e.message ?: "Error al actualizar"
-                                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
-                                    e.printStackTrace()
                                 }
                             }
                         },
@@ -1828,7 +1841,11 @@ fun PermissionRequestScreen(
     modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .verticalScroll(rememberScrollState()),
         contentAlignment = Alignment.Center
     ) {
         Card(

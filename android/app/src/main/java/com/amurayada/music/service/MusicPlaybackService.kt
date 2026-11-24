@@ -507,7 +507,7 @@ class MusicPlaybackService : MediaSessionService() {
             // Si el widget arrancó el servicio en frío sin pista cargada, cumplimos startForeground antes de detenernos
             try {
                 val placeholder = androidx.core.app.NotificationCompat.Builder(this, CHANNEL_ID)
-                    .setSmallIcon(com.amurayada.music.R.mipmap.ic_launcher)
+                    .setSmallIcon(com.amurayada.music.R.drawable.ic_notification_music)
                     .setContentTitle("Aura Player")
                     .setContentText("Sin pista activa")
                     .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)

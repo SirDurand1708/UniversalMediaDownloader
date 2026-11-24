@@ -63,6 +63,13 @@ import java.io.File
 // Cache thread-safe de detección de letras en disco para evitar jank en LazyColumn de 2000+ canciones
 private val lyricsCache = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
 
+private val MusicAccent @Composable get() = com.amurayada.music.ui.theme.LocalAuraPalette.current.accent
+private val MusicOnAccent @Composable get() = com.amurayada.music.ui.theme.LocalAuraPalette.current.onAccent
+private val MusicCardBg @Composable get() = com.amurayada.music.ui.theme.LocalAuraPalette.current.cardBg
+private val MusicCardActive @Composable get() = com.amurayada.music.ui.theme.LocalAuraPalette.current.cardBgActive
+private val MusicBorder @Composable get() = com.amurayada.music.ui.theme.LocalAuraPalette.current.border
+private val MusicTextPrimary @Composable get() = com.amurayada.music.ui.theme.LocalAuraPalette.current.textPrimary
+
 enum class LarkCategory(val label: String) {
     CANCIONES("Canciones"),
     PLAYLISTS("Playlists"),
@@ -187,9 +194,9 @@ fun LarkStyleMusicScreen(
             .associate { it.key to it.value }
     }
 
-    val neonCyan = Color(0xFF00E5FF)
-    val neonGreen = Color(0xFF00E676)
-    val titaniumCard = Color(0xFF141923)
+    val neonCyan = MusicAccent
+    val neonGreen = com.amurayada.music.ui.theme.LocalAuraPalette.current.accentGreen
+    val titaniumCard = MusicCardBg
 
     val snackbarHostState = remember { SnackbarHostState() }
     val rootScope = rememberCoroutineScope()
@@ -254,7 +261,7 @@ fun LarkStyleMusicScreen(
                         text = "Aura Player",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.ExtraBold,
-                        color = Color.White,
+                        color = MusicTextPrimary,
                         letterSpacing = (-0.5).sp,
                         maxLines = 1,
                         softWrap = false,
@@ -267,14 +274,14 @@ fun LarkStyleMusicScreen(
                         Icon(
                             imageVector = Icons.Rounded.Search,
                             contentDescription = "Buscar",
-                            tint = Color.White
+                            tint = MusicTextPrimary
                         )
                     }
                     IconButton(onClick = { showSortDialog = true }) {
                         Icon(
                             imageVector = Icons.Rounded.Sort,
                             contentDescription = "Ordenar",
-                            tint = Color.White
+                            tint = MusicTextPrimary
                         )
                     }
                     IconButton(onClick = onEqualizerClick) {
@@ -303,8 +310,8 @@ fun LarkStyleMusicScreen(
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = titaniumCard,
                         unfocusedContainerColor = titaniumCard,
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
+                        focusedTextColor = MusicTextPrimary,
+                        unfocusedTextColor = MusicTextPrimary,
                         cursorColor = neonCyan,
                         focusedIndicatorColor = neonCyan,
                         unfocusedIndicatorColor = Color.Transparent
@@ -326,7 +333,7 @@ fun LarkStyleMusicScreen(
                     isSearchActive = false
                     searchQuery = ""
                 }) {
-                    Text("Cancelar", color = Color.White)
+                    Text("Cancelar", color = MusicTextPrimary)
                 }
             }
             if (searchQuery.isBlank() && searchHistory.isNotEmpty()) {
@@ -366,14 +373,14 @@ fun LarkStyleMusicScreen(
                     color = if (selected) neonCyan else titaniumCard,
                     border = androidx.compose.foundation.BorderStroke(
                         1.dp,
-                        if (selected) neonCyan else Color(0xFF263248)
+                        if (selected) neonCyan else MusicBorder
                     )
                 ) {
                     Text(
                         text = category.label,
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (selected) Color.Black else Color.White.copy(alpha = 0.85f),
+                        color = if (selected) MusicOnAccent else MusicTextPrimary.copy(alpha = 0.85f),
                         maxLines = 1,
                         softWrap = false,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
@@ -1103,7 +1110,7 @@ private fun SongsListContent(
                     if (hiddenSongsCount > 0) {
                         Spacer(Modifier.height(12.dp))
                         TextButton(onClick = onShowHiddenSongs) {
-                            Text("Ver canciones ocultas ($hiddenSongsCount)", color = Color(0xFF00E5FF))
+                            Text("Ver canciones ocultas ($hiddenSongsCount)", color = MusicAccent)
                         }
                     }
                 }
@@ -1146,9 +1153,9 @@ private fun SongsListContent(
             if (inSelectionMode) {
                 item {
                     Surface(
-                        color = Color(0xFF141923),
+                        color = MusicCardBg,
                         shape = RoundedCornerShape(14.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.5f)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MusicAccent.copy(alpha = 0.5f)),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 6.dp)
@@ -1163,13 +1170,13 @@ private fun SongsListContent(
                                 onClick = { selectedIds.clear() },
                                 modifier = Modifier.size(34.dp)
                             ) {
-                                Icon(Icons.Rounded.Close, contentDescription = "Cancelar selección", tint = Color.White, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Rounded.Close, contentDescription = "Cancelar selección", tint = MusicTextPrimary, modifier = Modifier.size(18.dp))
                             }
                             Text(
                                 text = "${selectedIds.size}",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF00E5FF)
+                                color = MusicAccent
                             )
                             Spacer(Modifier.weight(1f))
                             IconButton(
@@ -1180,7 +1187,7 @@ private fun SongsListContent(
                                 },
                                 modifier = Modifier.size(36.dp)
                             ) {
-                                Icon(Icons.Rounded.PlaylistAdd, contentDescription = "Añadir a playlist", tint = Color.White, modifier = Modifier.size(20.dp))
+                                Icon(Icons.Rounded.PlaylistAdd, contentDescription = "Añadir a playlist", tint = MusicTextPrimary, modifier = Modifier.size(20.dp))
                             }
                             IconButton(
                                 onClick = {
@@ -1190,7 +1197,7 @@ private fun SongsListContent(
                                 },
                                 modifier = Modifier.size(36.dp)
                             ) {
-                                Icon(Icons.Rounded.QueueMusic, contentDescription = "Añadir a la cola", tint = Color.White, modifier = Modifier.size(20.dp))
+                                Icon(Icons.Rounded.QueueMusic, contentDescription = "Añadir a la cola", tint = MusicTextPrimary, modifier = Modifier.size(20.dp))
                             }
                             IconButton(
                                 onClick = {
@@ -1200,7 +1207,7 @@ private fun SongsListContent(
                                 },
                                 modifier = Modifier.size(36.dp)
                             ) {
-                                Icon(Icons.Rounded.VisibilityOff, contentDescription = "Ocultar", tint = Color.White, modifier = Modifier.size(20.dp))
+                                Icon(Icons.Rounded.VisibilityOff, contentDescription = "Ocultar", tint = MusicTextPrimary, modifier = Modifier.size(20.dp))
                             }
                             IconButton(
                                 onClick = {
@@ -1223,7 +1230,7 @@ private fun SongsListContent(
                                 },
                                 modifier = Modifier.size(36.dp)
                             ) {
-                                Icon(Icons.Rounded.SelectAll, contentDescription = "Seleccionar todo", tint = Color(0xFF00E5FF), modifier = Modifier.size(20.dp))
+                                Icon(Icons.Rounded.SelectAll, contentDescription = "Seleccionar todo", tint = MusicAccent, modifier = Modifier.size(20.dp))
                             }
                         }
                     }
@@ -1243,14 +1250,14 @@ private fun SongsListContent(
                                 text = "${songs.size} canciones",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color.White.copy(alpha = 0.7f),
+                                color = MusicTextPrimary.copy(alpha = 0.7f),
                                 maxLines = 1
                             )
                             if (hiddenSongsCount > 0) {
                                 Text(
                                     text = "Ocultas ($hiddenSongsCount)",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF00E5FF),
+                                    color = MusicAccent,
                                     modifier = Modifier.clickable { onShowHiddenSongs() }
                                 )
                             }
@@ -1260,14 +1267,14 @@ private fun SongsListContent(
                             if (currentSongIndex >= 0) {
                                 Surface(
                                     onClick = { scope.launch { listState.animateScrollToItem(currentSongIndex + 1) } },
-                                    color = Color(0xFF141923),
+                                    color = MusicCardBg,
                                     shape = RoundedCornerShape(12.dp),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF263248))
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, MusicBorder)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Rounded.MyLocation,
                                         contentDescription = "Ir a canción actual",
-                                        tint = Color(0xFF00E5FF),
+                                        tint = MusicAccent,
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp).size(16.dp)
                                     )
                                 }
@@ -1275,9 +1282,9 @@ private fun SongsListContent(
 
                             Surface(
                                 onClick = onPlayAll,
-                                color = Color(0xFF141923),
+                                color = MusicCardBg,
                                 shape = RoundedCornerShape(12.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF263248))
+                                border = androidx.compose.foundation.BorderStroke(1.dp, MusicBorder)
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -1286,7 +1293,7 @@ private fun SongsListContent(
                                     Icon(
                                         imageVector = Icons.Rounded.PlayArrow,
                                         contentDescription = null,
-                                        tint = Color(0xFF00E5FF),
+                                        tint = MusicAccent,
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(Modifier.width(4.dp))
@@ -1294,7 +1301,7 @@ private fun SongsListContent(
                                         text = "Todo",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color.White,
+                                        color = MusicTextPrimary,
                                         maxLines = 1,
                                         softWrap = false
                                     )
@@ -1303,9 +1310,9 @@ private fun SongsListContent(
 
                             Surface(
                                 onClick = onShuffle,
-                                color = Color(0xFF141923),
+                                color = MusicCardBg,
                                 shape = RoundedCornerShape(12.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF263248))
+                                border = androidx.compose.foundation.BorderStroke(1.dp, MusicBorder)
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -1314,7 +1321,7 @@ private fun SongsListContent(
                                     Icon(
                                         imageVector = Icons.Rounded.Shuffle,
                                         contentDescription = null,
-                                        tint = Color(0xFF00E5FF),
+                                        tint = MusicAccent,
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(Modifier.width(4.dp))
@@ -1322,7 +1329,7 @@ private fun SongsListContent(
                                         text = "Aleatorio",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color.White,
+                                        color = MusicTextPrimary,
                                         maxLines = 1,
                                         softWrap = false
                                     )
@@ -1385,7 +1392,7 @@ private fun SongsListContent(
 
             if (activeLetter != null) {
                 Surface(
-                    color = Color(0xFF00E5FF),
+                    color = MusicAccent,
                     shape = CircleShape,
                     modifier = Modifier
                         .align(Alignment.Center)
@@ -1396,7 +1403,7 @@ private fun SongsListContent(
                             text = activeLetter ?: "",
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color.Black
+                            color = MusicOnAccent
                         )
                     }
                 }
@@ -1423,7 +1430,7 @@ private fun SongsListContent(
                         text = letter,
                         fontSize = 9.sp,
                         fontWeight = if (activeLetter == letter) FontWeight.ExtraBold else FontWeight.Medium,
-                        color = if (activeLetter == letter) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.5f),
+                        color = if (activeLetter == letter) MusicAccent else MusicTextPrimary.copy(alpha = 0.5f),
                         modifier = Modifier
                             .clickable {
                                 val songIdx = songs.indexOfFirst { it.title.trimStart().startsWith(letter, ignoreCase = true) }
@@ -1445,8 +1452,8 @@ private fun SongsListContent(
         ) {
             SmallFloatingActionButton(
                 onClick = { scope.launch { listState.animateScrollToItem(0) } },
-                containerColor = Color(0xFF141923),
-                contentColor = Color(0xFF00E5FF)
+                containerColor = MusicCardBg,
+                contentColor = MusicAccent
             ) {
                 Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "Ir arriba")
             }
@@ -1520,8 +1527,8 @@ private fun LarkSongRow(
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .background(
                 when {
-                    isSelected -> Color(0xFF00E5FF).copy(alpha = 0.20f)
-                    isCurrent -> Color(0xFF00E5FF).copy(alpha = 0.12f)
+                    isSelected -> MusicAccent.copy(alpha = 0.20f)
+                    isCurrent -> MusicAccent.copy(alpha = 0.12f)
                     else -> Color.Transparent
                 }
             )
@@ -1537,7 +1544,7 @@ private fun LarkSongRow(
             Checkbox(
                 checked = isSelected,
                 onCheckedChange = { onClick() },
-                colors = CheckboxDefaults.colors(checkedColor = Color(0xFF00E5FF))
+                colors = CheckboxDefaults.colors(checkedColor = MusicAccent)
             )
             Spacer(Modifier.width(4.dp))
         }
@@ -1546,13 +1553,14 @@ private fun LarkSongRow(
             modifier = Modifier
                 .size(48.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF141923)),
+                .background(MusicCardBg),
             contentAlignment = Alignment.Center
         ) {
-            if (song.albumArtUri != null) {
-                val artRequest = remember(song.id, song.albumArtUri) {
+            val artModel = com.amurayada.music.ui.utils.toArtModel(song)
+            if (artModel != null) {
+                val artRequest = remember(song.id, song.path, song.albumArtUri) {
                     ImageRequest.Builder(context)
-                        .data(song.albumArtUri)
+                        .data(artModel)
                         .size(144)
                         .crossfade(true)
                         .diskCachePolicy(CachePolicy.ENABLED)
@@ -1568,7 +1576,7 @@ private fun LarkSongRow(
                 Icon(
                     imageVector = Icons.Rounded.MusicNote,
                     contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.6f),
+                    tint = MusicTextPrimary.copy(alpha = 0.6f),
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -1582,7 +1590,7 @@ private fun LarkSongRow(
                 ) {
                     EqualizerIndicator(
                         isAnimating = true,
-                        color = Color(0xFF00E5FF),
+                        color = MusicAccent,
                         maxHeight = 22.dp,
                         barCount = 3,
                         barWidth = 3.dp
@@ -1599,7 +1607,7 @@ private fun LarkSongRow(
                 text = song.title,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
-                color = if (isCurrent) Color(0xFF00E5FF) else Color.White,
+                color = if (isCurrent) MusicAccent else MusicTextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1612,14 +1620,14 @@ private fun LarkSongRow(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
-                            .border(0.8.dp, Color.White.copy(alpha = 0.45f), RoundedCornerShape(4.dp))
+                            .border(0.8.dp, MusicTextPrimary.copy(alpha = 0.45f), RoundedCornerShape(4.dp))
                             .padding(horizontal = 4.dp, vertical = 1.dp)
                     ) {
                         Text(
                             text = "LETRAS",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White.copy(alpha = 0.85f),
+                            color = MusicTextPrimary.copy(alpha = 0.85f),
                             fontSize = 8.sp,
                             letterSpacing = 0.5.sp
                         )
@@ -1638,7 +1646,7 @@ private fun LarkSongRow(
                 Text(
                     text = subtitleText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.55f),
+                    color = MusicTextPrimary.copy(alpha = 0.55f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false)
@@ -1654,7 +1662,7 @@ private fun LarkSongRow(
                 Text(
                     text = durationLabel,
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.65f),
+                    color = MusicTextPrimary.copy(alpha = 0.65f),
                     fontSize = 10.sp
                 )
             }
@@ -1662,14 +1670,14 @@ private fun LarkSongRow(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(4.dp))
-                    .background(Color(0xFF00E5FF).copy(alpha = 0.14f))
+                    .background(MusicAccent.copy(alpha = 0.14f))
                     .padding(horizontal = 4.dp, vertical = 1.dp)
             ) {
                 Text(
                     text = formatLabel,
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF00E5FF),
+                    color = MusicAccent,
                     fontSize = 8.sp
                 )
             }
@@ -1681,7 +1689,7 @@ private fun LarkSongRow(
                 Icon(
                     imageVector = Icons.Rounded.MoreVert,
                     contentDescription = "Opciones",
-                    tint = Color.White.copy(alpha = 0.6f),
+                    tint = MusicTextPrimary.copy(alpha = 0.6f),
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -1869,9 +1877,9 @@ private fun PlaylistsContent(
         item {
             Surface(
                 onClick = onCreatePlaylist,
-                color = Color(0xFF141923),
+                color = MusicCardBg,
                 shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.4f)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MusicAccent.copy(alpha = 0.4f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -1882,14 +1890,14 @@ private fun PlaylistsContent(
                         modifier = Modifier
                             .size(48.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFF00E5FF).copy(alpha = 0.2f)),
+                            .background(MusicAccent.copy(alpha = 0.2f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Rounded.Add, contentDescription = null, tint = Color(0xFF00E5FF))
+                        Icon(Icons.Rounded.Add, contentDescription = null, tint = MusicAccent)
                     }
                     Spacer(Modifier.width(16.dp))
                     Column {
-                        Text("Crear nueva playlist", fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("Crear nueva playlist", fontWeight = FontWeight.Bold, color = MusicTextPrimary)
                         Text("Organiza tus canciones locales", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     }
                 }
@@ -1928,12 +1936,12 @@ private fun PlaylistsContent(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                     modifier = Modifier.height(32.dp)
                 ) {
-                    Icon(Icons.Rounded.Sort, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF00E5FF))
+                    Icon(Icons.Rounded.Sort, contentDescription = null, modifier = Modifier.size(14.dp), tint = MusicAccent)
                     Spacer(Modifier.width(4.dp))
                     Text(
                         text = when (sortMode) { 1 -> "A-Z"; 2 -> "Más canciones"; else -> "Recientes" },
                         fontSize = 11.sp,
-                        color = Color(0xFF00E5FF)
+                        color = MusicAccent
                     )
                 }
             }
@@ -1946,7 +1954,7 @@ private fun PlaylistsContent(
                     text = "PLAYLISTS INTELIGENTES",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF00E5FF),
+                    color = MusicAccent,
                     letterSpacing = 1.sp
                 )
             }
@@ -1961,11 +1969,11 @@ private fun PlaylistsContent(
                         val hasActiveSong = currentSongId != null && currentSongId in smart.songIds
                         Surface(
                             onClick = { onPlaylistClick(smart) },
-                            color = if (hasActiveSong) Color(0xFF14242E) else Color(0xFF141923),
+                            color = if (hasActiveSong) MusicCardActive else MusicCardBg,
                             shape = RoundedCornerShape(12.dp),
                             border = androidx.compose.foundation.BorderStroke(
                                 if (hasActiveSong) 1.5.dp else 1.dp,
-                                if (hasActiveSong) Color(0xFF00E5FF) else Color(0xFF00E5FF).copy(alpha = 0.28f)
+                                if (hasActiveSong) MusicAccent else MusicAccent.copy(alpha = 0.28f)
                             ),
                             modifier = Modifier.width(156.dp)
                         ) {
@@ -1975,10 +1983,10 @@ private fun PlaylistsContent(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(iconVec, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(22.dp))
+                                    Icon(iconVec, contentDescription = null, tint = MusicAccent, modifier = Modifier.size(22.dp))
                                     if (hasActiveSong) {
                                         Surface(
-                                            color = Color(0xFF00E5FF).copy(alpha = 0.16f),
+                                            color = MusicAccent.copy(alpha = 0.16f),
                                             shape = RoundedCornerShape(6.dp)
                                         ) {
                                             Row(
@@ -1989,21 +1997,21 @@ private fun PlaylistsContent(
                                                 Icon(
                                                     if (isPlaying) Icons.Rounded.GraphicEq else Icons.Rounded.Pause,
                                                     contentDescription = null,
-                                                    tint = Color(0xFF00E5FF),
+                                                    tint = MusicAccent,
                                                     modifier = Modifier.size(12.dp)
                                                 )
                                                 Text(
                                                     text = if (isPlaying) "Activa" else "Pausa",
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = Color(0xFF00E5FF)
+                                                    color = MusicAccent
                                                 )
                                             }
                                         }
                                     }
                                 }
                                 Spacer(Modifier.height(8.dp))
-                                Text(smart.name, fontWeight = FontWeight.Bold, color = if (hasActiveSong) Color(0xFF00E5FF) else Color.White, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(smart.name, fontWeight = FontWeight.Bold, color = if (hasActiveSong) MusicAccent else MusicTextPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text("${smart.songIds.size} canciones", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                             }
                         }
@@ -2051,11 +2059,11 @@ private fun PlaylistsContent(
 
             Surface(
                 onClick = { onPlaylistClick(playlist) },
-                color = if (hasActiveSong) Color(0xFF12232D).copy(alpha = 0.9f) else Color(0xFF141923).copy(alpha = 0.7f),
+                color = if (hasActiveSong) MusicCardActive.copy(alpha = 0.9f) else MusicCardBg.copy(alpha = 0.7f),
                 shape = RoundedCornerShape(12.dp),
                 border = androidx.compose.foundation.BorderStroke(
                     if (hasActiveSong) 1.5.dp else 1.dp,
-                    if (hasActiveSong) Color(0xFF00E5FF) else Color(0xFF263248)
+                    if (hasActiveSong) MusicAccent else MusicBorder
                 ),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -2080,10 +2088,10 @@ private fun PlaylistsContent(
                             modifier = Modifier
                                 .size(48.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF1E2838)),
+                                .background(if (com.amurayada.music.ui.theme.LocalAuraPalette.current.isDark) Color(0xFF1E2838) else Color(0xFFE2E8F0)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Rounded.QueueMusic, contentDescription = null, tint = Color(0xFF00E5FF))
+                            Icon(Icons.Rounded.QueueMusic, contentDescription = null, tint = MusicAccent)
                         }
                     }
                     Spacer(Modifier.width(14.dp))
@@ -2091,7 +2099,7 @@ private fun PlaylistsContent(
                         Text(
                             playlist.name,
                             fontWeight = FontWeight.SemiBold,
-                            color = if (hasActiveSong) Color(0xFF00E5FF) else Color.White,
+                            color = if (hasActiveSong) MusicAccent else MusicTextPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -2102,7 +2110,7 @@ private fun PlaylistsContent(
                             Text("$validCount canciones", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             if (hasActiveSong) {
                                 Surface(
-                                    color = Color(0xFF00E5FF).copy(alpha = 0.16f),
+                                    color = MusicAccent.copy(alpha = 0.16f),
                                     shape = RoundedCornerShape(6.dp)
                                 ) {
                                     Row(
@@ -2113,14 +2121,14 @@ private fun PlaylistsContent(
                                         Icon(
                                             if (isPlaying) Icons.Rounded.GraphicEq else Icons.Rounded.Pause,
                                             contentDescription = null,
-                                            tint = Color(0xFF00E5FF),
+                                            tint = MusicAccent,
                                             modifier = Modifier.size(12.dp)
                                         )
                                         Text(
                                             text = if (isPlaying) "Reproduciendo" else "En pausa",
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF00E5FF)
+                                            color = MusicAccent
                                         )
                                     }
                                 }
@@ -2133,7 +2141,7 @@ private fun PlaylistsContent(
                             Icon(
                                 Icons.Rounded.MoreVert,
                                 contentDescription = "Opciones",
-                                tint = Color.White.copy(alpha = 0.6f),
+                                tint = MusicTextPrimary.copy(alpha = 0.6f),
                                 modifier = Modifier.size(20.dp)
                             )
                         }

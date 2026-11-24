@@ -66,9 +66,9 @@ fun SongListItem(
         // Album Art
         Box(modifier = Modifier.size(48.dp)) {
             val context = androidx.compose.ui.platform.LocalContext.current
-            val imageRequest = remember(song.albumArtUri) {
+            val imageRequest = remember(song.id, song.path, song.albumArtUri) {
                 coil.request.ImageRequest.Builder(context)
-                    .data(song.albumArtUri)
+                    .data(com.amurayada.music.ui.utils.toArtModel(song))
                     .crossfade(true)
                     .diskCachePolicy(CachePolicy.ENABLED)
                     .memoryCachePolicy(CachePolicy.ENABLED)

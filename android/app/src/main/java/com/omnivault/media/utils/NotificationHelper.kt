@@ -348,7 +348,7 @@ object NotificationHelper {
         val platform = com.omnivault.media.model.PlatformType.fromUrl(detectedUrl)
 
         val builder = NotificationCompat.Builder(context, CHANNEL_CLIPBOARD_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(com.amurayada.music.R.drawable.ic_notification_music)
             .setContentTitle("✦ OmniVault: [${platform.displayName}] detectado")
             .setContentText("Enlace multimedia copiado. ¿Deseas descargarlo ahora?")
             .setStyle(
@@ -386,7 +386,7 @@ object NotificationHelper {
         )
 
         val builder = NotificationCompat.Builder(context, CHANNEL_UPDATES_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(com.amurayada.music.R.drawable.ic_notification_music)
             .setContentTitle("🚀 Actualización disponible: OmniVault v$version")
             .setContentText("Toca aquí para actualizar automáticamente con 1 solo toque.")
             .setStyle(

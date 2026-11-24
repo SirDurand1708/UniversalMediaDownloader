@@ -1,19 +1,19 @@
 {
-  "version": "2.5.56",
-  "version_code": 306,
-  "release_date": "2026-11-23",
-  "title": "OmniVault v2.5.56 — Windows PC & Android",
-  "changelog": "✨ Android Funcionalidad: Re-descarga de canciones borradas visible al instante en Canciones, carpeta OmniVault/compartir content:// reparados, historial/letras en transición automática, Shuffle/Repeat persistentes, creación de playlist con pistas y notificaciones sin duplicados",
+  "version": "2.5.59",
+  "version_code": 309,
+  "release_date": "2026-11-24",
+  "title": "OmniVault v2.5.59 — Windows PC & Android",
+  "changelog": "✨ Android v2.5.59: Paleta adaptada a Modo Claro, compatibilidad universal Android 7–16 (API 24–36 + x86/x86_64/ARM), corrección de carátulas duplicadas por canción y versión sincronizada",
   "android": {
-    "version": "2.5.56",
-    "version_code": 306,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.56/OmniVault-v2.5.56-Android.apk",
+    "version": "2.5.59",
+    "version_code": 309,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.59/OmniVault-v2.5.59-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.56",
-    "version_code": 306,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.56/OmniVault-v2.5.56-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.56/OmniVault-v2.5.56-Windows-x64-Portable.zip"
+    "version": "2.5.59",
+    "version_code": 309,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.59/OmniVault-v2.5.59-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.59/OmniVault-v2.5.59-Windows-x64-Portable.zip"
   }
 }

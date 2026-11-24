@@ -36,11 +36,14 @@ import com.amurayada.music.data.model.Album
 import com.amurayada.music.data.model.Artist
 import com.amurayada.music.data.model.Song
 
-private val MusicNeonCyan = Color(0xFF00E5FF)
-private val MusicNeonGreen = Color(0xFF00E676)
-private val MusicTitaniumCard = Color(0xFF141923)
-private val MusicBorderSlate = Color(0xFF263248)
-private val MusicTextSecondary = Color(0xFF9AA4AF)
+import com.amurayada.music.ui.theme.LocalAuraPalette
+
+private val MusicNeonCyan @Composable get() = LocalAuraPalette.current.accent
+private val MusicNeonGreen @Composable get() = LocalAuraPalette.current.accentGreen
+private val MusicTitaniumCard @Composable get() = LocalAuraPalette.current.cardBg
+private val MusicBorderSlate @Composable get() = LocalAuraPalette.current.border
+private val MusicTextSecondary @Composable get() = LocalAuraPalette.current.textSecondary
+private val MusicTextPrimary @Composable get() = LocalAuraPalette.current.textPrimary
 
 private fun formatSongCount(count: Int): String =
     if (count == 1) "1 canción" else "$count canciones"
@@ -80,7 +83,7 @@ private fun LibraryEmptyState(icon: ImageVector, title: String, subtitle: String
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = MusicTextPrimary
             )
             Spacer(Modifier.height(6.dp))
             Text(
@@ -172,7 +175,7 @@ internal fun FoldersContent(
                             Text(
                                 text = folderName,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color.White,
+                                color = MusicTextPrimary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f, fill = false)
@@ -291,7 +294,7 @@ internal fun AlbumsContent(
                         Text(
                             text = album.name,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color.White,
+                            color = MusicTextPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -394,7 +397,7 @@ internal fun ArtistsContent(
                         Text(
                             text = artist.name,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color.White,
+                            color = MusicTextPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )

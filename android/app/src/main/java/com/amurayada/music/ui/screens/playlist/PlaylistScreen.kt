@@ -60,7 +60,9 @@ fun PlaylistScreen(
                 text = "Mis Playlists",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp).padding(top = 24.dp)
+                modifier = Modifier
+                    .statusBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
             )
 
             if (playlists.isEmpty() && userPlaylists.isEmpty()) {

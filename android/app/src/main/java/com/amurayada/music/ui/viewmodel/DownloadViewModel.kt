@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.amurayada.music.data.database.DownloadDatabase
@@ -550,6 +551,7 @@ class DownloadViewModel(
     
     private fun enqueueWorker(song: Song) {
         val workRequest = OneTimeWorkRequestBuilder<DownloadWorker>()
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .setInputData(
                 workDataOf(
                     "songId" to song.id,

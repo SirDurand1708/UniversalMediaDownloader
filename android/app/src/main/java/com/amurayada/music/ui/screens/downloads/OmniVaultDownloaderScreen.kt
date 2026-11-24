@@ -134,10 +134,11 @@ fun OmniVaultDownloaderScreen(
         }
     }
 
-    val accentColor = Color(0xFF00E5FF)
-    val darkOnAccent = Color.Black
-    val cardBg = Color(0xFF141923)
-    val borderCol = Color(0xFF263248)
+    val palette = com.amurayada.music.ui.theme.LocalAuraPalette.current
+    val accentColor = palette.accent
+    val darkOnAccent = palette.onAccent
+    val cardBg = palette.cardBg
+    val borderCol = palette.border
     var selectedDownloadTab by remember { mutableIntStateOf(0) } // 0 = Nuevo, 1 = Completadas
     val listState = rememberLazyListState()
     LaunchedEffect(selectedDownloadTab) {
@@ -242,7 +243,7 @@ fun OmniVaultDownloaderScreen(
                             text = "Descargas",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White,
+                            color = palette.textPrimary,
                             maxLines = 1,
                             softWrap = false
                         )
@@ -258,7 +259,7 @@ fun OmniVaultDownloaderScreen(
                         Icon(
                             imageVector = Icons.Rounded.AccountCircle,
                             contentDescription = if (isYtLoggedIn) "YT conectado" else "Sesión YT",
-                            tint = if (isYtLoggedIn) accentColor else Color.White.copy(alpha = 0.72f),
+                            tint = if (isYtLoggedIn) accentColor else palette.textPrimary.copy(alpha = 0.72f),
                             modifier = Modifier.size(28.dp)
                         )
                     }
@@ -288,7 +289,7 @@ fun OmniVaultDownloaderScreen(
                                 text = "Nuevo",
                                 fontSize = 14.sp,
                                 fontWeight = if (isNewTab) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isNewTab) darkOnAccent else Color.White.copy(alpha = 0.68f),
+                                color = if (isNewTab) darkOnAccent else palette.textPrimary.copy(alpha = 0.68f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -307,7 +308,7 @@ fun OmniVaultDownloaderScreen(
                                 text = "Completadas (${downloadedSongs.size})",
                                 fontSize = 14.sp,
                                 fontWeight = if (isCompletedTab) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isCompletedTab) darkOnAccent else Color.White.copy(alpha = 0.68f),
+                                color = if (isCompletedTab) darkOnAccent else palette.textPrimary.copy(alpha = 0.68f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -327,7 +328,7 @@ fun OmniVaultDownloaderScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF2D2212).copy(alpha = 0.9f)
+                        containerColor = if (palette.isDark) Color(0xFF2D2212).copy(alpha = 0.9f) else Color(0xFFFFF8E1)
                     ),
                     shape = RoundedCornerShape(14.dp),
                     border = BorderStroke(1.dp, Color(0xFFFFB300).copy(alpha = 0.45f))
@@ -350,13 +351,13 @@ fun OmniVaultDownloaderScreen(
                                 text = "Ahorro de batería activo",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFFFFE082)
+                                color = if (palette.isDark) Color(0xFFFFE082) else Color(0xFF92400E)
                             )
                         }
                         Text(
                             text = "Android puede pausar descargas largas al apagar la pantalla. Permite la ejecución sin restricciones para evitar cortes.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.85f)
+                            color = palette.textPrimary.copy(alpha = 0.85f)
                         )
                         OutlinedButton(
                             onClick = {
@@ -414,7 +415,7 @@ fun OmniVaultDownloaderScreen(
                             Text(
                                 "Pega un enlace...",
                                 fontSize = 13.5.sp,
-                                color = Color(0xFF9AA4AF),
+                                color = palette.textSecondary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -431,7 +432,7 @@ fun OmniVaultDownloaderScreen(
                                         },
                                         modifier = Modifier.size(34.dp)
                                     ) {
-                                        Icon(Icons.Rounded.Clear, contentDescription = "Limpiar", tint = Color(0xFF9AA4AF), modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Rounded.Clear, contentDescription = "Limpiar", tint = palette.textSecondary, modifier = Modifier.size(18.dp))
                                     }
                                 }
                                 IconButton(
@@ -450,7 +451,7 @@ fun OmniVaultDownloaderScreen(
                                     },
                                     modifier = Modifier.size(36.dp)
                                 ) {
-                                    Icon(Icons.Rounded.ContentPaste, contentDescription = "Pegar", tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(19.dp))
+                                    Icon(Icons.Rounded.ContentPaste, contentDescription = "Pegar", tint = palette.textPrimary.copy(alpha = 0.85f), modifier = Modifier.size(19.dp))
                                 }
                             }
                         },
@@ -460,8 +461,8 @@ fun OmniVaultDownloaderScreen(
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = accentColor,
                             unfocusedBorderColor = borderCol,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            focusedTextColor = palette.textPrimary,
+                            unfocusedTextColor = palette.textPrimary
                         )
                     )
 
@@ -544,7 +545,7 @@ fun OmniVaultDownloaderScreen(
                                 Icon(
                                     Icons.Rounded.Clear,
                                     contentDescription = "Descartar",
-                                    tint = Color(0xFF9AA4AF),
+                                    tint = palette.textSecondary,
                                     modifier = Modifier.size(14.dp)
                                 )
                             }
@@ -556,14 +557,16 @@ fun OmniVaultDownloaderScreen(
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF2B2214)),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (palette.isDark) Color(0xFF2B2214) else Color(0xFFFFF8E1)
+                        ),
                         border = BorderStroke(1.dp, Color(0xFFFFB300).copy(alpha = 0.5f))
                     ) {
                         Column(modifier = Modifier.padding(10.dp)) {
                             Text(
                                 text = analyzeTimeoutMessage ?: "",
                                 fontSize = 12.sp,
-                                color = Color(0xFFFFE082)
+                                color = if (palette.isDark) Color(0xFFFFE082) else Color(0xFF92400E)
                             )
                             Spacer(Modifier.height(6.dp))
                             Row(
@@ -574,7 +577,7 @@ fun OmniVaultDownloaderScreen(
                                     onClick = { downloadViewModel.abortAnalysis() },
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                                 ) {
-                                    Text("Abortar", fontSize = 12.sp, color = Color.LightGray)
+                                    Text("Abortar", fontSize = 12.sp, color = palette.textSecondary)
                                 }
                                 Spacer(Modifier.width(6.dp))
                                 TextButton(
@@ -638,7 +641,7 @@ fun OmniVaultDownloaderScreen(
                                     style = MaterialTheme.typography.titleMedium,
                                     fontSize = 17.sp,
                                     fontWeight = FontWeight.Medium,
-                                    color = Color.White,
+                                    color = palette.textPrimary,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -646,7 +649,7 @@ fun OmniVaultDownloaderScreen(
                                 Text(
                                     text = preview.author,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFF9AA4AF),
+                                    color = palette.textSecondary,
                                     fontSize = 13.5.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -656,7 +659,7 @@ fun OmniVaultDownloaderScreen(
                                 Text(
                                     text = "${durPart}${preview.platform.displayName}",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFF9AA4AF),
+                                    color = palette.textSecondary,
                                     fontSize = 13.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -698,7 +701,7 @@ fun OmniVaultDownloaderScreen(
                                 Icon(
                                     Icons.Rounded.MusicNote,
                                     contentDescription = null,
-                                    tint = if (isAudioFormatTab) darkOnAccent else Color.White.copy(alpha = 0.72f),
+                                    tint = if (isAudioFormatTab) darkOnAccent else palette.textPrimary.copy(alpha = 0.72f),
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(Modifier.width(6.dp))
@@ -706,7 +709,7 @@ fun OmniVaultDownloaderScreen(
                                     text = "Audio",
                                     fontSize = 14.sp,
                                     fontWeight = if (isAudioFormatTab) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isAudioFormatTab) darkOnAccent else Color.White.copy(alpha = 0.72f),
+                                    color = if (isAudioFormatTab) darkOnAccent else palette.textPrimary.copy(alpha = 0.72f),
                                     maxLines = 1
                                 )
                             }
@@ -731,7 +734,7 @@ fun OmniVaultDownloaderScreen(
                                 Icon(
                                     Icons.Rounded.Videocam,
                                     contentDescription = null,
-                                    tint = if (!isAudioFormatTab) darkOnAccent else Color.White.copy(alpha = 0.72f),
+                                    tint = if (!isAudioFormatTab) darkOnAccent else palette.textPrimary.copy(alpha = 0.72f),
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(Modifier.width(6.dp))
@@ -739,7 +742,7 @@ fun OmniVaultDownloaderScreen(
                                     text = "Video",
                                     fontSize = 14.sp,
                                     fontWeight = if (!isAudioFormatTab) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (!isAudioFormatTab) darkOnAccent else Color.White.copy(alpha = 0.72f),
+                                    color = if (!isAudioFormatTab) darkOnAccent else palette.textPrimary.copy(alpha = 0.72f),
                                     maxLines = 1
                                 )
                             }
@@ -874,7 +877,7 @@ fun OmniVaultDownloaderScreen(
                                 append(parts.joinToString(" • "))
                             },
                             style = MaterialTheme.typography.labelMedium,
-                            color = Color.White,
+                            color = palette.textPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
@@ -952,7 +955,7 @@ fun OmniVaultDownloaderScreen(
             }
             items(pausedDownloadList, key = { "paused_${it.processId}" }) { state ->
                 Surface(
-                    color = Color(0xFF1A1914),
+                    color = if (palette.isDark) Color(0xFF1A1914) else Color(0xFFFFFBEB),
                     shape = RoundedCornerShape(14.dp),
                     border = BorderStroke(1.dp, Color(0xFFFFB300).copy(alpha = 0.45f))
                 ) {
@@ -965,14 +968,14 @@ fun OmniVaultDownloaderScreen(
                                 text = state.title,
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White,
+                                color = palette.textPrimary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = state.errorReason ?: "Pausada • Toca Reanudar",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFFFFE082),
+                                color = if (palette.isDark) Color(0xFFFFE082) else Color(0xFFB45309),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -1003,7 +1006,7 @@ fun OmniVaultDownloaderScreen(
 
             items(failedDownloadList, key = { "err_${it.processId}" }) { state ->
                 Surface(
-                    color = Color(0xFF1A1418),
+                    color = if (palette.isDark) Color(0xFF1A1418) else Color(0xFFFEF2F2),
                     shape = RoundedCornerShape(14.dp),
                     border = BorderStroke(1.dp, Color(0xFFFF5252).copy(alpha = 0.45f))
                 ) {
@@ -1018,14 +1021,14 @@ fun OmniVaultDownloaderScreen(
                                 text = state.title,
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White,
+                                color = palette.textPrimary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = state.errorReason ?: "Error de red o enlace",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFFFF8A80),
+                                color = if (palette.isDark) Color(0xFFFF8A80) else palette.danger,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -1061,7 +1064,7 @@ fun OmniVaultDownloaderScreen(
                         text = "Historial (${filteredCompletedSongs.size})",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
+                        color = palette.textPrimary,
                         maxLines = 1,
                         softWrap = false,
                         overflow = TextOverflow.Ellipsis
@@ -1156,7 +1159,7 @@ fun OmniVaultDownloaderScreen(
                                 "No hay descargas que coincidan con el filtro"
                             },
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.7f)
+                            color = palette.textPrimary.copy(alpha = 0.7f)
                         )
                     }
                 }
@@ -1348,14 +1351,15 @@ fun FormatChip(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val selectedBg = Color(0xFF00E5FF)
-    val selectedText = Color.Black
+    val palette = com.amurayada.music.ui.theme.LocalAuraPalette.current
+    val selectedBg = palette.accent
+    val selectedText = palette.onAccent
     Surface(
         onClick = onClick,
         modifier = modifier.height(40.dp),
         shape = RoundedCornerShape(20.dp),
-        color = if (selected) selectedBg else Color(0xFF141923),
-        border = if (selected) null else BorderStroke(1.dp, Color(0xFF263248))
+        color = if (selected) selectedBg else palette.cardBg,
+        border = if (selected) null else BorderStroke(1.dp, palette.border)
     ) {
         Box(
             contentAlignment = Alignment.Center,
@@ -1366,7 +1370,7 @@ fun FormatChip(
                     text = label,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                    color = if (selected) selectedText else Color.White.copy(alpha = 0.85f),
+                    color = if (selected) selectedText else palette.textPrimary.copy(alpha = 0.85f),
                     fontSize = 12.sp,
                     maxLines = 1,
                     softWrap = false,
@@ -1391,13 +1395,14 @@ fun UniversalActiveDownloadCard(
     state: UniversalDownloadState,
     onCancel: () -> Unit
 ) {
-    val accentColor = Color(0xFF00E5FF)
+    val palette = com.amurayada.music.ui.theme.LocalAuraPalette.current
+    val accentColor = palette.accent
     val percent = (state.progress.coerceIn(0f, 1f) * 100f).toInt()
 
     Surface(
-        color = Color(0xFF141923),
+        color = palette.cardBg,
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, Color(0xFF263248))
+        border = BorderStroke(1.dp, palette.border)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
@@ -1410,7 +1415,7 @@ fun UniversalActiveDownloadCard(
                         text = state.title,
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = palette.textPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -1418,7 +1423,7 @@ fun UniversalActiveDownloadCard(
                         Text(
                             text = state.artist,
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.6f),
+                            color = palette.textPrimary.copy(alpha = 0.6f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -1443,7 +1448,7 @@ fun UniversalActiveDownloadCard(
                     .height(6.dp)
                     .clip(RoundedCornerShape(3.dp)),
                 color = accentColor,
-                trackColor = Color(0xFF263248)
+                trackColor = palette.trackBg
             )
 
             Spacer(Modifier.height(6.dp))
@@ -1461,7 +1466,7 @@ fun UniversalActiveDownloadCard(
                 Text(
                     text = state.format.label,
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.6f)
+                    color = palette.textPrimary.copy(alpha = 0.6f)
                 )
             }
         }
@@ -1478,7 +1483,8 @@ fun CompletedDownloadSongCard(
     onPlay: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val accentColor = Color(0xFF00E5FF)
+    val palette = com.amurayada.music.ui.theme.LocalAuraPalette.current
+    val accentColor = palette.accent
     var menuExpanded by remember { mutableStateOf(false) }
     val shareContext = LocalContext.current
 
@@ -1500,9 +1506,10 @@ fun CompletedDownloadSongCard(
                     .background(Color.Black),
                 contentAlignment = Alignment.Center
             ) {
-                if (song.albumArtUri != null) {
+                val artModel = with(com.amurayada.music.ui.utils.toArtModel(song)) { this }
+                if (artModel != null) {
                     AsyncImage(
-                        model = song.albumArtUri,
+                        model = artModel,
                         contentDescription = song.title,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
@@ -1526,7 +1533,7 @@ fun CompletedDownloadSongCard(
                     fontSize = 13.5.sp,
                     lineHeight = 17.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
+                    color = palette.textPrimary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1534,7 +1541,7 @@ fun CompletedDownloadSongCard(
                 Text(
                     text = "${song.artist} • ${if (isVideo) "Video MP4" else "Audio HQ"}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.62f),
+                    color = palette.textPrimary.copy(alpha = 0.62f),
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Ellipsis,
@@ -1550,7 +1557,7 @@ fun CompletedDownloadSongCard(
                     Icon(
                         Icons.Rounded.MoreVert,
                         contentDescription = "Opciones",
-                        tint = Color.White.copy(alpha = 0.72f),
+                        tint = palette.textPrimary.copy(alpha = 0.72f),
                         modifier = Modifier.size(20.dp)
                     )
                 }
