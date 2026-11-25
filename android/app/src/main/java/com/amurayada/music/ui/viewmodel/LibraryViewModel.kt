@@ -192,6 +192,18 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         loadLibrary()
     }
 
+    private var _filterCallRecordings by mutableStateOf(
+        application.getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE)
+            .getBoolean("filter_call_recordings", true)
+    )
+    val filterCallRecordings: Boolean get() = _filterCallRecordings
+
+    fun setFilterCallRecordings(enabled: Boolean) {
+        _filterCallRecordings = enabled
+        omniPrefs.edit().putBoolean("filter_call_recordings", enabled).apply()
+        loadLibrary()
+    }
+
     private var loadJob: kotlinx.coroutines.Job? = null
     private data class PendingTagEdit(
         val song: Song,
@@ -587,8 +599,16 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                     val hiddenFound = mergedAll.filter {
                         excludedIds.contains(it.id) && (it.path.isBlank() || !excludedPathsNorm.contains(it.path.lowercase()))
                     }
-                    val allSongs = mergedAll
-                        .filter { !excludedIds.contains(it.id) && (it.path.isBlank() || !excludedPathsNorm.contains(it.path.lowercase())) }
+                    val allSongs = mergedAll.filter {
+                        !excludedIds.contains(it.id) &&
+                            (it.path.isBlank() || !excludedPathsNorm.contains(it.path.lowercase())) &&
+                            (!_filterCallRecordings || !com.omnivault.media.utils.LibraryExclusionHelper.isCallOrVoiceRecording(
+                                path = it.path,
+                                title = it.title,
+                                album = it.album,
+                                artist = it.artist
+                            ))
+                    }
                     val sortedSongs = allSongs.sortedBy { it.title }
 
                     // Pre-indexar archivos .lrc en IO (O(1) para UI Thread y compatible con content://)

@@ -20,6 +20,96 @@ data class ExclusionReconcileResult(
 
 object LibraryExclusionHelper {
 
+    private val CALL_REC_PATH_MARKERS = listOf(
+        "/call/",
+        "/call_rec/",
+        "/callrecordings/",
+        "/call recording/",
+        "/callrecorder/",
+        "/acrcalls/",
+        "/cubecallrecorder/",
+        "/sound_recorder/",
+        "/voice_recorder/",
+        "/voice recorder/",
+        "/sound recorder/"
+    )
+
+    private val MESSAGING_OR_REC_PATH_MARKERS = listOf(
+        "/recordings/",
+        "/whatsapp/",
+        "/whatsapp audio/",
+        "/whatsapp voice notes/",
+        "/whatsapp business audio/",
+        "/telegram/"
+    )
+
+    private val RECORDING_ALBUMS = setOf(
+        "call",
+        "call_rec",
+        "call recordings",
+        "grabaciones",
+        "grabaciones de llamadas",
+        "sound_recorder",
+        "sound recorder",
+        "voice recorder",
+        "whatsapp audio",
+        "whatsapp voice notes"
+    )
+
+    private val RECORDING_PREFIX_REGEX = Regex(
+        "^(llamada[ _]|call[ _]recording|call@|call-\\d{8}|grabaci[oó]n de llamada|ptt-|aud-).*"
+    )
+
+    /**
+     * Detecta grabaciones de llamadas telefónicas y notas de voz (WhatsApp/Telegram/grabadoras OEM)
+     * evitando falsos positivos en canciones reales guardadas en `/Music/` o `/OmniVault/`.
+     */
+    fun isCallOrVoiceRecording(
+        path: String,
+        title: String,
+        album: String,
+        artist: String
+    ): Boolean {
+        val normPath = path.trim().lowercase().replace('\\', '/')
+        if (normPath.contains("/omnivault/")) return false
+
+        val normArtist = artist.trim().lowercase()
+        val isUnknownArtist = normArtist.isBlank() ||
+            normArtist == "<unknown>" ||
+            normArtist == "unknown" ||
+            normArtist == "unknown artist" ||
+            normArtist == "artista desconocido" ||
+            normArtist == "desconocido"
+
+        if (CALL_REC_PATH_MARKERS.any { normPath.contains(it) }) {
+            return true
+        }
+
+        val fileName = if (normPath.startsWith("content://")) "" else normPath.substringAfterLast('/')
+        val normTitle = title.trim().lowercase()
+        val normAlbum = album.trim().lowercase()
+        val isVoiceExt = fileName.endsWith(".amr") || fileName.endsWith(".3gp") || fileName.endsWith(".opus")
+
+        if (MESSAGING_OR_REC_PATH_MARKERS.any { normPath.contains(it) }) {
+            if (isUnknownArtist || isVoiceExt || RECORDING_PREFIX_REGEX.matches(normTitle) || RECORDING_PREFIX_REGEX.matches(fileName)) {
+                return true
+            }
+        }
+
+        if (normAlbum in RECORDING_ALBUMS && isUnknownArtist) {
+            return true
+        }
+
+        val isInsideMusicFolder = normPath.contains("/music/")
+        if (!isInsideMusicFolder && isUnknownArtist &&
+            (RECORDING_PREFIX_REGEX.matches(normTitle) || RECORDING_PREFIX_REGEX.matches(fileName))
+        ) {
+            return true
+        }
+
+        return false
+    }
+
     /**
      * Reconcilia `deleted_song_paths` y `hidden_song_ids` cuando una canción previamente eliminada
      * vuelve a aparecer en `downloadedSongs`.

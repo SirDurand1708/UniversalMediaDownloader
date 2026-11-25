@@ -1,19 +1,19 @@
 {
-  "version": "2.5.60",
-  "version_code": 310,
-  "release_date": "2026-11-24",
-  "title": "OmniVault v2.5.60 — Windows PC & Android",
-  "changelog": "🔋 Android v2.5.60: Corrección de WakeLock retenido en STATE_IDLE (ahorro de batería) y scopes de corutinas supervisados con manejo de errores",
+  "version": "2.5.61",
+  "version_code": 311,
+  "release_date": "2026-11-25",
+  "title": "OmniVault v2.5.61 — Windows PC & Android",
+  "changelog": "🧹 Android v2.5.61: Filtro automático de grabaciones de llamadas y notas de voz en Música (configurable en filtros) y limpieza de <unknown>",
   "android": {
-    "version": "2.5.60",
-    "version_code": 310,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.60/OmniVault-v2.5.60-Android.apk",
+    "version": "2.5.61",
+    "version_code": 311,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.61/OmniVault-v2.5.61-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.60",
-    "version_code": 310,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.60/OmniVault-v2.5.60-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.60/OmniVault-v2.5.60-Windows-x64-Portable.zip"
+    "version": "2.5.61",
+    "version_code": 311,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.61/OmniVault-v2.5.61-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.61/OmniVault-v2.5.61-Windows-x64-Portable.zip"
   }
 }

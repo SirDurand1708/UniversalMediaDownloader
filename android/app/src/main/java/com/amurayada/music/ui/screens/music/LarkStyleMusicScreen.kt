@@ -710,6 +710,23 @@ fun LarkStyleMusicScreen(
                             onCheckedChange = { libraryViewModel.setFilterShortAudio(it) }
                         )
                     }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { libraryViewModel.setFilterCallRecordings(!libraryViewModel.filterCallRecordings) }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Ocultar llamadas y notas de voz", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text("Filtra grabaciones de llamadas y WhatsApp", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        }
+                        Switch(
+                            checked = libraryViewModel.filterCallRecordings,
+                            onCheckedChange = { libraryViewModel.setFilterCallRecordings(it) }
+                        )
+                    }
                 }
             },
             confirmButton = {
@@ -1635,8 +1652,10 @@ private fun LarkSongRow(
                     Spacer(Modifier.width(6.dp))
                 }
 
-                val cleanArtist = song.artist.replace(" - Topic", "", ignoreCase = true).trim()
-                val cleanAlbum = song.album.replace(" - Topic", "", ignoreCase = true).trim()
+                val rawArtist = FilenameStandardizer.cleanArtistName(song.artist)
+                val cleanArtist = if (FilenameStandardizer.isValidArtist(rawArtist)) rawArtist else "Artista desconocido"
+                val rawAlbum = song.album.replace(" - Topic", "", ignoreCase = true).trim()
+                val cleanAlbum = if (rawAlbum.equals("<unknown>", ignoreCase = true) || rawAlbum.equals("unknown", ignoreCase = true)) "" else rawAlbum
                 val subtitleText = if (cleanAlbum.isBlank() || cleanAlbum.equals(cleanArtist, ignoreCase = true)) {
                     cleanArtist
                 } else {

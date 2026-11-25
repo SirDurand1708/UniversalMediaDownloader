@@ -69,4 +69,40 @@ class LibraryExclusionHelperTest {
         assertEquals(2, merged.size)
         assertEquals(listOf(100L, 501L), merged.map { it.id })
     }
+
+    @Test
+    fun `isCallOrVoiceRecording filters phone calls and voice notes without false positives on Music`() {
+        assertTrue(
+            LibraryExclusionHelper.isCallOrVoiceRecording(
+                path = "/storage/emulated/0/Recordings/Call/Llamada 996779727_260101.m4a",
+                title = "Llamada 996779727_260101",
+                album = "Call",
+                artist = "<unknown>"
+            )
+        )
+        assertTrue(
+            LibraryExclusionHelper.isCallOrVoiceRecording(
+                path = "/storage/emulated/0/WhatsApp/Media/WhatsApp Voice Notes/202601/PTT-20260101-WA0001.opus",
+                title = "PTT-20260101-WA0001",
+                album = "WhatsApp Voice Notes",
+                artist = "<unknown>"
+            )
+        )
+        assertFalse(
+            LibraryExclusionHelper.isCallOrVoiceRecording(
+                path = "/storage/emulated/0/Music/Llamada de emergencia.mp3",
+                title = "Llamada de emergencia",
+                album = "<unknown>",
+                artist = "<unknown>"
+            )
+        )
+        assertFalse(
+            LibraryExclusionHelper.isCallOrVoiceRecording(
+                path = "/storage/emulated/0/Music/OmniVault/Call.m4a",
+                title = "Call",
+                album = "Call",
+                artist = "<unknown>"
+            )
+        )
+    }
 }
