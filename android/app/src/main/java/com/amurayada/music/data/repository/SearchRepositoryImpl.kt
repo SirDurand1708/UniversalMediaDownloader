@@ -179,7 +179,13 @@ class SearchRepositoryImpl(private val context: android.content.Context) : Searc
                 // PREFETCH: Preload top artist details silently
                 val topArtist = sortedArtists.first()
                 if (topArtist.path.contains("channel/")) {
-                    kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                    val prefetchScope = com.amurayada.music.MusicApplication.getInstance()?.applicationScope
+                        ?: kotlinx.coroutines.CoroutineScope(
+                            kotlinx.coroutines.SupervisorJob() +
+                                Dispatchers.IO +
+                                kotlinx.coroutines.CoroutineExceptionHandler { _, _ -> }
+                        )
+                    prefetchScope.launch {
                         try {
                             android.util.Log.d("SearchRepository", "Prefetching artist: ${topArtist.name}")
                             getArtistDetails(topArtist.path)

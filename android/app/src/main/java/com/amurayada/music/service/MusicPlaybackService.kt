@@ -254,7 +254,7 @@ class MusicPlaybackService : MediaSessionService() {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 val isPlaying = player.isPlaying
                 val isBuffering = playbackState == Player.STATE_BUFFERING
-                manageWakeLock(isPlaying || isBuffering || playbackState == Player.STATE_IDLE)
+                manageWakeLock(isPlaying || isBuffering)
                 updateWidget()
                 
                 // Focus Manual: Solicitamos en Play O Buffering (NUNCA soltamos proactivamente)
@@ -566,7 +566,7 @@ class MusicPlaybackService : MediaSessionService() {
                 wakeLock?.setReferenceCounted(false)
             }
             if (wakeLock?.isHeld == false) {
-                wakeLock?.acquire()
+                wakeLock?.acquire(60 * 60 * 1000L)
             }
             
             // Wifi Lock (Keep radio awake for online streaming)
@@ -920,7 +920,7 @@ class MusicPlaybackService : MediaSessionService() {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 val isPlaying = player.isPlaying
                 val isBuffering = playbackState == Player.STATE_BUFFERING
-                manageWakeLock(isPlaying || isBuffering || playbackState == Player.STATE_IDLE)
+                manageWakeLock(isPlaying || isBuffering)
                 updateWidget()
                 if (isPlaying || isBuffering) requestAudioFocus()
                 

@@ -40,11 +40,23 @@ class MusicApplication : Application(), ImageLoaderFactory {
             .build()
     }
 
+    val applicationScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() +
+            kotlinx.coroutines.Dispatchers.IO +
+            kotlinx.coroutines.CoroutineExceptionHandler { _, throwable ->
+                com.omnivault.media.utils.LocalCrashLogger.logError(
+                    "MusicApplication",
+                    "Error no controlado en applicationScope",
+                    throwable
+                )
+            }
+    )
+
     fun clearImageCache() {
         android.util.Log.d("MusicApplication", "Clearing image cache...")
         val loader = coil.Coil.imageLoader(this)
         loader.memoryCache?.clear()
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        applicationScope.launch {
             try {
                 loader.diskCache?.clear()
             } catch (_: Exception) {}
@@ -84,7 +96,7 @@ class MusicApplication : Application(), ImageLoaderFactory {
         initNewPipe()
         
         // 2. Network Warm-up ligero (YoutubeDL/FFmpeg/Aria2c se inicializan perezosamente al requerirse)
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        applicationScope.launch {
             try {
                 // Dummy request to open TCP/TLS connection
                 val client = com.amurayada.music.data.newpipe.NewPipeDownloader.getClient()

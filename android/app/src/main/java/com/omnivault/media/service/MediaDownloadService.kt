@@ -273,12 +273,22 @@ class MediaDownloadService : Service() {
     }
 
     override fun onTimeout(startId: Int, fgsType: Int) {
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        val scope = (applicationContext as? com.amurayada.music.MusicApplication)?.applicationScope
+            ?: kotlinx.coroutines.CoroutineScope(
+                kotlinx.coroutines.SupervisorJob() +
+                    kotlinx.coroutines.Dispatchers.IO +
+                    kotlinx.coroutines.CoroutineExceptionHandler { _, t ->
+                        com.omnivault.media.utils.LocalCrashLogger.logError("MediaDownloadService", "Error en onTimeout", t)
+                    }
+            )
+        scope.launch {
             try {
                 com.omnivault.media.downloader.UniversalDownloadEngine
                     .getInstance(applicationContext)
                     .markActiveDownloadsPaused("Pausado por límite de tiempo en 2º plano (Android)")
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                com.omnivault.media.utils.LocalCrashLogger.logError("MediaDownloadService", "Error pausando descargas en onTimeout", e)
+            }
         }
         releaseWakeLockSafely()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {

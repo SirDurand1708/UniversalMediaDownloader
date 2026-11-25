@@ -42,6 +42,14 @@ object UpdateManager {
         .followRedirects(true)
         .build()
 
+    private val updateScope = CoroutineScope(
+        SupervisorJob() +
+            Dispatchers.IO +
+            CoroutineExceptionHandler { _, throwable ->
+                LocalCrashLogger.logError("UpdateManager", "Error no controlado en UpdateManager", throwable)
+            }
+    )
+
     /**
      * Consulta en segundo plano la existencia de una nueva versión oficial de OmniVault.
      */
@@ -52,7 +60,7 @@ object UpdateManager {
         onNoUpdate: (() -> Unit)? = null,
         onError: ((String) -> Unit)? = null
     ) {
-        CoroutineScope(Dispatchers.IO).launch {
+        updateScope.launch {
             try {
                 val request = Request.Builder()
                     .url(UPDATE_URL)
@@ -135,7 +143,7 @@ object UpdateManager {
             onError?.invoke("Ya hay una descarga de actualización en curso")
             return
         }
-        CoroutineScope(Dispatchers.IO).launch {
+        updateScope.launch {
             try {
                 val updateDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "updates")
                 if (!updateDir.exists()) updateDir.mkdirs()
