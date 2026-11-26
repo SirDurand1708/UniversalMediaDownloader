@@ -13,7 +13,6 @@ import com.amurayada.music.data.model.DownloadProgress
 import com.amurayada.music.data.model.DownloadStatus as AppDownloadStatus
 import com.amurayada.music.data.model.Song
 import com.amurayada.music.worker.DownloadWorker
-import com.omnivault.media.downloader.DownloadManager
 import com.omnivault.media.downloader.MediaExtractor
 import com.omnivault.media.downloader.MediaPreview
 import com.omnivault.media.downloader.UniversalDownloadEngine
@@ -39,7 +38,6 @@ class DownloadViewModel(
     
     private val downloadDao = DownloadDatabase.getDatabase(application).downloadDao()
     private val context = application
-    private val omniDownloadManager = DownloadManager.getInstance(application)
     private val universalEngine = UniversalDownloadEngine.getInstance(application)
     
     private val _downloadedSongs = MutableStateFlow<List<Song>>(emptyList())
@@ -93,11 +91,8 @@ class DownloadViewModel(
                     com.omnivault.media.utils.NotificationHelper.createNotificationChannels(getApplication())
                     toAutoResume.forEach { item ->
                         val fmt = MediaFormat.entries.firstOrNull { it.name == item.formatName } ?: MediaFormat.MP3_320
-                        try {
-                            MediaDownloadService.startDownload(getApplication(), item.url, fmt)
-                        } catch (e: Exception) {
-                            com.omnivault.media.utils.LocalCrashLogger.logError("DownloadVM", "Fallback enqueue en restorePersistedQueue", e)
-                            omniDownloadManager.enqueueDownload(item.url, fmt)
+                        if (!MediaDownloadService.startDownload(getApplication(), item.url, fmt, item.processId)) {
+                            universalEngine.enqueueDownload(item.url, fmt, item.processId)
                         }
                     }
                 }
@@ -429,11 +424,8 @@ class DownloadViewModel(
         lastQueuedUrl.value = trimmed
         com.omnivault.media.utils.NotificationHelper.createNotificationChannels(getApplication())
 
-        try {
-            MediaDownloadService.startDownload(getApplication(), trimmed, format)
-        } catch (e: Exception) {
-            android.util.Log.e("DownloadViewModel", "Error starting MediaDownloadService, fallback to direct enqueue", e)
-            omniDownloadManager.enqueueDownload(trimmed, format)
+        if (!MediaDownloadService.startDownload(getApplication(), trimmed, format)) {
+            universalEngine.enqueueDownload(trimmed, format)
         }
 
         urlInput.value = ""
@@ -462,10 +454,8 @@ class DownloadViewModel(
                     skipped++
                     continue
                 }
-                try {
-                    MediaDownloadService.startDownload(getApplication(), u, format)
-                } catch (_: Exception) {
-                    omniDownloadManager.enqueueDownload(u, format)
+                if (!MediaDownloadService.startDownload(getApplication(), u, format)) {
+                    universalEngine.enqueueDownload(u, format)
                 }
                 enqueued++
             }
@@ -492,10 +482,8 @@ class DownloadViewModel(
             com.omnivault.media.utils.NotificationHelper.createNotificationChannels(getApplication())
             for (item in targets) {
                 withContext(Dispatchers.IO) { universalEngine.removePersistedQueueItem(item.processId) }
-                try {
-                    MediaDownloadService.startDownload(getApplication(), item.url, item.format)
-                } catch (_: Exception) {
-                    omniDownloadManager.enqueueDownload(item.url, item.format)
+                if (!MediaDownloadService.startDownload(getApplication(), item.url, item.format)) {
+                    universalEngine.enqueueDownload(item.url, item.format)
                 }
             }
         }
@@ -508,7 +496,6 @@ class DownloadViewModel(
             }
             for (item in allPending) {
                 universalEngine.cancelDownload(item.processId)
-                omniDownloadManager.cancelDownload(item.processId)
                 withContext(Dispatchers.IO) { universalEngine.removePersistedQueueItem(item.processId) }
             }
         }
@@ -516,7 +503,6 @@ class DownloadViewModel(
 
     fun cancelOmniDownload(taskId: String) {
         universalEngine.cancelDownload(taskId)
-        omniDownloadManager.cancelDownload(taskId)
         viewModelScope.launch(Dispatchers.IO) {
             universalEngine.removePersistedQueueItem(taskId)
         }

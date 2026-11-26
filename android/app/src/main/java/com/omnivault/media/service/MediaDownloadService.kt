@@ -7,13 +7,18 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
-import androidx.core.app.NotificationManagerCompat
-import com.omnivault.media.downloader.DownloadManager
+import com.omnivault.media.downloader.DownloadEvent
 import com.omnivault.media.downloader.UniversalDownloadEngine
+import com.omnivault.media.downloader.UniversalDownloadState
 import com.omnivault.media.model.DownloadItem
 import com.omnivault.media.model.DownloadStatus
 import com.omnivault.media.model.MediaFormat
 import com.omnivault.media.utils.NotificationHelper
+import com.omnivault.media.utils.StorageHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
@@ -23,11 +28,6 @@ import kotlinx.coroutines.launch
  *  - La aplicación está minimizada
  *  - El usuario usa otra aplicación
  *  - La pantalla del celular está apagada / bloqueada (vía WakeLock parcial)
- *
- * En la barra de estado y panel de notificaciones:
- *  - Muestra una barra de carga interactiva en tiempo real con porcentaje y velocidad (MB/s).
- *  - Al finalizar, emite una notificación de "Descarga completada" con sonido, vibración
- *    y botones directos para Reproducir y Compartir.
  */
 class MediaDownloadService : Service() {
 
@@ -38,29 +38,45 @@ class MediaDownloadService : Service() {
         const val EXTRA_URL = "extra_url"
         const val EXTRA_FORMAT = "extra_format"
         const val EXTRA_TASK_ID = "extra_task_id"
+        const val EXTRA_PROCESS_ID = "extra_process_id"
 
         const val FOREGROUND_SERVICE_NOTIF_ID = 4001
         private const val WAKELOCK_TAG = "OmniVault:MediaDownloadWakeLock"
 
-        /** Lanza el servicio en segundo plano de forma segura para Android 8+ */
-        fun startDownload(context: Context, url: String, format: MediaFormat) {
+        /**
+         * Lanza el servicio en segundo plano de forma segura para Android 8+.
+         * Devuelve `true` si el sistema aceptó iniciar el servicio, o `false` si fue bloqueado.
+         */
+        fun startDownload(
+            context: Context,
+            url: String,
+            format: MediaFormat,
+            processId: String? = null
+        ): Boolean {
             NotificationHelper.createNotificationChannels(context)
             val intent = Intent(context, MediaDownloadService::class.java).apply {
                 action = ACTION_START_DOWNLOAD
                 putExtra(EXTRA_URL, url)
                 putExtra(EXTRA_FORMAT, format.name)
+                if (processId != null) {
+                    putExtra(EXTRA_PROCESS_ID, processId)
+                }
             }
-            try {
+            return try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)
                 } else {
                     context.startService(intent)
                 }
+                true
             } catch (e: Exception) {
                 android.util.Log.w("MediaDownloadService", "startForegroundService failed, falling back to startService", e)
                 try {
                     context.startService(intent)
-                } catch (_: Exception) {}
+                    true
+                } catch (_: Exception) {
+                    false
+                }
             }
         }
 
@@ -69,28 +85,21 @@ class MediaDownloadService : Service() {
             try {
                 UniversalDownloadEngine.getInstance(context).cancelDownload(taskId)
             } catch (_: Exception) {}
-            try {
-                DownloadManager.getInstance(context).cancelDownload(taskId)
-            } catch (_: Exception) {}
         }
     }
 
-    private lateinit var downloadManager: DownloadManager
     private lateinit var universalEngine: UniversalDownloadEngine
     private var wakeLock: PowerManager.WakeLock? = null
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    // Listener thread-safe para recibir cambios de progreso de DownloadManager / UniversalDownloadEngine
-    private val downloadListener: (DownloadItem) -> Unit = { item ->
-        handleDownloadUpdate(item)
-    }
+    @Volatile
+    private var hasObservedActiveDownload = false
 
     override fun onCreate() {
         super.onCreate()
 
-        // 1. Iniciar canales de notificación para evitar RemoteServiceException en Android 8+
         NotificationHelper.createNotificationChannels(this)
 
-        // 2. Iniciar inmediatamente como Foreground Service para cumplir con Android 8/14+
         try {
             val initialNotif = NotificationHelper.buildForegroundServiceNotification(this).build()
             promoteToForeground(initialNotif)
@@ -98,7 +107,6 @@ class MediaDownloadService : Service() {
             android.util.Log.e("MediaDownloadService", "Error posting initial notification", e)
         }
 
-        // 3. Inicializar WakeLock para descargas con pantalla bloqueada
         try {
             val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
             wakeLock = powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKELOCK_TAG)?.apply {
@@ -106,23 +114,80 @@ class MediaDownloadService : Service() {
             }
         } catch (_: Exception) {}
 
-        // 4. Conectar al UniversalDownloadEngine y DownloadManager Singleton mediante listener seguro
         universalEngine = UniversalDownloadEngine.getInstance(this)
-        downloadManager = DownloadManager.getInstance(this)
-        downloadManager.addDownloadListener(downloadListener)
+
+        serviceScope.launch {
+            universalEngine.downloadsState.collect { stateMap ->
+                val active = stateMap.values.filter { universalEngine.isActiveStatus(it.status) }
+                if (active.isNotEmpty()) {
+                    hasObservedActiveDownload = true
+                    acquireWakeLockIfNeeded()
+                    val current = active.firstOrNull {
+                        it.status == DownloadStatus.DOWNLOADING || it.status == DownloadStatus.PROCESSING
+                    } ?: active.first()
+                    val baseTitle = current.title.ifBlank { "Analizando enlace…" }
+                    val notifTitle = if (active.size > 1) "[${active.size} en cola] $baseTitle" else baseTitle
+                    val progressInt = (current.progress * 100f).toInt().coerceIn(0, 100)
+                    val notif = NotificationHelper.buildForegroundProgressNotification(
+                        context = this@MediaDownloadService,
+                        title = notifTitle,
+                        progress = progressInt,
+                        speed = current.speedText,
+                        indeterminate = current.progress <= 0f
+                    ).build()
+                    promoteToForeground(notif)
+                } else if (hasObservedActiveDownload) {
+                    stopForegroundAndSelf()
+                }
+            }
+        }
+
+        serviceScope.launch {
+            universalEngine.downloadEvents.collect { event ->
+                when (event) {
+                    is DownloadEvent.Completed -> {
+                        try {
+                            NotificationHelper.showCompletedNotification(
+                                this@MediaDownloadService,
+                                event.state.toDownloadItem()
+                            )
+                        } catch (_: SecurityException) {}
+                    }
+
+                    is DownloadEvent.Failed -> {
+                        try {
+                            NotificationHelper.showErrorNotification(
+                                this@MediaDownloadService,
+                                event.state.toDownloadItem()
+                            )
+                        } catch (_: SecurityException) {}
+                    }
+                }
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        acquireWakeLockIfNeeded()
+        if (intent == null) {
+            if (universalEngine.downloadsState.value.values.none { universalEngine.isActiveStatus(it.status) }) {
+                stopForegroundAndSelf()
+            }
+            return START_NOT_STICKY
+        }
 
-        when (intent?.action) {
+        when (intent.action) {
             ACTION_START_DOWNLOAD -> {
                 val url = intent.getStringExtra(EXTRA_URL)
                 val formatKey = intent.getStringExtra(EXTRA_FORMAT) ?: MediaFormat.MP3_320.name
                 val format = MediaFormat.fromKey(formatKey)
+                val processId = intent.getStringExtra(EXTRA_PROCESS_ID)
 
                 if (!url.isNullOrBlank()) {
-                    downloadManager.enqueueDownload(url, format)
+                    acquireWakeLockIfNeeded()
+                    hasObservedActiveDownload = true
+                    universalEngine.enqueueDownload(url, format, processId)
+                } else if (universalEngine.downloadsState.value.values.none { universalEngine.isActiveStatus(it.status) }) {
+                    stopForegroundAndSelf()
                 }
             }
 
@@ -130,88 +195,16 @@ class MediaDownloadService : Service() {
                 val taskId = intent.getStringExtra(EXTRA_TASK_ID)
                 if (!taskId.isNullOrBlank()) {
                     universalEngine.cancelDownload(taskId)
-                    downloadManager.cancelDownload(taskId)
+                }
+                if (universalEngine.downloadsState.value.values.none { universalEngine.isActiveStatus(it.status) }) {
+                    stopForegroundAndSelf()
                 }
             }
         }
 
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
-    private fun handleDownloadUpdate(item: DownloadItem) {
-        val notifId = NotificationHelper.NOTIFICATION_ID_BASE + Math.abs(item.id.hashCode() % 1000)
-
-        when (item.status) {
-            DownloadStatus.FETCHING_METADATA, DownloadStatus.QUEUED -> {
-                acquireWakeLockIfNeeded()
-                val notif = NotificationHelper.buildForegroundProgressNotification(
-                    context = this,
-                    title = item.title.ifBlank { "Analizando enlace…" },
-                    progress = 0,
-                    speed = item.speedText.ifBlank { "Extrayendo metadatos…" },
-                    indeterminate = true
-                ).build()
-                promoteToForeground(notif)
-            }
-
-            DownloadStatus.DOWNLOADING -> {
-                acquireWakeLockIfNeeded()
-                // Actualizar la notificación persistente del Foreground Service con la barra de carga (0..100%)
-                val activeCount = downloadManager.getActiveDownloads().size
-                val notifTitle = if (activeCount > 1) "[$activeCount en cola] ${item.title}" else item.title
-                val notif = NotificationHelper.buildForegroundProgressNotification(
-                    context = this,
-                    title = notifTitle,
-                    progress = item.progress.coerceIn(0, 100),
-                    speed = item.speedText,
-                    indeterminate = item.progress <= 0
-                ).build()
-                promoteToForeground(notif)
-            }
-
-            DownloadStatus.PROCESSING -> {
-                val notif = NotificationHelper.buildForegroundProgressNotification(
-                    context = this,
-                    title = item.title,
-                    progress = item.progress.coerceIn(0, 100),
-                    speed = item.speedText.ifBlank { "Procesando y exportando…" },
-                    indeterminate = item.progress <= 0
-                ).build()
-                promoteToForeground(notif)
-            }
-
-            DownloadStatus.COMPLETED -> {
-                // Cancelar cualquier notificación previa de progreso para este item
-                NotificationHelper.cancelNotification(this, notifId)
-
-                // Emitir la notificación de descarga completada con sonido, vibración y acciones
-                try {
-                    NotificationHelper.showCompletedNotification(this, item)
-                } catch (_: SecurityException) {}
-
-                checkIfAllDownloadsFinished()
-            }
-
-            DownloadStatus.ERROR -> {
-                NotificationHelper.cancelNotification(this, notifId)
-                try {
-                    NotificationHelper.showErrorNotification(this, item)
-                } catch (_: SecurityException) {}
-
-                checkIfAllDownloadsFinished()
-            }
-
-            DownloadStatus.CANCELLED, DownloadStatus.PAUSED -> {
-                NotificationHelper.cancelNotification(this, notifId)
-                checkIfAllDownloadsFinished()
-            }
-        }
-    }
-
-    /**
-     * Publica o actualiza la notificación de Foreground Service.
-     * En Android 14+ (API 34) especifica ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC.
-     */
     private fun promoteToForeground(notification: android.app.Notification) {
         NotificationHelper.createNotificationChannels(this)
         try {
@@ -232,7 +225,7 @@ class MediaDownloadService : Service() {
     private fun acquireWakeLockIfNeeded() {
         try {
             if (wakeLock?.isHeld != true) {
-                wakeLock?.acquire(45 * 60 * 1000L) // 45 minutos máximo de resguardo
+                wakeLock?.acquire(45 * 60 * 1000L)
             }
         } catch (_: Exception) {}
     }
@@ -245,61 +238,58 @@ class MediaDownloadService : Service() {
         } catch (_: Exception) {}
     }
 
-    private fun checkIfAllDownloadsFinished() {
-        val active = downloadManager.getActiveDownloads()
-        if (active.isEmpty()) {
-            // Ya no hay descargas en progreso: retirar el servicio de foreground y detenerlo
-            releaseWakeLockSafely()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                stopForeground(STOP_FOREGROUND_REMOVE)
-            } else {
-                @Suppress("DEPRECATION")
-                stopForeground(true)
-            }
-            stopSelf()
+    private fun stopForegroundAndSelf() {
+        releaseWakeLockSafely()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
         } else {
-            // Aún hay descargas activas en la cola: mostrar el progreso de la siguiente
-            val next = active.first()
-            val notifTitle = if (active.size > 1) "[${active.size} en cola] ${next.title}" else next.title
-            val nextNotif = NotificationHelper.buildForegroundProgressNotification(
-                context = this,
-                title = notifTitle,
-                progress = next.progress,
-                speed = next.speedText,
-                indeterminate = next.progress <= 0
-            ).build()
-            promoteToForeground(nextNotif)
+            @Suppress("DEPRECATION")
+            stopForeground(true)
         }
+        stopSelf()
     }
 
+    private fun UniversalDownloadState.toDownloadItem(): DownloadItem = DownloadItem(
+        id = processId,
+        url = url,
+        format = format,
+        title = title,
+        artist = artist,
+        thumbnailUrl = thumbnailUrl,
+        progress = (progress * 100f).toInt().coerceIn(0, 100),
+        speedText = speedText,
+        status = status,
+        localFilePath = localFilePath,
+        fileSizeBytes = fileSizeBytes,
+        fileSizeFormatted = if (fileSizeBytes > 0L) StorageHelper.formatFileSize(fileSizeBytes) else "",
+        errorReason = errorReason
+    )
+
     override fun onTimeout(startId: Int, fgsType: Int) {
+        serviceScope.cancel()
         val scope = (applicationContext as? com.amurayada.music.MusicApplication)?.applicationScope
-            ?: kotlinx.coroutines.CoroutineScope(
-                kotlinx.coroutines.SupervisorJob() +
-                    kotlinx.coroutines.Dispatchers.IO +
+            ?: CoroutineScope(
+                SupervisorJob() +
+                    Dispatchers.IO +
                     kotlinx.coroutines.CoroutineExceptionHandler { _, t ->
                         com.omnivault.media.utils.LocalCrashLogger.logError("MediaDownloadService", "Error en onTimeout", t)
                     }
             )
         scope.launch {
             try {
-                com.omnivault.media.downloader.UniversalDownloadEngine
+                UniversalDownloadEngine
                     .getInstance(applicationContext)
                     .markActiveDownloadsPaused("Pausado por límite de tiempo en 2º plano (Android)")
             } catch (e: Exception) {
                 com.omnivault.media.utils.LocalCrashLogger.logError("MediaDownloadService", "Error pausando descargas en onTimeout", e)
             }
         }
-        releaseWakeLockSafely()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-        }
-        stopSelf()
+        stopForegroundAndSelf()
         super.onTimeout(startId, fgsType)
     }
 
     override fun onDestroy() {
-        downloadManager.removeDownloadListener(downloadListener)
+        serviceScope.cancel()
         releaseWakeLockSafely()
         super.onDestroy()
     }

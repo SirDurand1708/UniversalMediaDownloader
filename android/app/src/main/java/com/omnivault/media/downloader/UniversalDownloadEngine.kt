@@ -24,15 +24,25 @@ import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.io.File
 import java.nio.ByteBuffer
 import java.security.MessageDigest
@@ -79,6 +89,12 @@ data class UniversalDownloadResult(
     val localThumbnailPath: String?
 )
 
+sealed interface DownloadEvent {
+    val state: UniversalDownloadState
+    data class Completed(override val state: UniversalDownloadState) : DownloadEvent
+    data class Failed(override val state: UniversalDownloadState) : DownloadEvent
+}
+
 /**
  * Motor Universal de Descargas basado en `youtubedl-android` (`yt-dlp` + `FFmpeg` + `Aria2c`).
  * Soporta cualquier URL (YouTube, YouTube Music, TikTok, Instagram Reels, X/Twitter, Facebook, etc.)
@@ -92,11 +108,24 @@ class UniversalDownloadEngine private constructor(context: Context) {
     private val downloadDao = db.downloadDao()
     private val downloadQueueDao = db.downloadQueueDao()
     private val downloadSemaphore = Semaphore(2)
+    private val engineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val activeJobs = ConcurrentHashMap<String, Job>()
+    private val enqueueLock = Any()
 
     private val _downloadsState = MutableStateFlow<Map<String, UniversalDownloadState>>(emptyMap())
     val downloadsState: StateFlow<Map<String, UniversalDownloadState>> = _downloadsState.asStateFlow()
-    private val activeProcesses = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    private val _downloadEvents = MutableSharedFlow<DownloadEvent>(extraBufferCapacity = 64)
+    val downloadEvents: SharedFlow<DownloadEvent> = _downloadEvents.asSharedFlow()
+
+    private val activeProcesses = ConcurrentHashMap.newKeySet<String>()
     private val metadataCache = LruCache<String, UniversalMediaMetadata>(40)
+
+    fun isActiveStatus(status: DownloadStatus): Boolean =
+        status == DownloadStatus.QUEUED ||
+            status == DownloadStatus.FETCHING_METADATA ||
+            status == DownloadStatus.DOWNLOADING ||
+            status == DownloadStatus.PROCESSING
 
     fun computeStableSongId(url: String, isVideo: Boolean): Long {
         val norm = UrlUtils.normalizeMediaUrl(url)
@@ -365,17 +394,59 @@ class UniversalDownloadEngine private constructor(context: Context) {
         }
     }
 
-    suspend fun markFallbackCompleted(processId: String) {
-        try {
-            downloadQueueDao.deleteById(processId)
-            val current = _downloadsState.value.toMutableMap()
-            if (current.remove(processId) != null) {
-                _downloadsState.value = current
+    fun enqueueDownload(
+        url: String,
+        format: MediaFormat,
+        processId: String? = null
+    ): String {
+        val cleanUrl = UrlUtils.extractUrlFromText(url)?.trim() ?: url.trim()
+        val normalizedUrl = UrlUtils.normalizeMediaUrl(cleanUrl)
+
+        return synchronized(enqueueLock) {
+            val existing = _downloadsState.value.values.firstOrNull { state ->
+                isActiveStatus(state.status) &&
+                    activeJobs.containsKey(state.processId) &&
+                    ((processId != null && state.processId == processId) ||
+                        (UrlUtils.normalizeMediaUrl(state.url) == normalizedUrl && state.format == format))
             }
-        } catch (_: Exception) {}
+            if (existing != null) {
+                return@synchronized existing.processId
+            }
+
+            val targetProcessId = processId ?: "dl_${UUID.randomUUID()}"
+            val cachedTitle = getCachedMetadata(cleanUrl)?.title ?: "Analizando enlace…"
+            val initialState = UniversalDownloadState(
+                processId = targetProcessId,
+                url = cleanUrl,
+                format = format,
+                title = cachedTitle,
+                status = DownloadStatus.QUEUED,
+                speedText = "En cola…"
+            )
+            _downloadsState.update { it + (targetProcessId to initialState) }
+
+            val job = engineScope.launch {
+                try {
+                    executeDownload(
+                        url = cleanUrl,
+                        format = format,
+                        processId = targetProcessId
+                    )
+                } catch (_: CancellationException) {
+                    // Cancelación gestionada por cancelDownload / executeDownload
+                } catch (_: Exception) {
+                    // executeDownload ya actualiza _downloadsState, downloadQueueDao y _downloadEvents
+                } finally {
+                    activeJobs.remove(targetProcessId)
+                }
+            }
+            activeJobs[targetProcessId] = job
+            targetProcessId
+        }
     }
 
     fun cancelDownload(processId: String) {
+        activeJobs.remove(processId)?.cancel()
         try {
             YoutubeDL.getInstance().destroyProcessById(processId)
         } catch (_: Exception) {}
@@ -498,6 +569,10 @@ class UniversalDownloadEngine private constructor(context: Context) {
         persistQueuedItem(processId, cleanUrl, format, currentState.title)
 
         downloadSemaphore.withPermit {
+        coroutineContext.ensureActive()
+        if (_downloadsState.value[processId]?.status == DownloadStatus.CANCELLED) {
+            throw CancellationException("Download cancelled while queued")
+        }
         try {
             if (!StorageHelper.hasEnoughFreeSpace(appContext)) {
                 throw IllegalStateException("Espacio insuficiente en el dispositivo (mínimo 250 MB libres)")
@@ -756,6 +831,7 @@ class UniversalDownloadEngine private constructor(context: Context) {
                 thumbnailUrl = localCoverPath ?: metadata.thumbnailUrl
             )
             publishState(currentState)
+            _downloadEvents.tryEmit(DownloadEvent.Completed(currentState))
 
             return@withContext UniversalDownloadResult(
                 processId = processId,
@@ -779,6 +855,7 @@ class UniversalDownloadEngine private constructor(context: Context) {
                 errorReason = errMsg
             )
             publishState(failedState)
+            _downloadEvents.tryEmit(DownloadEvent.Failed(failedState))
             throw e
         } finally {
             activeProcesses.remove(processId)
