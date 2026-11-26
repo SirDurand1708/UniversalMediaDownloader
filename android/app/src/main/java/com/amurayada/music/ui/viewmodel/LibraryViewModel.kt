@@ -31,11 +31,9 @@ class LibraryViewModel(
     
     // Download Repository for integrating downloaded songs
     private val downloadDatabase = com.amurayada.music.data.database.DownloadDatabase.getDatabase(application)
-    private val streamRepository = com.amurayada.music.data.repository.StreamRepositoryImpl()
     private val downloadRepository = com.amurayada.music.data.repository.DownloadRepositoryImpl(
         application,
-        downloadDatabase.downloadDao(),
-        streamRepository
+        downloadDatabase.downloadDao()
     )
     
     private var debounceJob: kotlinx.coroutines.Job? = null

@@ -21,8 +21,7 @@ import java.io.File
 
 class DownloadRepositoryImpl(
     private val context: Context,
-    private val downloadDao: DownloadDao,
-    private val streamRepository: StreamRepository
+    private val downloadDao: DownloadDao
 ) : DownloadRepository {
     
     private val activeDownloads = MutableStateFlow<Map<Long, DownloadProgress>>(emptyMap())
