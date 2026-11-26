@@ -14,7 +14,8 @@
 
 # Uncomment this to preserve the line number information for
 # debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Preserve line number information for crash logs
+-keepattributes SourceFile,LineNumberTable
 
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
@@ -40,11 +41,13 @@
 -dontwarn javax.imageio.**
 -dontwarn javax.swing.**
 
-# NewPipeExtractor and Rhino - ignore missing Java desktop classes
+# NewPipeExtractor and Rhino - keep JS engine & ignore missing Java desktop classes
 -dontwarn java.beans.**
 -dontwarn javax.script.**
 -dontwarn org.mozilla.javascript.**
 -dontwarn org.jsoup.**
+-keep class org.mozilla.javascript.** { *; }
+-keep class org.mozilla.classfile.ClassFileWriter { *; }
 -keep class org.schabi.newpipe.extractor.** { *; }
 -keep interface org.schabi.newpipe.extractor.** { *; }
 
@@ -66,16 +69,23 @@
 # Keep ViewModel states and Enums (Fixes UI State in Release)
 -keep class com.amurayada.music.ui.viewmodel.** { *; }
 
-# youtubedl-android (yt-dlp + FFmpeg + Aria2c)
--keep class com.yausername.youtubedl_android.** { *; }
--keep class com.yausername.ffmpeg.** { *; }
--keep class com.yausername.aria2c.** { *; }
+# youtubedl-android (yt-dlp + FFmpeg + Aria2c + Commons Compress + Jackson)
+-keep class com.yausername.** { *; }
 -keep class io.github.junkfood02.** { *; }
+-keep class org.apache.commons.compress.** { *; }
+-keep class com.fasterxml.jackson.** { *; }
 -dontwarn com.yausername.**
 -dontwarn org.apache.commons.**
+-dontwarn com.fasterxml.jackson.**
 
-# Gson serialization models
+# Gson serialization models & TypeToken
 -keep class com.google.gson.** { *; }
+-keep,allowobfuscation class * extends com.google.gson.reflect.TypeToken
+-keepclassmembers class * extends com.google.gson.reflect.TypeToken { *; }
+-keepclassmembers,allowobfuscation class * {
+    @com.google.gson.annotations.SerializedName <fields>;
+    @com.google.gson.annotations.Expose <fields>;
+}
 -keep class com.omnivault.media.downloader.PlaylistEntryPreview { *; }
 -keep class com.omnivault.media.downloader.UniversalMediaMetadata { *; }
 -keep class com.amurayada.music.ui.viewmodel.VideoPlaylist { *; }
@@ -91,8 +101,6 @@
 -dontwarn javax.annotation.**
 
 # OkHttp (Network)
--keepattributes Signature
--keepattributes *Annotation*
 -keep class okhttp3.** { *; }
 -keep interface okhttp3.** { *; }
 -dontwarn okhttp3.**
