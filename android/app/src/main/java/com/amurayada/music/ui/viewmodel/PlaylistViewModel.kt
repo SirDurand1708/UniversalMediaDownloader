@@ -1,7 +1,6 @@
 package com.amurayada.music.ui.viewmodel
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.amurayada.music.data.model.Playlist
 import com.amurayada.music.data.repository.PlaylistRepository
@@ -9,9 +8,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 class PlaylistViewModel(
-    application: Application,
-    private val repository: PlaylistRepository = PlaylistRepository(application)
-) : AndroidViewModel(application) {
+    private val repository: PlaylistRepository
+) : ViewModel() {
     val playlists: StateFlow<List<Playlist>> = repository.playlists
 
     init {

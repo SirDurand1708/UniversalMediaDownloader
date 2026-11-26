@@ -1,10 +1,9 @@
 package com.amurayada.music.ui.viewmodel
 
-import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.amurayada.music.data.model.Album
 import com.amurayada.music.data.model.Artist
@@ -39,9 +38,8 @@ enum class SearchType {
 }
 
 class SearchViewModel(
-    application: Application,
-    private val searchRepository: SearchRepository = SearchRepositoryImpl(application.applicationContext)
-) : AndroidViewModel(application) {
+    private val searchRepository: SearchRepository
+) : ViewModel() {
 
     private var searchJob: kotlinx.coroutines.Job? = null
     private var suggestionsJob: kotlinx.coroutines.Job? = null

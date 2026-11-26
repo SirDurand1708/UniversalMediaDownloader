@@ -85,7 +85,7 @@ class AppContainer(application: Application) {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(VideosViewModel::class.java)) {
-                return VideosViewModel(app, preferencesRepository) as T
+                return VideosViewModel(app, preferencesRepository, mediaCleanupRepository) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }
@@ -105,7 +105,7 @@ class AppContainer(application: Application) {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(LibraryViewModel::class.java)) {
-                return LibraryViewModel(app, preferencesRepository, mediaRepository, searchRepository) as T
+                return LibraryViewModel(app, preferencesRepository, mediaRepository, searchRepository, mediaCleanupRepository) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }
@@ -115,7 +115,7 @@ class AppContainer(application: Application) {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(PlaylistViewModel::class.java)) {
-                return PlaylistViewModel(app, playlistRepository) as T
+                return PlaylistViewModel(playlistRepository) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }
@@ -125,7 +125,7 @@ class AppContainer(application: Application) {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(SearchViewModel::class.java)) {
-                return SearchViewModel(app, searchRepository) as T
+                return SearchViewModel(searchRepository) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }

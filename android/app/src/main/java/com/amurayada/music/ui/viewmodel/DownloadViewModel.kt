@@ -30,10 +30,13 @@ import java.io.File
 class DownloadViewModel(
     application: Application,
     private val preferencesRepository: com.amurayada.music.data.repository.PreferencesRepository =
-        com.amurayada.music.data.repository.SharedPreferencesRepositoryImpl(application)
+        com.amurayada.music.data.repository.SharedPreferencesRepositoryImpl(application),
+    private val downloadDao: com.amurayada.music.data.database.DownloadDao =
+        DownloadDatabase.getDatabase(application).downloadDao(),
+    private val downloadRepository: com.amurayada.music.data.repository.DownloadRepository =
+        com.amurayada.music.data.repository.DownloadRepositoryImpl(application, downloadDao)
 ) : AndroidViewModel(application) {
-    
-    private val downloadDao = DownloadDatabase.getDatabase(application).downloadDao()
+
     private val context = application
     private val universalEngine = UniversalDownloadEngine.getInstance(application)
     
@@ -513,22 +516,7 @@ class DownloadViewModel(
     
     fun deleteDownload(songId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val download = downloadDao.getDownload(songId)
-                download?.localPath?.let { path ->
-                    if (path.startsWith("content://")) {
-                        try {
-                            context.contentResolver.delete(Uri.parse(path), null, null)
-                        } catch (_: Exception) {}
-                    } else {
-                        val file = File(path)
-                        if (file.exists()) file.delete()
-                    }
-                }
-                downloadDao.deleteDownloadById(songId)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            downloadRepository.deleteDownload(songId)
         }
     }
 

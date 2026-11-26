@@ -31,6 +31,15 @@ class SettingsViewModelTest {
         var videoCalls = 0
         var audioCalls = 0
 
+        override fun observeVideoStoreChanges() = kotlinx.coroutines.flow.emptyFlow<Unit>()
+        override fun observeAudioStoreChanges() = kotlinx.coroutines.flow.emptyFlow<Unit>()
+        override suspend fun scanAllDeviceVideos(): List<DownloadItem> = emptyList()
+        override fun getMimeTypeForUri(uriString: String): String? = null
+        override fun resolveAudioUriAndName(rawPath: String): Pair<String?, String?> = null to null
+        override suspend fun resolveAudioMediaStoreUri(song: Song): android.net.Uri = android.net.Uri.EMPTY
+        override suspend fun deleteSingleVideo(item: DownloadItem) = com.amurayada.music.data.repository.SingleVideoDeleteResult.Deleted
+        override suspend fun deleteBatchVideos(items: List<DownloadItem>) = com.amurayada.music.data.repository.BatchVideoDeleteResult.Completed(items)
+        override suspend fun deleteAudioSong(song: Song) = com.amurayada.music.data.repository.AudioDeleteResult.Deleted
         override suspend fun findDuplicateAudios(songs: List<Song>): List<Pair<Song, Long>> = emptyList()
         override suspend fun findDuplicateVideos(): List<DownloadItem> = emptyList()
 

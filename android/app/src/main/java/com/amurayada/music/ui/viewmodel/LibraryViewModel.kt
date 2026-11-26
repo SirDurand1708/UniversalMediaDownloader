@@ -1,9 +1,7 @@
 package com.amurayada.music.ui.viewmodel
 
 import android.app.Application
-import android.content.ContentUris
 import android.net.Uri
-import android.provider.MediaStore
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -14,6 +12,9 @@ import com.amurayada.music.data.model.Album
 import com.amurayada.music.data.model.Artist
 import com.amurayada.music.data.model.Song
 import com.amurayada.music.data.model.SongSort
+import com.amurayada.music.data.repository.AndroidMediaCleanupRepository
+import com.amurayada.music.data.repository.AudioDeleteResult
+import com.amurayada.music.data.repository.MediaCleanupRepository
 import com.amurayada.music.data.repository.MediaRepository
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -26,7 +27,8 @@ class LibraryViewModel(
         com.amurayada.music.data.repository.SharedPreferencesRepositoryImpl(application),
     private val repository: MediaRepository = MediaRepository(application),
     private val searchRepository: com.amurayada.music.data.repository.SearchRepository =
-        com.amurayada.music.data.repository.SearchRepositoryImpl(application.applicationContext)
+        com.amurayada.music.data.repository.SearchRepositoryImpl(application.applicationContext),
+    private val mediaCleanupRepository: MediaCleanupRepository = AndroidMediaCleanupRepository(application)
 ) : AndroidViewModel(application) {
     
     // Download Repository for integrating downloaded songs
@@ -40,21 +42,7 @@ class LibraryViewModel(
     
     private val _permissionEvent = androidx.lifecycle.MutableLiveData<androidx.activity.result.IntentSenderRequest?>()
     val permissionEvent: androidx.lifecycle.LiveData<androidx.activity.result.IntentSenderRequest?> = _permissionEvent
-    
-    private val contentObserver = object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
-        override fun onChange(selfChange: Boolean, uri: android.net.Uri?) {
-            super.onChange(selfChange, uri)
-            android.util.Log.d("LibraryViewModel", "ContentObserver.onChange triggered! uri=$uri")
-            triggerLibraryUpdate()
-        }
-        
-        override fun onChange(selfChange: Boolean) {
-            super.onChange(selfChange)
-            android.util.Log.d("LibraryViewModel", "ContentObserver.onChange (no uri) triggered!")
-            triggerLibraryUpdate()
-        }
-    }
-    
+
     private fun triggerLibraryUpdate() {
         android.util.Log.d("LibraryViewModel", "triggerLibraryUpdate called, debouncing...")
         debounceJob?.cancel()
@@ -81,38 +69,12 @@ class LibraryViewModel(
         localSongs: List<Song>,
         downloadedSongs: List<Song>
     ): List<Song> {
-        val resolver = getApplication<Application>().contentResolver
         return com.omnivault.media.utils.LibraryExclusionHelper.mergeSongsDeduplicated(
             localSongs = localSongs,
             downloadedSongs = downloadedSongs,
             keySelector = { s -> com.omnivault.media.utils.SongKey(s.id, s.title, s.path, s.fileSize) },
-            contentUriResolver = { rawPath ->
-                var resolvedDataPath: String? = null
-                var resolvedDisplayName: String? = null
-                try {
-                    resolver.query(
-                        Uri.parse(rawPath),
-                        arrayOf(MediaStore.Audio.Media.DATA, MediaStore.MediaColumns.DISPLAY_NAME),
-                        null,
-                        null,
-                        null
-                    )?.use { cursor ->
-                        if (cursor.moveToFirst()) {
-                            val dataIdx = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
-                            if (dataIdx != -1) resolvedDataPath = cursor.getString(dataIdx)?.trim()
-                            val nameIdx = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
-                            if (nameIdx != -1) resolvedDisplayName = cursor.getString(nameIdx)?.trim()
-                        }
-                    }
-                } catch (_: Exception) {}
-                resolvedDataPath to resolvedDisplayName
-            }
+            contentUriResolver = { rawPath -> mediaCleanupRepository.resolveAudioUriAndName(rawPath) }
         )
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        getApplication<Application>().contentResolver.unregisterContentObserver(contentObserver)
     }
     
     var songs by mutableStateOf<List<Song>>(emptyList())
@@ -226,12 +188,8 @@ class LibraryViewModel(
 
         viewModelScope.launch {
             try {
-                val resolvedUri = if (song.path.startsWith("content://")) {
-                    android.net.Uri.parse(song.path)
-                } else {
-                    withContext(Dispatchers.IO) {
-                        resolveMediaStoreAudioUri(context, song)
-                    }
+                val resolvedUri = withContext(Dispatchers.IO) {
+                    mediaCleanupRepository.resolveAudioMediaStoreUri(song)
                 }
 
                 val repoResult = repository.updateSongTags(song, resolvedUri, cleanTitle, cleanArtist, cleanAlbum)
@@ -279,118 +237,17 @@ class LibraryViewModel(
         _permissionEvent.value = null
     }
 
-    private fun resolveMediaStoreAudioUri(context: android.content.Context, song: Song): android.net.Uri {
-        if (song.path.isNotBlank()) {
-            try {
-                context.contentResolver.query(
-                    android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                    arrayOf(android.provider.MediaStore.Audio.Media._ID),
-                    "${android.provider.MediaStore.Audio.Media.DATA} = ?",
-                    arrayOf(song.path),
-                    null
-                )?.use { cursor ->
-                    if (cursor.moveToFirst()) {
-                        val idCol = cursor.getColumnIndex(android.provider.MediaStore.Audio.Media._ID)
-                        if (idCol != -1) {
-                            val mediaId = cursor.getLong(idCol)
-                            return android.content.ContentUris.withAppendedId(
-                                android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                                mediaId
-                            )
-                        }
-                    }
-                }
-            } catch (_: Exception) {}
-        }
-        return android.content.ContentUris.withAppendedId(
-            android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            song.id
-        )
-    }
-
     fun deleteSong(song: Song, context: android.content.Context, onComplete: () -> Unit = {}) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // 1. Intentar eliminar primero de MediaStore y almacenamiento físico
-                val mediaUri = resolveMediaStoreAudioUri(context, song)
-                var securityException: SecurityException? = null
-                var deletedRows = 0
-
-                try {
-                    deletedRows = context.contentResolver.delete(mediaUri, null, null)
-                } catch (se: SecurityException) {
-                    securityException = se
-                    android.util.Log.w("LibraryViewModel", "SecurityException eliminando URI $mediaUri: ${se.message}")
-                } catch (e: Exception) {
-                    android.util.Log.w("LibraryViewModel", "Error eliminando de MediaStore por URI: ${e.message}")
-                }
-
-                val isContentUri = song.path.startsWith("content://")
-                var fileDeleted = deletedRows > 0
-                if (song.path.isNotBlank() && !isContentUri) {
-                    if (!fileDeleted) {
-                        try {
-                            deletedRows = context.contentResolver.delete(
-                                android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                                "${android.provider.MediaStore.Audio.Media.DATA} = ?",
-                                arrayOf(song.path)
-                            )
-                            fileDeleted = deletedRows > 0
-                        } catch (se: SecurityException) {
-                            if (securityException == null) securityException = se
-                        } catch (e: Exception) {
-                            android.util.Log.w("LibraryViewModel", "Error eliminando de MediaStore por DATA: ${e.message}")
-                        }
+                when (val outcome = mediaCleanupRepository.deleteAudioSong(song)) {
+                    is AudioDeleteResult.RequiresPermission -> {
+                        _permissionEvent.postValue(
+                            androidx.activity.result.IntentSenderRequest.Builder(outcome.intentSender).build()
+                        )
+                        return@launch
                     }
-
-                    val file = java.io.File(song.path)
-                    if (file.exists()) {
-                        try {
-                            if (file.delete()) fileDeleted = true
-                        } catch (_: Exception) {}
-                    } else if (!fileDeleted && securityException == null) {
-                        fileDeleted = true
-                    }
-                }
-
-                val stillExists = if (isContentUri) {
-                    !fileDeleted && securityException != null
-                } else if (song.path.isNotBlank()) {
-                    java.io.File(song.path).exists()
-                } else {
-                    !fileDeleted
-                }
-
-                var requestedSystemPermission = false
-                if (stillExists && securityException != null) {
-                    try {
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                            val pendingIntent = android.provider.MediaStore.createDeleteRequest(
-                                context.contentResolver,
-                                listOf(mediaUri)
-                            )
-                            requestedSystemPermission = true
-                            _permissionEvent.postValue(
-                                androidx.activity.result.IntentSenderRequest.Builder(pendingIntent.intentSender).build()
-                            )
-                        } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q &&
-                            securityException is android.app.RecoverableSecurityException
-                        ) {
-                            requestedSystemPermission = true
-                            _permissionEvent.postValue(
-                                androidx.activity.result.IntentSenderRequest.Builder(
-                                    securityException.userAction.actionIntent.intentSender
-                                ).build()
-                            )
-                        }
-                    } catch (reqEx: Exception) {
-                        android.util.Log.w("LibraryViewModel", "No se pudo emitir solicitud de eliminación: ${reqEx.message}")
-                    }
-                }
-
-                if (requestedSystemPermission) {
-                    // Esperar confirmación del sistema; no destruir BD/archivos auxiliares si el usuario cancela
-                    return@launch
+                    is AudioDeleteResult.Deleted -> Unit
                 }
 
                 // 2. Solo tras confirmar eliminación física (o inexistencia real), limpiar BD, caché y estado UI
@@ -409,6 +266,7 @@ class LibraryViewModel(
                 }
 
                 if (song.path.isNotBlank()) {
+                    val isContentUri = song.path.startsWith("content://")
                     if (!isContentUri) {
                         try {
                             val audioFile = java.io.File(song.path)
@@ -820,22 +678,11 @@ class LibraryViewModel(
     init {
         loadLibrary()
         loadSearchHistory()
-        val contentResolver = application.contentResolver
-        contentResolver.registerContentObserver(
-            android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            true,
-            contentObserver
-        )
-        contentResolver.registerContentObserver(
-            android.provider.MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI,
-            true,
-            contentObserver
-        )
-        contentResolver.registerContentObserver(
-            android.provider.MediaStore.Audio.Artists.EXTERNAL_CONTENT_URI,
-            true,
-            contentObserver
-        )
+        viewModelScope.launch {
+            mediaCleanupRepository.observeAudioStoreChanges().collect {
+                triggerLibraryUpdate()
+            }
+        }
     }
     private data class LibraryData(
         val songs: List<Song>,

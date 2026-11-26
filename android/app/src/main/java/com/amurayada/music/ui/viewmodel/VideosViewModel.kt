@@ -1,15 +1,16 @@
 package com.amurayada.music.ui.viewmodel
 
 import android.app.Application
-import android.content.ContentUris
-import android.media.MediaScannerConnection
 import android.net.Uri
-import android.os.Build
-import android.provider.MediaStore
 import androidx.activity.result.IntentSenderRequest
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.omnivault.media.data.LocalMediaScanner
+import com.amurayada.music.data.repository.AndroidMediaCleanupRepository
+import com.amurayada.music.data.repository.BatchVideoDeleteResult
+import com.amurayada.music.data.repository.MediaCleanupRepository
+import com.amurayada.music.data.repository.PreferencesRepository
+import com.amurayada.music.data.repository.SharedPreferencesRepositoryImpl
+import com.amurayada.music.data.repository.SingleVideoDeleteResult
 import com.omnivault.media.model.DownloadItem
 import com.omnivault.media.model.SortOption
 import com.omnivault.media.utils.FilenameStandardizer
@@ -100,8 +101,8 @@ private fun parseVideoDurationSeconds(dur: String): Long {
 
 class VideosViewModel(
     application: Application,
-    private val preferencesRepository: com.amurayada.music.data.repository.PreferencesRepository =
-        com.amurayada.music.data.repository.SharedPreferencesRepositoryImpl(application)
+    private val preferencesRepository: PreferencesRepository = SharedPreferencesRepositoryImpl(application),
+    private val mediaCleanupRepository: MediaCleanupRepository = AndroidMediaCleanupRepository(application)
 ) : AndroidViewModel(application) {
 
     private val _rawVideos = MutableStateFlow<List<DownloadItem>>(emptyList())
@@ -200,20 +201,6 @@ class VideosViewModel(
 
     private var videoRefreshDebounceJob: Job? = null
 
-    private val videoContentObserver = object : android.database.ContentObserver(
-        android.os.Handler(android.os.Looper.getMainLooper())
-    ) {
-        override fun onChange(selfChange: Boolean, uri: Uri?) {
-            super.onChange(selfChange, uri)
-            scheduleVideoRefresh()
-        }
-
-        override fun onChange(selfChange: Boolean) {
-            super.onChange(selfChange)
-            scheduleVideoRefresh()
-        }
-    }
-
     private fun scheduleVideoRefresh() {
         videoRefreshDebounceJob?.cancel()
         videoRefreshDebounceJob = viewModelScope.launch {
@@ -225,13 +212,11 @@ class VideosViewModel(
     init {
         loadVideoPlaylists()
         loadVideos()
-        try {
-            application.contentResolver.registerContentObserver(
-                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                true,
-                videoContentObserver
-            )
-        } catch (_: Exception) {}
+        viewModelScope.launch {
+            mediaCleanupRepository.observeVideoStoreChanges().collect {
+                scheduleVideoRefresh()
+            }
+        }
 
         viewModelScope.launch {
             try {
@@ -249,13 +234,6 @@ class VideosViewModel(
         }
     }
 
-    override fun onCleared() {
-        super.onCleared()
-        try {
-            getApplication<Application>().contentResolver.unregisterContentObserver(videoContentObserver)
-        } catch (_: Exception) {}
-    }
-
     private var loadVideosJob: Job? = null
     private val playlistLock = Any()
 
@@ -265,7 +243,7 @@ class VideosViewModel(
             _isLoading.value = true
             try {
                 val app = getApplication<Application>()
-                val scanned = LocalMediaScanner.scanDeviceVideo(app)
+                val scanned = mediaCleanupRepository.scanAllDeviceVideos()
                 val dbVideos = withContext(Dispatchers.IO) {
                     val dao = com.amurayada.music.data.database.DownloadDatabase.getDatabase(app).downloadDao()
                     dao.getAllDownloads().first()
@@ -273,7 +251,7 @@ class VideosViewModel(
                             val path = entity.localPath ?: ""
                             val lower = path.lowercase()
                             val mime = entity.mimeType ?: if (path.startsWith("content://")) {
-                                try { app.contentResolver.getType(android.net.Uri.parse(path)) } catch (_: Exception) { null }
+                                mediaCleanupRepository.getMimeTypeForUri(path)
                             } else null
                             entity.isVideo ||
                                 mime?.startsWith("video/", ignoreCase = true) == true ||
@@ -345,7 +323,7 @@ class VideosViewModel(
                             .downloadDao()
                             .updateDownloadPathAndTitle(oldPath, newPath, item.title)
                     } catch (_: Exception) {}
-                    MediaScannerConnection.scanFile(
+                    android.media.MediaScannerConnection.scanFile(
                         getApplication(),
                         arrayOf(oldPath, newPath),
                         null
@@ -437,58 +415,18 @@ class VideosViewModel(
         onComplete: (Int) -> Unit
     ) {
         viewModelScope.launch(Dispatchers.IO) {
-            val ctx = getApplication<Application>()
-            val pendingUris = mutableListOf<Uri>()
-            var deletedCount = 0
-            items.forEach { item ->
-                val path = item.localFilePath
-                if (path.isNullOrBlank()) {
-                    removeVideoFromDb(item)
-                    deletedCount++
-                } else if (path.startsWith("content://")) {
-                    val uri = Uri.parse(path)
-                    try {
-                        if (ctx.contentResolver.delete(uri, null, null) > 0) {
-                            removeVideoFromDb(item)
-                            deletedCount++
-                        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                            pendingUris.add(uri)
-                        }
-                    } catch (_: SecurityException) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                            pendingUris.add(uri)
-                        }
-                    }
-                } else {
-                    val f = File(path)
-                    if (!f.exists() || f.delete()) {
-                        removeVideoFromDb(item)
-                        MediaScannerConnection.scanFile(ctx, arrayOf(path), null, null)
-                        deletedCount++
-                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        ctx.contentResolver.query(
-                            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                            arrayOf(MediaStore.Video.Media._ID),
-                            "${MediaStore.Video.Media.DATA} = ?",
-                            arrayOf(path),
-                            null
-                        )?.use { c ->
-                            if (c.moveToFirst()) {
-                                val id = c.getLong(c.getColumnIndexOrThrow(MediaStore.Video.Media._ID))
-                                pendingUris.add(ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id))
-                            }
-                        }
+            when (val res = mediaCleanupRepository.deleteBatchVideos(items)) {
+                is BatchVideoDeleteResult.RequiresPermission -> {
+                    res.deletedItems.forEach { removeVideoFromDb(it) }
+                    withContext(Dispatchers.Main) {
+                        onRequirePermission(IntentSenderRequest.Builder(res.intentSender).build())
                     }
                 }
-            }
-            if (pendingUris.isNotEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                val pi = MediaStore.createDeleteRequest(ctx.contentResolver, pendingUris)
-                withContext(Dispatchers.Main) {
-                    onRequirePermission(IntentSenderRequest.Builder(pi.intentSender).build())
+                is BatchVideoDeleteResult.Completed -> {
+                    res.deletedItems.forEach { removeVideoFromDb(it) }
+                    loadVideos()
+                    withContext(Dispatchers.Main) { onComplete(res.deletedItems.size) }
                 }
-            } else {
-                loadVideos()
-                withContext(Dispatchers.Main) { onComplete(deletedCount) }
             }
         }
     }
@@ -499,74 +437,23 @@ class VideosViewModel(
         onComplete: (Boolean) -> Unit
     ) {
         viewModelScope.launch(Dispatchers.IO) {
-            val ctx = getApplication<Application>()
-            val path = item.localFilePath
             try {
-                if (path.isNullOrBlank()) {
-                    removeVideoFromDb(item)
-                    loadVideos()
-                    withContext(Dispatchers.Main) { onComplete(true) }
-                    return@launch
-                }
-
-                if (path.startsWith("content://")) {
-                    val contentUri = Uri.parse(path)
-                    try {
-                        val rows = ctx.contentResolver.delete(contentUri, null, null)
-                        if (rows > 0) {
-                            removeVideoFromDb(item)
-                            loadVideos()
-                            withContext(Dispatchers.Main) { onComplete(true) }
-                            return@launch
-                        }
-                    } catch (_: SecurityException) {}
-
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        val pi = MediaStore.createDeleteRequest(ctx.contentResolver, listOf(contentUri))
+                when (val res = mediaCleanupRepository.deleteSingleVideo(item)) {
+                    is SingleVideoDeleteResult.Deleted -> {
+                        removeVideoFromDb(item)
+                        loadVideos()
+                        withContext(Dispatchers.Main) { onComplete(true) }
+                    }
+                    is SingleVideoDeleteResult.RequiresPermission -> {
                         withContext(Dispatchers.Main) {
-                            onRequirePermission(IntentSenderRequest.Builder(pi.intentSender).build())
+                            onRequirePermission(IntentSenderRequest.Builder(res.intentSender).build())
                         }
-                        return@launch
                     }
-                    withContext(Dispatchers.Main) { onComplete(false) }
-                    return@launch
-                }
-
-                val file = File(path)
-                val deletedDirect = if (file.exists()) file.delete() else true
-                if (deletedDirect) {
-                    removeVideoFromDb(item)
-                    MediaScannerConnection.scanFile(ctx, arrayOf(path), null, null)
-                    loadVideos()
-                    withContext(Dispatchers.Main) { onComplete(true) }
-                    return@launch
-                }
-
-                // Buscar URI en MediaStore.Video para solicitar eliminación en 1 solo diálogo del sistema
-                var mediaUri: Uri? = null
-                ctx.contentResolver.query(
-                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                    arrayOf(MediaStore.Video.Media._ID),
-                    "${MediaStore.Video.Media.DATA} = ?",
-                    arrayOf(path),
-                    null
-                )?.use { cursor ->
-                    if (cursor.moveToFirst()) {
-                        val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID))
-                        mediaUri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
+                    is SingleVideoDeleteResult.Failed -> {
+                        withContext(Dispatchers.Main) { onComplete(false) }
                     }
                 }
-
-                if (mediaUri != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    val pi = MediaStore.createDeleteRequest(ctx.contentResolver, listOf(mediaUri!!))
-                    withContext(Dispatchers.Main) {
-                        onRequirePermission(IntentSenderRequest.Builder(pi.intentSender).build())
-                    }
-                } else {
-                    withContext(Dispatchers.Main) { onComplete(false) }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
+            } catch (_: Exception) {
                 withContext(Dispatchers.Main) { onComplete(false) }
             }
         }
