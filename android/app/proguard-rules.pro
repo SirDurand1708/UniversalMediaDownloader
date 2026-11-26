@@ -33,7 +33,9 @@
 -keep class com.amurayada.music.data.model.** { *; }
 -keep class com.omnivault.media.model.** { *; }
 
-# jaudiotagger - ignore missing Java AWT/ImageIO classes (not available on Android)
+# jaudiotagger - reflection readers/writers + ignore missing Java AWT/ImageIO classes (not available on Android)
+-keep class org.jaudiotagger.** { *; }
+-dontwarn org.jaudiotagger.**
 -dontwarn java.awt.**
 -dontwarn javax.imageio.**
 -dontwarn javax.swing.**
@@ -42,6 +44,7 @@
 -dontwarn java.beans.**
 -dontwarn javax.script.**
 -dontwarn org.mozilla.javascript.**
+-dontwarn org.jsoup.**
 -keep class org.schabi.newpipe.extractor.** { *; }
 -keep interface org.schabi.newpipe.extractor.** { *; }
 
@@ -63,9 +66,20 @@
 # Keep ViewModel states and Enums (Fixes UI State in Release)
 -keep class com.amurayada.music.ui.viewmodel.** { *; }
 
-# youtubedl-android
+# youtubedl-android (yt-dlp + FFmpeg + Aria2c)
 -keep class com.yausername.youtubedl_android.** { *; }
+-keep class com.yausername.ffmpeg.** { *; }
+-keep class com.yausername.aria2c.** { *; }
 -keep class io.github.junkfood02.** { *; }
+-dontwarn com.yausername.**
+-dontwarn org.apache.commons.**
+
+# Gson serialization models
+-keep class com.google.gson.** { *; }
+-keep class com.omnivault.media.downloader.PlaylistEntryPreview { *; }
+-keep class com.omnivault.media.downloader.UniversalMediaMetadata { *; }
+-keep class com.amurayada.music.ui.viewmodel.VideoPlaylist { *; }
+-keep class com.amurayada.music.data.database.** { *; }
 
 # Security Crypto (EncryptedSharedPreferences) - Critical for Release builds
 -keep class androidx.security.crypto.** { *; }
