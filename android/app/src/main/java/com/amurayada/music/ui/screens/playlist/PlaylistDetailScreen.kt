@@ -95,11 +95,14 @@ fun PlaylistDetailScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    val prefs = remember { context.getSharedPreferences("omnivault_prefs", Context.MODE_PRIVATE) }
+    val prefsRepo = remember {
+        (context.applicationContext as? com.amurayada.music.MusicApplication)?.appContainer?.preferencesRepository
+            ?: com.amurayada.music.data.repository.SharedPreferencesRepositoryImpl(context)
+    }
     var currentSort by remember(playlist.id, isReadOnly) {
         mutableStateOf(
             if (isReadOnly) PlaylistSort.MANUAL
-            else PlaylistSort.fromName(prefs.getString("playlist_sort_${playlist.id}", PlaylistSort.RECENTLY_ADDED.name))
+            else PlaylistSort.fromName(prefsRepo.getPlaylistSort(playlist.id, PlaylistSort.RECENTLY_ADDED.name))
         )
     }
 
@@ -280,7 +283,7 @@ fun PlaylistDetailScreen(
                                         },
                                         onClick = {
                                             currentSort = option
-                                            prefs.edit().putString("playlist_sort_${playlist.id}", option.name).apply()
+                                            prefsRepo.setPlaylistSort(playlist.id, option.name)
                                             showSortMenu = false
                                         }
                                     )

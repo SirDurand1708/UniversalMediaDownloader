@@ -90,7 +90,9 @@ class MainActivity : ComponentActivity() {
     
     private val libraryViewModel: LibraryViewModel by viewModels()
     private val playbackViewModel: PlaybackViewModel by viewModels()
-    private val settingsViewModel: SettingsViewModel by viewModels()
+    private val settingsViewModel: SettingsViewModel by viewModels {
+        (application as MusicApplication).appContainer.settingsViewModelFactory
+    }
     private val playlistViewModel: com.amurayada.music.ui.viewmodel.PlaylistViewModel by viewModels()
     private val handsFreeViewModel: HandsFreeViewModel by viewModels()
     private val searchViewModel: SearchViewModel by viewModels()

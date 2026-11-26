@@ -190,7 +190,27 @@ fun SettingsScreen(
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             onRescanLibrary()
-            Toast.makeText(context, "Videos duplicados eliminados", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Duplicados eliminados", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    LaunchedEffect(settingsViewModel) {
+        settingsViewModel.duplicateDeletionEvents.collect { outcome ->
+            when (outcome) {
+                is com.amurayada.music.data.repository.DuplicateDeletionResult.RequiresPermission -> {
+                    deleteDuplicatesLauncher.launch(
+                        IntentSenderRequest.Builder(outcome.intentSender).build()
+                    )
+                }
+                is com.amurayada.music.data.repository.DuplicateDeletionResult.DeletedDirectly -> {
+                    onRescanLibrary()
+                    val label = if (outcome.isVideo) "duplicados eliminados" else "canciones duplicadas eliminadas"
+                    Toast.makeText(context, "${outcome.count} $label", Toast.LENGTH_SHORT).show()
+                }
+                is com.amurayada.music.data.repository.DuplicateDeletionResult.Error -> {
+                    Toast.makeText(context, "No se pudo solicitar eliminación: ${outcome.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
     var totalRenamedSoFar by remember { mutableIntStateOf(0) }
@@ -412,8 +432,7 @@ fun SettingsScreen(
                 }
                 
                 SettingsSection(title = "Bóveda & Captura", icon = Icons.Rounded.CloudDownload) {
-                    val prefs = context.getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE)
-                    var clipboardEnabled by remember { mutableStateOf(prefs.getBoolean("clipboard_monitor_enabled", true)) }
+                    val clipboardEnabled by settingsViewModel.clipboardMonitorEnabled.collectAsState()
 
                     SettingsToggleItem(
                         title = "Auto-Captura de Portapapeles",
@@ -421,8 +440,7 @@ fun SettingsScreen(
                         icon = Icons.Rounded.ContentPaste,
                         checked = clipboardEnabled,
                         onCheckedChange = {
-                            clipboardEnabled = it
-                            prefs.edit().putBoolean("clipboard_monitor_enabled", it).apply()
+                            settingsViewModel.setClipboardMonitorEnabled(it)
                             if (it) {
                                 com.omnivault.media.service.ClipboardMonitorService.startService(context)
                             } else {
@@ -1186,35 +1204,7 @@ fun SettingsScreen(
                     onClick = {
                         val batch = duplicates
                         duplicateVideosToDelete = null
-                        scope.launch {
-                            val pendingUris = mutableListOf<Uri>()
-                            var deletedDirect = 0
-                            withContext(Dispatchers.IO) {
-                                batch.forEach { item ->
-                                    val mediaId = item.id.removePrefix("media_video_").toLongOrNull()
-                                    if (mediaId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                        pendingUris.add(
-                                            android.content.ContentUris.withAppendedId(
-                                                android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                                                mediaId
-                                            )
-                                        )
-                                    } else {
-                                        val path = item.localFilePath
-                                        if (!path.isNullOrBlank() && File(path).delete()) {
-                                            deletedDirect++
-                                        }
-                                    }
-                                }
-                            }
-                            if (pendingUris.isNotEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                val pi = android.provider.MediaStore.createDeleteRequest(context.contentResolver, pendingUris)
-                                deleteDuplicatesLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
-                            } else {
-                                onRescanLibrary()
-                                Toast.makeText(context, "$deletedDirect duplicados eliminados", Toast.LENGTH_SHORT).show()
-                            }
-                        }
+                        settingsViewModel.deleteDuplicateVideos(batch)
                     }
                 ) {
                     Text("Eliminar copias")
@@ -1263,51 +1253,7 @@ fun SettingsScreen(
                     onClick = {
                         val batch = duplicates
                         duplicateSongsToDelete = null
-                        scope.launch {
-                            val pendingUris = mutableListOf<Uri>()
-                            var deletedDirect = 0
-                            withContext(Dispatchers.IO) {
-                                batch.forEach { (song, _) ->
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !song.path.contains(context.packageName)) {
-                                        val candidateUri = if (song.path.startsWith("content://")) {
-                                            Uri.parse(song.path)
-                                        } else {
-                                            android.content.ContentUris.withAppendedId(
-                                                android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                                                song.id
-                                            )
-                                        }
-                                        val existsInMediaStore = try {
-                                            context.contentResolver.query(
-                                                candidateUri,
-                                                arrayOf(android.provider.MediaStore.Audio.Media._ID),
-                                                null,
-                                                null,
-                                                null
-                                            )?.use { it.moveToFirst() } == true
-                                        } catch (_: Exception) { false }
-                                        if (existsInMediaStore) {
-                                            pendingUris.add(candidateUri)
-                                        } else if (!song.path.startsWith("content://") && File(song.path).delete()) {
-                                            deletedDirect++
-                                        }
-                                    } else if (!song.path.startsWith("content://") && File(song.path).delete()) {
-                                        deletedDirect++
-                                    }
-                                }
-                            }
-                            if (pendingUris.isNotEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                try {
-                                    val pi = android.provider.MediaStore.createDeleteRequest(context.contentResolver, pendingUris)
-                                    deleteDuplicatesLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "No se pudo solicitar eliminación: ${e.message}", Toast.LENGTH_SHORT).show()
-                                }
-                            } else {
-                                onRescanLibrary()
-                                Toast.makeText(context, "$deletedDirect canciones duplicadas eliminadas", Toast.LENGTH_SHORT).show()
-                            }
-                        }
+                        settingsViewModel.deleteDuplicateAudios(batch.map { it.first })
                     }
                 ) {
                     Text("Eliminar copias")

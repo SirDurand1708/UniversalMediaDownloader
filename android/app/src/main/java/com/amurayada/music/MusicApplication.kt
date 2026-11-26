@@ -9,6 +9,10 @@ import coil.request.CachePolicy
 import kotlinx.coroutines.launch
 
 class MusicApplication : Application(), ImageLoaderFactory {
+
+    val appContainer: com.amurayada.music.di.AppContainer by lazy {
+        com.amurayada.music.di.AppContainer(this)
+    }
     
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)

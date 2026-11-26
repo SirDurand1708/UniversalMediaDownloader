@@ -1,100 +1,114 @@
 package com.amurayada.music.ui.viewmodel
 
-import android.app.Application
 import android.content.Context
-import android.content.Intent
-import androidx.core.content.FileProvider
-import com.amurayada.music.BuildConfig
-import kotlinx.coroutines.Dispatchers
-import okhttp3.Request
-import java.io.File
-import java.io.FileOutputStream
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.runtime.Composable
-import androidx.lifecycle.AndroidViewModel
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import android.net.Uri
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.amurayada.music.BuildConfig
+import com.amurayada.music.data.model.Song
+import com.amurayada.music.data.repository.DuplicateDeletionResult
+import com.amurayada.music.data.repository.MediaCleanupRepository
+import com.amurayada.music.data.repository.PreferencesRepository
 import com.amurayada.music.data.repository.ReleaseInfo
 import com.amurayada.music.data.repository.UpdateRepository
 import com.amurayada.music.data.repository.UpdateRepositoryImpl
+import com.omnivault.media.model.DownloadItem
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.io.File
+import java.io.FileOutputStream
 
 /**
  * ViewModel encargado de la gestión de configuraciones globales de la aplicación,
- * persistencia de preferencias de usuario y el sistema de actualizaciones.
+ * persistencia de preferencias de usuario, limpieza de duplicados y actualizaciones.
  */
-class SettingsViewModel(application: Application) : AndroidViewModel(application) {
-    
-    // Almacenamiento persistente mediante SharedPreferences
-    private val prefs = application.getSharedPreferences("music_settings", Context.MODE_PRIVATE)
+class SettingsViewModel(
+    private val preferencesRepository: PreferencesRepository,
+    private val mediaCleanupRepository: MediaCleanupRepository,
+    private val updateRepository: UpdateRepository = UpdateRepositoryImpl(OkHttpClient()),
+    private val appCacheDir: File? = null,
+    private val appFilesDir: File? = null,
+    private val currentVersion: String = BuildConfig.VERSION_NAME
+) : ViewModel() {
 
-    // Cliente HTTP compartido para consultas de red
     private val client = OkHttpClient()
-    
-    // Repositorio para la gestión de versiones desde GitHub
-    private val updateRepository: UpdateRepository = UpdateRepositoryImpl(client)
 
-    // Versión oficial de Aura Player / OmniVault
     val CURRENT_VERSION: String
-        get() = BuildConfig.VERSION_NAME
+        get() = currentVersion
 
     // --- Estados de Configuración ---
-    
-    private val _themeMode = MutableStateFlow(prefs.getString("theme_mode", "system") ?: "system")
+
+    private val _themeMode = MutableStateFlow(preferencesRepository.getThemeMode())
     val themeMode: StateFlow<String> = _themeMode.asStateFlow()
-    
-    private val _useDynamicColors = MutableStateFlow(prefs.getBoolean("dynamic_colors", true))
+
+    private val _useDynamicColors = MutableStateFlow(preferencesRepository.getDynamicColors())
     val useDynamicColors: StateFlow<Boolean> = _useDynamicColors.asStateFlow()
-    
-    private val _sleepTimerMinutes = MutableStateFlow(prefs.getInt("sleep_timer", 0))
+
+    private val _sleepTimerMinutes = MutableStateFlow(preferencesRepository.getSleepTimerMinutes())
     val sleepTimerMinutes: StateFlow<Int> = _sleepTimerMinutes.asStateFlow()
 
-    private val _autoResumeDownloads = MutableStateFlow(prefs.getBoolean("auto_resume_downloads", false))
+    private val _autoResumeDownloads = MutableStateFlow(preferencesRepository.getAutoResumeDownloads())
     val autoResumeDownloads: StateFlow<Boolean> = _autoResumeDownloads.asStateFlow()
 
+    private val _clipboardMonitorEnabled = MutableStateFlow(preferencesRepository.getClipboardMonitorEnabled())
+    val clipboardMonitorEnabled: StateFlow<Boolean> = _clipboardMonitorEnabled.asStateFlow()
+
     // --- Personalización Visual ---
-    
-    private val _customPrimaryColor = MutableStateFlow<Int?>(
-        if (prefs.contains("custom_primary_color")) prefs.getInt("custom_primary_color", -1) else null
-    )
+
+    private val _customPrimaryColor = MutableStateFlow(preferencesRepository.getCustomPrimaryColor())
     val customPrimaryColor: StateFlow<Int?> = _customPrimaryColor.asStateFlow()
 
-    private val _customBackgroundImageUri = MutableStateFlow<String?>(prefs.getString("custom_bg_uri", null))
+    private val _customBackgroundImageUri = MutableStateFlow(preferencesRepository.getCustomBackgroundImageUri())
     val customBackgroundImageUri: StateFlow<String?> = _customBackgroundImageUri.asStateFlow()
 
-    private val _playerBackgroundType = MutableStateFlow(prefs.getString("player_bg_type", "auto") ?: "auto")
+    private val _playerBackgroundType = MutableStateFlow(preferencesRepository.getPlayerBackgroundType())
     val playerBackgroundType: StateFlow<String> = _playerBackgroundType.asStateFlow()
 
-    private val _playerBackgroundColor = MutableStateFlow<Int?>(
-        if (prefs.contains("player_bg_color")) prefs.getInt("player_bg_color", -1) else null
-    )
+    private val _playerBackgroundColor = MutableStateFlow(preferencesRepository.getPlayerBackgroundColor())
     val playerBackgroundColor: StateFlow<Int?> = _playerBackgroundColor.asStateFlow()
 
-    private val _playerAlbumArtScale = MutableStateFlow(prefs.getFloat("player_art_scale", 1.0f))
+    private val _playerAlbumArtScale = MutableStateFlow(preferencesRepository.getPlayerAlbumArtScale())
     val playerAlbumArtScale: StateFlow<Float> = _playerAlbumArtScale.asStateFlow()
-    
-    // Control manual del tema oscuro (null indica seguir el sistema)
+
     private val _isDarkThemeOverride = MutableStateFlow<Boolean?>(
-        when (prefs.getString("theme_mode", "system")) {
+        when (_themeMode.value) {
             "dark" -> true
             "light" -> false
             else -> null
         }
     )
     val isDarkThemeOverride: StateFlow<Boolean?> = _isDarkThemeOverride.asStateFlow()
-    
-    val isDarkTheme: StateFlow<Boolean> = MutableStateFlow(
-        _isDarkThemeOverride.value ?: false
-    )
+
+    val isDarkTheme: StateFlow<Boolean> = MutableStateFlow(_isDarkThemeOverride.value ?: false)
+
+    private val _isAmoledMode = MutableStateFlow(preferencesRepository.getAmoledMode())
+    val isAmoledMode: StateFlow<Boolean> = _isAmoledMode.asStateFlow()
+
+    private val _filterShortAudio = MutableStateFlow(preferencesRepository.getFilterShortAudio())
+    val filterShortAudio: StateFlow<Boolean> = _filterShortAudio.asStateFlow()
+
+    private val _onlineMode = MutableStateFlow(preferencesRepository.getOnlineMode())
+    val onlineMode: StateFlow<Boolean> = _onlineMode.asStateFlow()
+
+    private val _applyBackgroundToPlayer = MutableStateFlow(preferencesRepository.getApplyBackgroundToPlayer())
+    val applyBackgroundToPlayer: StateFlow<Boolean> = _applyBackgroundToPlayer.asStateFlow()
+
+    private val _isCanvasEnabled = MutableStateFlow(preferencesRepository.getIsCanvasEnabled())
+    val isCanvasEnabled: StateFlow<Boolean> = _isCanvasEnabled.asStateFlow()
+
+    // --- Eventos one-shot de eliminación de duplicados ---
+    private val _duplicateDeletionEvents = Channel<DuplicateDeletionResult>(Channel.BUFFERED)
+    val duplicateDeletionEvents = _duplicateDeletionEvents.receiveAsFlow()
 
     // --- Sistema de Actualizaciones ---
-    
+
     sealed class UpdateStatus {
         object Idle : UpdateStatus()
         object Checking : UpdateStatus()
@@ -108,21 +122,16 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _updateStatus = MutableStateFlow<UpdateStatus>(UpdateStatus.Idle)
     val updateStatus: StateFlow<UpdateStatus> = _updateStatus.asStateFlow()
 
-    var latestRelease by mutableStateOf<ReleaseInfo?>(null)
+    var latestRelease: ReleaseInfo? = null
         private set
 
-    /**
-     * Consulta la API de GitHub para verificar si existe una nueva versión del APK.
-     * Compara semánticamente la versión remota con [CURRENT_VERSION].
-     */
     fun checkForUpdates() {
         viewModelScope.launch {
             _updateStatus.value = UpdateStatus.Checking
             val result = updateRepository.getLatestRelease()
-            
+
             result.onSuccess { release ->
                 latestRelease = release
-                // Verificación simple de versión (suponiendo formato X.Y)
                 if (isNewerVersion(CURRENT_VERSION, release.versionName)) {
                     _updateStatus.value = UpdateStatus.UpdateAvailable(release)
                 } else {
@@ -134,10 +143,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /**
-     * Descarga el APK de actualización en cacheDir con progreso real y dispara el instalador.
-     */
     fun downloadAndInstallApk(downloadUrl: String) {
+        val cacheDir = appCacheDir ?: run {
+            _updateStatus.value = UpdateStatus.Error("Directorio de caché no disponible")
+            return
+        }
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 _updateStatus.value = UpdateStatus.Downloading(0f)
@@ -152,7 +162,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                         return@launch
                     }
                     val totalBytes = body.contentLength()
-                    val apkFile = File(getApplication<Application>().cacheDir, "omnivault_update.apk")
+                    val apkFile = File(cacheDir, "omnivault_update.apk")
                     if (apkFile.exists()) apkFile.delete()
 
                     body.byteStream().use { input ->
@@ -172,7 +182,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                                         _updateStatus.value = UpdateStatus.Downloading(progress)
                                     }
                                 } else {
-                                    // Sin Content-Length: reportar progreso estimado creciente en lugar de quedarse en 0%
                                     val approxPct = ((downloaded / 1_048_576L).toInt() * 3).coerceIn(5, 95)
                                     if (approxPct != lastReportedPct) {
                                         lastReportedPct = approxPct
@@ -196,19 +205,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /**
-     * Lanza el instalador del sistema usando FileProvider para el APK descargado.
-     */
     fun installApk(context: Context, apkFile: File) {
         com.omnivault.media.utils.UpdateManager.installApk(context, apkFile)
     }
 
-    /**
-     * Lógica de comparación de versiones.
-     */
     private fun isNewerVersion(current: String, latest: String): Boolean =
         com.omnivault.media.utils.VersionUtils.isRemoteNewer(latest, current)
-    
+
     // --- Métodos de Setter con Persistencia ---
 
     fun setThemeMode(mode: String) {
@@ -218,83 +221,57 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             "light" -> false
             else -> null
         }
-        prefs.edit().putString("theme_mode", mode).apply()
+        preferencesRepository.setThemeMode(mode)
     }
-    
+
     fun setDynamicColors(enabled: Boolean) {
         _useDynamicColors.value = enabled
-        prefs.edit().putBoolean("dynamic_colors", enabled).apply()
+        preferencesRepository.setDynamicColors(enabled)
     }
-    
-    private val _isAmoledMode = MutableStateFlow(prefs.getBoolean("amoled_mode", false))
-    val isAmoledMode: StateFlow<Boolean> = _isAmoledMode.asStateFlow()
-
-    private val _filterShortAudio = MutableStateFlow(
-        application.getSharedPreferences("omnivault_prefs", Context.MODE_PRIVATE).let { op ->
-            if (op.contains("filter_short_audio")) op.getBoolean("filter_short_audio", true)
-            else prefs.getBoolean("filter_short_audio", true)
-        }
-    )
-    val filterShortAudio: StateFlow<Boolean> = _filterShortAudio.asStateFlow()
 
     fun setFilterShortAudio(enabled: Boolean) {
         _filterShortAudio.value = enabled
-        prefs.edit().putBoolean("filter_short_audio", enabled).apply()
-        getApplication<Application>()
-            .getSharedPreferences("omnivault_prefs", Context.MODE_PRIVATE)
-            .edit().putBoolean("filter_short_audio", enabled).apply()
+        preferencesRepository.setFilterShortAudio(enabled)
     }
-    
+
     fun setSleepTimer(minutes: Int) {
         _sleepTimerMinutes.value = minutes
-        prefs.edit().putInt("sleep_timer", minutes).apply()
+        preferencesRepository.setSleepTimerMinutes(minutes)
     }
 
     fun setCustomPrimaryColor(color: Int?) {
         _customPrimaryColor.value = color
-        if (color != null) {
-            prefs.edit().putInt("custom_primary_color", color).apply()
-        } else {
-            prefs.edit().remove("custom_primary_color").apply()
-        }
+        preferencesRepository.setCustomPrimaryColor(color)
     }
 
     fun setCustomBackgroundImage(uri: String?) {
         _customBackgroundImageUri.value = uri
-        if (uri != null) {
-            prefs.edit().putString("custom_bg_uri", uri).apply()
-        } else {
-            prefs.edit().remove("custom_bg_uri").apply()
-        }
+        preferencesRepository.setCustomBackgroundImageUri(uri)
     }
-    
+
     fun setPlayerBackgroundType(type: String) {
         _playerBackgroundType.value = type
-        prefs.edit().putString("player_bg_type", type).apply()
+        preferencesRepository.setPlayerBackgroundType(type)
     }
 
     fun setPlayerBackgroundColor(color: Int) {
         _playerBackgroundColor.value = color
-        prefs.edit().putInt("player_bg_color", color).apply()
+        preferencesRepository.setPlayerBackgroundColor(color)
     }
 
     fun setPlayerAlbumArtScale(scale: Float) {
         _playerAlbumArtScale.value = scale
-        prefs.edit().putFloat("player_art_scale", scale).apply()
+        preferencesRepository.setPlayerAlbumArtScale(scale)
     }
 
-    /**
-     * Copia una imagen seleccionada por el usuario al almacenamiento interno
-     * para garantizar persistencia y evitar problemas de permisos de URI.
-     */
-    fun copyImageToInternalStorage(context: Context, uri: android.net.Uri): String? {
+    fun copyImageToInternalStorage(context: Context, uri: Uri): String? {
         return try {
             context.filesDir.listFiles { _, name -> name.startsWith("custom_bg_") && name.endsWith(".jpg") }
                 ?.forEach { it.delete() }
             val inputStream = context.contentResolver.openInputStream(uri)
             val fileName = "custom_bg_${System.currentTimeMillis()}.jpg"
-            val file = java.io.File(context.filesDir, fileName)
-            java.io.FileOutputStream(file).use { output ->
+            val file = File(context.filesDir, fileName)
+            FileOutputStream(file).use { output ->
                 inputStream?.use { input ->
                     input.copyTo(output)
                 }
@@ -305,39 +282,46 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             null
         }
     }
-    
+
     fun setAmoledMode(enabled: Boolean) {
         _isAmoledMode.value = enabled
-        prefs.edit().putBoolean("amoled_mode", enabled).apply()
+        preferencesRepository.setAmoledMode(enabled)
     }
-
-    private val _onlineMode = MutableStateFlow(prefs.getBoolean("online_mode", false))
-    val onlineMode: StateFlow<Boolean> = _onlineMode.asStateFlow()
 
     fun setOnlineMode(enabled: Boolean) {
         _onlineMode.value = enabled
-        prefs.edit().putBoolean("online_mode", enabled).apply()
+        preferencesRepository.setOnlineMode(enabled)
     }
-
-    private val _applyBackgroundToPlayer = MutableStateFlow(prefs.getBoolean("apply_bg_to_player", false))
-    val applyBackgroundToPlayer: StateFlow<Boolean> = _applyBackgroundToPlayer.asStateFlow()
 
     fun setApplyBackgroundToPlayer(enabled: Boolean) {
         _applyBackgroundToPlayer.value = enabled
-        prefs.edit().putBoolean("apply_bg_to_player", enabled).apply()
+        preferencesRepository.setApplyBackgroundToPlayer(enabled)
     }
-
-    private val _isCanvasEnabled = MutableStateFlow(prefs.getBoolean("is_canvas_enabled", false))
-    val isCanvasEnabled: StateFlow<Boolean> = _isCanvasEnabled.asStateFlow()
 
     fun setCanvasEnabled(enabled: Boolean) {
         _isCanvasEnabled.value = enabled
-        prefs.edit().putBoolean("is_canvas_enabled", enabled).apply()
+        preferencesRepository.setIsCanvasEnabled(enabled)
     }
-    
-    init {
+
+    fun setClipboardMonitorEnabled(enabled: Boolean) {
+        _clipboardMonitorEnabled.value = enabled
+        preferencesRepository.setClipboardMonitorEnabled(enabled)
     }
-    
+
+    fun deleteDuplicateVideos(items: List<DownloadItem>) {
+        viewModelScope.launch {
+            val result = mediaCleanupRepository.deleteDuplicateVideos(items)
+            _duplicateDeletionEvents.send(result)
+        }
+    }
+
+    fun deleteDuplicateAudios(songs: List<Song>) {
+        viewModelScope.launch {
+            val result = mediaCleanupRepository.deleteDuplicateAudios(songs)
+            _duplicateDeletionEvents.send(result)
+        }
+    }
+
     fun getThemeModeDisplay(): String {
         return when (_themeMode.value) {
             "light" -> "Claro"
@@ -348,12 +332,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     fun setAutoResumeDownloads(enabled: Boolean) {
         _autoResumeDownloads.value = enabled
-        prefs.edit().putBoolean("auto_resume_downloads", enabled).apply()
+        preferencesRepository.setAutoResumeDownloads(enabled)
     }
 
-    /**
-     * Restaura los valores de personalización visual por defecto.
-     */
     fun resetPersonalization() {
         _customPrimaryColor.value = null
         _customBackgroundImageUri.value = null
@@ -362,18 +343,15 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _playerAlbumArtScale.value = 1.0f
 
         try {
-            getApplication<Application>().filesDir
-                .listFiles { _, name -> name.startsWith("custom_bg_") && name.endsWith(".jpg") }
+            appFilesDir
+                ?.listFiles { _, name -> name.startsWith("custom_bg_") && name.endsWith(".jpg") }
                 ?.forEach { it.delete() }
         } catch (_: Exception) {}
-        
-        prefs.edit().apply {
-            remove("custom_primary_color")
-            remove("custom_bg_uri")
-            putString("player_bg_type", "auto")
-            remove("player_bg_color")
-            putFloat("player_art_scale", 1.0f)
-            apply()
-        }
+
+        preferencesRepository.setCustomPrimaryColor(null)
+        preferencesRepository.setCustomBackgroundImageUri(null)
+        preferencesRepository.setPlayerBackgroundType("auto")
+        preferencesRepository.setPlayerBackgroundColor(null)
+        preferencesRepository.setPlayerAlbumArtScale(1.0f)
     }
 }

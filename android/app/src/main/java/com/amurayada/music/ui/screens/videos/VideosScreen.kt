@@ -83,8 +83,11 @@ fun VideosScreen(
     val onlyDownloaded by videosViewModel.onlyDownloaded.collectAsState()
     val onlyCamera by videosViewModel.onlyCamera.collectAsState()
 
-    val prefs = remember { context.getSharedPreferences("omnivault_prefs", Context.MODE_PRIVATE) }
-    var isGridView by remember { mutableStateOf(prefs.getBoolean("video_grid_view", false)) }
+    val prefsRepo = remember {
+        (context.applicationContext as? com.amurayada.music.MusicApplication)?.appContainer?.preferencesRepository
+            ?: com.amurayada.music.data.repository.SharedPreferencesRepositoryImpl(context)
+    }
+    var isGridView by remember { mutableStateOf(prefsRepo.getVideoGridView()) }
     var showSearchBar by remember { mutableStateOf(false) }
     var showHeaderMenu by remember { mutableStateOf(false) }
     val selectedVideoIds = remember { mutableStateListOf<String>() }
@@ -275,7 +278,7 @@ fun VideosScreen(
                 IconButton(onClick = {
                     val next = !isGridView
                     isGridView = next
-                    prefs.edit().putBoolean("video_grid_view", next).apply()
+                    prefsRepo.setVideoGridView(next)
                 }) {
                     Icon(
                         imageVector = if (isGridView) Icons.Rounded.ViewList else Icons.Rounded.GridView,

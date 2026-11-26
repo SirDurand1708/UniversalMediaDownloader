@@ -197,22 +197,13 @@ fun LarkStyleMusicScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val rootScope = rememberCoroutineScope()
-    val prefs = remember { context.getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE) }
-    var searchHistory by remember {
-        mutableStateOf(
-            prefs.getString("music_search_history", "")
-                ?.split("|")
-                ?.filter { it.isNotBlank() }
-                ?: emptyList()
-        )
+    val prefsRepo = remember {
+        (context.applicationContext as? com.amurayada.music.MusicApplication)?.appContainer?.preferencesRepository
+            ?: com.amurayada.music.data.repository.SharedPreferencesRepositoryImpl(context)
     }
+    var searchHistory by remember { mutableStateOf(prefsRepo.getMusicSearchHistory()) }
     val saveSearchQuery: (String) -> Unit = { q ->
-        val clean = q.trim()
-        if (clean.length >= 2) {
-            val updated = (listOf(clean) + searchHistory.filterNot { it.equals(clean, ignoreCase = true) }).take(5)
-            searchHistory = updated
-            prefs.edit().putString("music_search_history", updated.joinToString("|")).apply()
-        }
+        searchHistory = prefsRepo.saveMusicSearchQuery(q)
     }
     var songsToDeleteBatch by remember { mutableStateOf<List<Song>>(emptyList()) }
 
