@@ -25,7 +25,6 @@ object LocalMediaScanner {
      */
     suspend fun scanDeviceAudio(context: Context): List<DownloadItem> = withContext(Dispatchers.IO) {
         val items = mutableListOf<DownloadItem>()
-        val trackEntities = mutableListOf<TrackEntity>()
 
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
@@ -107,33 +106,11 @@ object LocalMediaScanner {
                         timestamp = if (dateAddedSec > 0) dateAddedSec * 1000 else System.currentTimeMillis()
                     )
                     items.add(downloadItem)
-
-                    trackEntities.add(
-                        TrackEntity(
-                            id = "track_$id",
-                            title = rawTitle,
-                            artist = cleanArtist,
-                            album = album,
-                            durationMs = duration,
-                            filePath = path,
-                            coverPath = coverUri
-                        )
-                    )
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error escaneando MediaStore de audio", e)
         }
-
-        // Persistir en Room en lotes seguros de 100 para no exceder los límites de parámetros SQL de Android
-        try {
-            if (trackEntities.isNotEmpty()) {
-                val db = AppDatabase.getInstance(context)
-                trackEntities.chunked(100).forEach { chunk ->
-                    db.trackDao().insertTracks(chunk)
-                }
-            }
-        } catch (_: Exception) {}
 
         items
     }

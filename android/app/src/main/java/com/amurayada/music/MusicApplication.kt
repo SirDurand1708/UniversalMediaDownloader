@@ -95,8 +95,14 @@ class MusicApplication : Application(), ImageLoaderFactory {
         // 1. Initialize NewPipe with Localization
         initNewPipe()
         
-        // 2. Network Warm-up ligero (YoutubeDL/FFmpeg/Aria2c se inicializan perezosamente al requerirse)
+        // 2. Network Warm-up ligero + limpieza única de almacenamiento legado sin lectores
         applicationScope.launch {
+            try {
+                deleteDatabase("omnivault_media_db")
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                    deleteSharedPreferences("omnivault_storage")
+                }
+            } catch (_: Exception) {}
             try {
                 // Dummy request to open TCP/TLS connection
                 val client = com.amurayada.music.data.newpipe.NewPipeDownloader.getClient()

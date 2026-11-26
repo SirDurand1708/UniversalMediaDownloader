@@ -434,14 +434,6 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                 }
 
                 if (song.path.isNotBlank()) {
-                    try {
-                        com.omnivault.media.downloader.DownloadManager.getInstance(context).removeHistoryByPath(song.path)
-                    } catch (_: Exception) {}
-
-                    try {
-                        com.omnivault.media.data.AppDatabase.getInstance(context).trackDao().deleteByPath(song.path)
-                    } catch (_: Exception) {}
-
                     if (!isContentUri) {
                         try {
                             val audioFile = java.io.File(song.path)
