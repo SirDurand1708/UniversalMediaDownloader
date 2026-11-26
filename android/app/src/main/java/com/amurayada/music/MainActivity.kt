@@ -88,16 +88,22 @@ import com.google.accompanist.permissions.rememberMultiplePermissionsState
 
 class MainActivity : ComponentActivity() {
     
-    private val libraryViewModel: LibraryViewModel by viewModels()
+    private val libraryViewModel: LibraryViewModel by viewModels {
+        (application as MusicApplication).appContainer.libraryViewModelFactory
+    }
     private val playbackViewModel: PlaybackViewModel by viewModels {
         (application as MusicApplication).appContainer.playbackViewModelFactory
     }
     private val settingsViewModel: SettingsViewModel by viewModels {
         (application as MusicApplication).appContainer.settingsViewModelFactory
     }
-    private val playlistViewModel: com.amurayada.music.ui.viewmodel.PlaylistViewModel by viewModels()
+    private val playlistViewModel: com.amurayada.music.ui.viewmodel.PlaylistViewModel by viewModels {
+        (application as MusicApplication).appContainer.playlistViewModelFactory
+    }
     private val handsFreeViewModel: HandsFreeViewModel by viewModels()
-    private val searchViewModel: SearchViewModel by viewModels()
+    private val searchViewModel: SearchViewModel by viewModels {
+        (application as MusicApplication).appContainer.searchViewModelFactory
+    }
     val downloadViewModel: DownloadViewModel by viewModels {
         (application as MusicApplication).appContainer.downloadViewModelFactory
     }

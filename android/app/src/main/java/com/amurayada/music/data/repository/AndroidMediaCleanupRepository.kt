@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import com.amurayada.music.data.model.Song
+import com.omnivault.media.data.LocalMediaScanner
 import com.omnivault.media.model.DownloadItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -14,6 +15,36 @@ import java.io.File
 class AndroidMediaCleanupRepository(context: Context) : MediaCleanupRepository {
 
     private val appContext = context.applicationContext
+
+    override suspend fun findDuplicateAudios(songs: List<Song>): List<Pair<Song, Long>> =
+        withContext(Dispatchers.IO) {
+            songs
+                .mapNotNull { song ->
+                    val f = File(song.path)
+                    val len = if (f.exists()) f.length() else 0L
+                    if (len > 0L) Pair(song, len) else null
+                }
+                .groupBy { (song, len) ->
+                    val norm = song.title.lowercase().replace(Regex("[^a-z0-9]"), "").take(24)
+                    Pair(len, norm)
+                }
+                .values
+                .filter { it.size > 1 }
+                .flatMap { it.drop(1) }
+        }
+
+    override suspend fun findDuplicateVideos(): List<DownloadItem> =
+        withContext(Dispatchers.IO) {
+            LocalMediaScanner.scanDeviceVideo(appContext)
+                .filter { it.fileSizeBytes > 0L }
+                .groupBy {
+                    val norm = it.title.lowercase().replace(Regex("[^a-z0-9]"), "").take(24)
+                    Pair(it.fileSizeBytes, norm)
+                }
+                .values
+                .filter { it.size > 1 }
+                .flatMap { group -> group.drop(1) }
+        }
 
     override suspend fun deleteDuplicateVideos(items: List<DownloadItem>): DuplicateDeletionResult =
         withContext(Dispatchers.IO) {

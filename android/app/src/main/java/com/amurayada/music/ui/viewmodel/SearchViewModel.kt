@@ -38,9 +38,11 @@ enum class SearchType {
     ALL, SONGS, ALBUMS, ARTISTS, PLAYLISTS
 }
 
-class SearchViewModel(application: Application) : AndroidViewModel(application) {
-
+class SearchViewModel(
+    application: Application,
     private val searchRepository: SearchRepository = SearchRepositoryImpl(application.applicationContext)
+) : AndroidViewModel(application) {
+
     private var searchJob: kotlinx.coroutines.Job? = null
     private var suggestionsJob: kotlinx.coroutines.Job? = null
 

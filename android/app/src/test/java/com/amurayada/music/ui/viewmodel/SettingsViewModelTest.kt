@@ -31,6 +31,9 @@ class SettingsViewModelTest {
         var videoCalls = 0
         var audioCalls = 0
 
+        override suspend fun findDuplicateAudios(songs: List<Song>): List<Pair<Song, Long>> = emptyList()
+        override suspend fun findDuplicateVideos(): List<DownloadItem> = emptyList()
+
         override suspend fun deleteDuplicateVideos(items: List<DownloadItem>): DuplicateDeletionResult {
             videoCalls++
             return nextVideoResult

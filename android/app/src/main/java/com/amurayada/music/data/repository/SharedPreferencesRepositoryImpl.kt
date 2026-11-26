@@ -9,6 +9,7 @@ class SharedPreferencesRepositoryImpl(context: Context) : PreferencesRepository 
     private val omniPrefs = appContext.getSharedPreferences("omnivault_prefs", Context.MODE_PRIVATE)
     private val playbackPrefs = appContext.getSharedPreferences("playback_data", Context.MODE_PRIVATE)
     private val appPrefs = appContext.getSharedPreferences("music_app_prefs", Context.MODE_PRIVATE)
+    private val headphonePrefs = appContext.getSharedPreferences("headphone_usage_prefs", Context.MODE_PRIVATE)
 
     override fun getThemeMode(): String =
         musicPrefs.getString("theme_mode", "system") ?: "system"
@@ -211,11 +212,26 @@ class SharedPreferencesRepositoryImpl(context: Context) : PreferencesRepository 
         omniPrefs.edit().putString("song_sort_order", name).apply()
     }
 
-    override fun getFilterCallRecordings(): Boolean =
-        omniPrefs.getBoolean("filter_call_recordings", false)
+    override fun getFilterCallRecordings(defaultValue: Boolean): Boolean =
+        omniPrefs.getBoolean("filter_call_recordings", defaultValue)
 
     override fun setFilterCallRecordings(enabled: Boolean) {
         omniPrefs.edit().putBoolean("filter_call_recordings", enabled).apply()
+    }
+
+    override fun getHiddenSongIds(): Set<Long> =
+        omniPrefs.getStringSet("hidden_song_ids", emptySet())
+            ?.mapNotNull { it.toLongOrNull() }?.toSet() ?: emptySet()
+
+    override fun setHiddenSongIds(ids: Set<Long>) {
+        omniPrefs.edit().putStringSet("hidden_song_ids", ids.map { it.toString() }.toHashSet()).apply()
+    }
+
+    override fun getDeletedSongPaths(): Set<String> =
+        omniPrefs.getStringSet("deleted_song_paths", emptySet())?.toSet() ?: emptySet()
+
+    override fun setDeletedSongPaths(paths: Set<String>) {
+        omniPrefs.edit().putStringSet("deleted_song_paths", paths.toHashSet()).apply()
     }
 
     override fun getOnlineSearchHistory(): String =
@@ -275,5 +291,14 @@ class SharedPreferencesRepositoryImpl(context: Context) : PreferencesRepository 
             putLong("current_position", positionMs)
             apply()
         }
+    }
+
+    override fun getHeadphoneDailyCancels(): Int =
+        headphonePrefs.getInt("daily_cancels", 0)
+
+    override fun incrementHeadphoneDailyCancels(): Int {
+        val next = getHeadphoneDailyCancels() + 1
+        headphonePrefs.edit().putInt("daily_cancels", next).apply()
+        return next
     }
 }

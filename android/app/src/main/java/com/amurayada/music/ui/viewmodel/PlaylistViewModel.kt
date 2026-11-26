@@ -8,8 +8,10 @@ import com.amurayada.music.data.repository.PlaylistRepository
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-class PlaylistViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository = PlaylistRepository(application)
+class PlaylistViewModel(
+    application: Application,
+    private val repository: PlaylistRepository = PlaylistRepository(application)
+) : AndroidViewModel(application) {
     val playlists: StateFlow<List<Playlist>> = repository.playlists
 
     init {

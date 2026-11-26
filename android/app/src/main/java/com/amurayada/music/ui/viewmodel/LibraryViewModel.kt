@@ -20,11 +20,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.withContext
 
-class LibraryViewModel(application: Application) : AndroidViewModel(application) {
-    
-    private val repository = MediaRepository(application)
-    // Add SearchRepository for online Library
-    private val searchRepository = com.amurayada.music.data.repository.SearchRepositoryImpl(application.applicationContext) // Init correctly
+class LibraryViewModel(
+    application: Application,
+    private val preferencesRepository: com.amurayada.music.data.repository.PreferencesRepository =
+        com.amurayada.music.data.repository.SharedPreferencesRepositoryImpl(application),
+    private val repository: MediaRepository = MediaRepository(application),
+    private val searchRepository: com.amurayada.music.data.repository.SearchRepository =
+        com.amurayada.music.data.repository.SearchRepositoryImpl(application.applicationContext)
+) : AndroidViewModel(application) {
     
     // Download Repository for integrating downloaded songs
     private val downloadDatabase = com.amurayada.music.data.database.DownloadDatabase.getDatabase(application)
@@ -129,42 +132,27 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     var userPlaylists by mutableStateOf<List<com.amurayada.music.data.model.Playlist>>(emptyList())
         private set
 
-    private val omniPrefs by lazy {
-        application.getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE)
-    }
-
     var songSortOrder by mutableStateOf(
-        SongSort.fromKey(
-            application.getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE)
-                .getString("song_sort_order", SongSort.RECENT.name)
-        )
+        SongSort.fromKey(preferencesRepository.getSongSortOrder(SongSort.RECENT.name))
     )
         private set
 
     fun setSongSort(sort: SongSort) {
         songSortOrder = sort
-        omniPrefs.edit().putString("song_sort_order", sort.name).apply()
+        preferencesRepository.setSongSortOrder(sort.name)
     }
 
-    var hiddenSongIds by mutableStateOf<Set<Long>>(
-        application.getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE)
-            .getStringSet("hidden_song_ids", emptySet())
-            ?.mapNotNull { it.toLongOrNull() }?.toSet() ?: emptySet()
-    )
+    var hiddenSongIds by mutableStateOf<Set<Long>>(preferencesRepository.getHiddenSongIds())
         private set
 
-    var deletedSongPaths by mutableStateOf<Set<String>>(
-        application.getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE)
-            .getStringSet("deleted_song_paths", emptySet())
-            ?.toSet() ?: emptySet()
-    )
+    var deletedSongPaths by mutableStateOf<Set<String>>(preferencesRepository.getDeletedSongPaths())
         private set
 
     fun hideSong(songId: Long) {
         synchronized(com.omnivault.media.downloader.UniversalDownloadEngine.EXCLUSION_PREFS_LOCK) {
             val updated = hiddenSongIds + songId
             hiddenSongIds = updated
-            omniPrefs.edit().putStringSet("hidden_song_ids", updated.map { it.toString() }.toHashSet()).apply()
+            preferencesRepository.setHiddenSongIds(updated)
         }
         loadLibrary()
     }
@@ -175,32 +163,23 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     var lrcKeys by mutableStateOf<Set<String>>(emptySet())
         private set
 
-    private var _filterShortAudio by mutableStateOf(
-        application.getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE)
-            .let { op ->
-                if (op.contains("filter_short_audio")) op.getBoolean("filter_short_audio", true)
-                else application.getSharedPreferences("music_settings", android.content.Context.MODE_PRIVATE)
-                    .getBoolean("filter_short_audio", true)
-            }
-    )
+    private var _filterShortAudio by mutableStateOf(preferencesRepository.getFilterShortAudio())
     val filterShortAudio: Boolean get() = _filterShortAudio
 
     fun setFilterShortAudio(enabled: Boolean) {
         _filterShortAudio = enabled
-        omniPrefs.edit().putBoolean("filter_short_audio", enabled).apply()
-        prefs.edit().putBoolean("filter_short_audio", enabled).apply()
+        preferencesRepository.setFilterShortAudio(enabled)
         loadLibrary()
     }
 
     private var _filterCallRecordings by mutableStateOf(
-        application.getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE)
-            .getBoolean("filter_call_recordings", true)
+        preferencesRepository.getFilterCallRecordings(defaultValue = true)
     )
     val filterCallRecordings: Boolean get() = _filterCallRecordings
 
     fun setFilterCallRecordings(enabled: Boolean) {
         _filterCallRecordings = enabled
-        omniPrefs.edit().putBoolean("filter_call_recordings", enabled).apply()
+        preferencesRepository.setFilterCallRecordings(enabled)
         loadLibrary()
     }
 
@@ -218,7 +197,7 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         synchronized(com.omnivault.media.downloader.UniversalDownloadEngine.EXCLUSION_PREFS_LOCK) {
             val updated = hiddenSongIds - songId
             hiddenSongIds = updated
-            omniPrefs.edit().putStringSet("hidden_song_ids", updated.map { it.toString() }.toHashSet()).apply()
+            preferencesRepository.setHiddenSongIds(updated)
         }
         loadLibrary()
     }
@@ -230,7 +209,7 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                 hiddenSongs.filter { normDel.contains(it.path.lowercase()) }.map { it.id }.toSet()
             }
             hiddenSongIds = keepDeletedIds
-            omniPrefs.edit().putStringSet("hidden_song_ids", keepDeletedIds.map { it.toString() }.toHashSet()).apply()
+            preferencesRepository.setHiddenSongIds(keepDeletedIds)
         }
         loadLibrary()
     }
@@ -293,10 +272,8 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
             hiddenSongIds = updatedIds
             val updatedPaths = if (song.path.isNotBlank()) deletedSongPaths + song.path else deletedSongPaths
             deletedSongPaths = updatedPaths
-            omniPrefs.edit()
-                .putStringSet("hidden_song_ids", updatedIds.map { it.toString() }.toHashSet())
-                .putStringSet("deleted_song_paths", updatedPaths.toHashSet())
-                .apply()
+            preferencesRepository.setHiddenSongIds(updatedIds)
+            preferencesRepository.setDeletedSongPaths(updatedPaths)
         }
     }
 
@@ -561,10 +538,8 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                     val (freshHiddenIds, freshDeletedPaths) = synchronized(
                         com.omnivault.media.downloader.UniversalDownloadEngine.EXCLUSION_PREFS_LOCK
                     ) {
-                        val hIds = omniPrefs.getStringSet("hidden_song_ids", emptySet())
-                            ?.mapNotNull { it.toLongOrNull() }?.toSet() ?: emptySet()
-                        val dPaths = omniPrefs.getStringSet("deleted_song_paths", emptySet())
-                            ?.toSet() ?: emptySet()
+                        val hIds = preferencesRepository.getHiddenSongIds()
+                        val dPaths = preferencesRepository.getDeletedSongPaths()
 
                         val mergedPreview = mergeSongsDeduplicated(localSongs, downloadedSongs)
                         val reconciled = com.omnivault.media.utils.LibraryExclusionHelper.reconcileRedownloadedExclusions(
@@ -574,10 +549,8 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                             hiddenIds = hIds
                         )
                         if (reconciled.changed) {
-                            omniPrefs.edit()
-                                .putStringSet("hidden_song_ids", reconciled.cleanedHiddenIds.mapTo(HashSet()) { it.toString() })
-                                .putStringSet("deleted_song_paths", HashSet(reconciled.cleanedDeletedPaths))
-                                .commit()
+                            preferencesRepository.setHiddenSongIds(reconciled.cleanedHiddenIds)
+                            preferencesRepository.setDeletedSongPaths(reconciled.cleanedDeletedPaths)
                         }
                         reconciled.cleanedHiddenIds to reconciled.cleanedDeletedPaths
                     }
@@ -811,20 +784,15 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     var searchHistory by mutableStateOf<List<String>>(emptyList())
         private set
 
-    private val prefs by lazy {
-        getApplication<Application>().getSharedPreferences("music_app_prefs", android.content.Context.MODE_PRIVATE)
-    }
-
     private fun loadSearchHistory() {
-        val historyString = prefs.getString("search_history", "") ?: ""
+        val historyString = preferencesRepository.getOnlineSearchHistory()
         if (historyString.isNotEmpty()) {
             searchHistory = historyString.split("|").filter { it.isNotEmpty() }
         }
     }
 
     private fun saveSearchHistory() {
-        val historyString = searchHistory.joinToString("|")
-        prefs.edit().putString("search_history", historyString).apply()
+        preferencesRepository.setOnlineSearchHistory(searchHistory.joinToString("|"))
     }
 
     fun addToSearchHistory(query: String) {

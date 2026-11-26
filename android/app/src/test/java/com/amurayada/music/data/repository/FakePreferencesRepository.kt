@@ -96,8 +96,14 @@ class FakePreferencesRepository : PreferencesRepository {
     }
     override fun getSongSortOrder(defaultName: String) = storedSongSortOrder
     override fun setSongSortOrder(name: String) { storedSongSortOrder = name }
-    override fun getFilterCallRecordings() = storedFilterCallRecordings
+    override fun getFilterCallRecordings(defaultValue: Boolean) = storedFilterCallRecordings
     override fun setFilterCallRecordings(enabled: Boolean) { storedFilterCallRecordings = enabled }
+    var storedHiddenSongIds: Set<Long> = emptySet()
+    override fun getHiddenSongIds() = storedHiddenSongIds
+    override fun setHiddenSongIds(ids: Set<Long>) { storedHiddenSongIds = ids }
+    var storedDeletedSongPaths: Set<String> = emptySet()
+    override fun getDeletedSongPaths() = storedDeletedSongPaths
+    override fun setDeletedSongPaths(paths: Set<String>) { storedDeletedSongPaths = paths }
     override fun getOnlineSearchHistory() = storedOnlineSearchHistory
     override fun setOnlineSearchHistory(history: String) { storedOnlineSearchHistory = history }
     override fun getShuffleEnabled() = storedShuffleEnabled
@@ -118,5 +124,11 @@ class FakePreferencesRepository : PreferencesRepository {
     override fun savePlaybackPosition(index: Int, positionMs: Long) {
         storedQueueIndex = index
         storedQueuePositionMs = positionMs
+    }
+    var storedHeadphoneDailyCancels: Int = 0
+    override fun getHeadphoneDailyCancels() = storedHeadphoneDailyCancels
+    override fun incrementHeadphoneDailyCancels(): Int {
+        storedHeadphoneDailyCancels += 1
+        return storedHeadphoneDailyCancels
     }
 }

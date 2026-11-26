@@ -14,6 +14,8 @@ sealed interface DuplicateDeletionResult {
  * Desacopla las consultas y solicitudes de borrado en MediaStore de la capa de UI.
  */
 interface MediaCleanupRepository {
+    suspend fun findDuplicateAudios(songs: List<Song>): List<Pair<Song, Long>>
+    suspend fun findDuplicateVideos(): List<DownloadItem>
     suspend fun deleteDuplicateVideos(items: List<DownloadItem>): DuplicateDeletionResult
     suspend fun deleteDuplicateAudios(songs: List<Song>): DuplicateDeletionResult
 }

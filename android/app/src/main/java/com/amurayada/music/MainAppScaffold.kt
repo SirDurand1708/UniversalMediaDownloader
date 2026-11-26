@@ -259,11 +259,13 @@ fun MusicPlayerApp(
         var timeLeft by remember { mutableStateOf(10) }
         var dailyCancels by remember { mutableStateOf(0) }
         
+        val prefsRepo = remember {
+            (context.applicationContext as? MusicApplication)?.appContainer?.preferencesRepository
+                ?: com.amurayada.music.data.repository.SharedPreferencesRepositoryImpl(context)
+        }
         // Cargar cancelaciones diarias
         LaunchedEffect(Unit) {
-            val prefs = context.getSharedPreferences("headphone_usage_prefs", android.content.Context.MODE_PRIVATE)
-            // Lógica simple: leemos valor actual. La lógica de reseteo está en el Service, y confiamos en el valor almacenado.
-            dailyCancels = prefs.getInt("daily_cancels", 0)
+            dailyCancels = prefsRepo.getHeadphoneDailyCancels()
         }
 
         LaunchedEffect(timeLeft) {
@@ -286,9 +288,7 @@ fun MusicPlayerApp(
             confirmButton = {
                 if (dailyCancels < HeadphoneUsageMonitor.MAX_DAILY_CANCELS) {
                     TextButton(onClick = {
-                        // Increment cancel count
-                        val prefs = context.getSharedPreferences("headphone_usage_prefs", android.content.Context.MODE_PRIVATE)
-                        prefs.edit().putInt("daily_cancels", dailyCancels + 1).apply()
+                        prefsRepo.incrementHeadphoneDailyCancels()
                         showWarning90 = false
                     }) {
                         Text("🆘 Cancelar pausa (${dailyCancels}/${HeadphoneUsageMonitor.MAX_DAILY_CANCELS})")

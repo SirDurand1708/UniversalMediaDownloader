@@ -77,8 +77,14 @@ interface PreferencesRepository {
     fun getSongSortOrder(defaultName: String): String
     fun setSongSortOrder(name: String)
 
-    fun getFilterCallRecordings(): Boolean
+    fun getFilterCallRecordings(defaultValue: Boolean = false): Boolean
     fun setFilterCallRecordings(enabled: Boolean)
+
+    fun getHiddenSongIds(): Set<Long>
+    fun setHiddenSongIds(ids: Set<Long>)
+
+    fun getDeletedSongPaths(): Set<String>
+    fun setDeletedSongPaths(paths: Set<String>)
 
     fun getOnlineSearchHistory(): String
     fun setOnlineSearchHistory(history: String)
@@ -101,4 +107,8 @@ interface PreferencesRepository {
 
     fun savePlaybackQueue(queueJson: String, index: Int, positionMs: Long)
     fun savePlaybackPosition(index: Int, positionMs: Long)
+
+    // --- headphone_usage_prefs ---
+    fun getHeadphoneDailyCancels(): Int
+    fun incrementHeadphoneDailyCancels(): Int
 }

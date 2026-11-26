@@ -308,6 +308,18 @@ class SettingsViewModel(
         preferencesRepository.setClipboardMonitorEnabled(enabled)
     }
 
+    fun findDuplicateVideos(onResult: (List<DownloadItem>) -> Unit) {
+        viewModelScope.launch {
+            onResult(mediaCleanupRepository.findDuplicateVideos())
+        }
+    }
+
+    fun findDuplicateAudios(songs: List<Song>, onResult: (List<Pair<Song, Long>>) -> Unit) {
+        viewModelScope.launch {
+            onResult(mediaCleanupRepository.findDuplicateAudios(songs))
+        }
+    }
+
     fun deleteDuplicateVideos(items: List<DownloadItem>) {
         viewModelScope.launch {
             val result = mediaCleanupRepository.deleteDuplicateVideos(items)

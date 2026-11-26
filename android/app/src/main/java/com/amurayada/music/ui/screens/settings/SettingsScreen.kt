@@ -531,22 +531,7 @@ fun SettingsScreen(
                             onClick = {
                                 if (!isScanningAudioDuplicates) {
                                     isScanningAudioDuplicates = true
-                                    scope.launch {
-                                        val extras = withContext(Dispatchers.IO) {
-                                            libraryViewModel.songs
-                                                .mapNotNull { song ->
-                                                    val f = File(song.path)
-                                                    val len = if (f.exists()) f.length() else 0L
-                                                    if (len > 0L) Pair(song, len) else null
-                                                }
-                                                .groupBy { (song, len) ->
-                                                    val norm = song.title.lowercase().replace(Regex("[^a-z0-9]"), "").take(24)
-                                                    Pair(len, norm)
-                                                }
-                                                .values
-                                                .filter { it.size > 1 }
-                                                .flatMap { it.drop(1) }
-                                        }
+                                    settingsViewModel.findDuplicateAudios(libraryViewModel.songs) { extras ->
                                         isScanningAudioDuplicates = false
                                         if (extras.isEmpty()) {
                                             Toast.makeText(context, "No se encontraron canciones duplicadas", Toast.LENGTH_SHORT).show()
@@ -565,19 +550,7 @@ fun SettingsScreen(
                         onClick = {
                             if (!isScanningDuplicates) {
                                 isScanningDuplicates = true
-                                scope.launch {
-                                    val extras = withContext(Dispatchers.IO) {
-                                        val allVideos = LocalMediaScanner.scanDeviceVideo(context)
-                                        allVideos
-                                            .filter { it.fileSizeBytes > 0L }
-                                            .groupBy {
-                                                val norm = it.title.lowercase().replace(Regex("[^a-z0-9]"), "").take(24)
-                                                Pair(it.fileSizeBytes, norm)
-                                            }
-                                            .values
-                                            .filter { it.size > 1 }
-                                            .flatMap { group -> group.drop(1) }
-                                    }
+                                settingsViewModel.findDuplicateVideos { extras ->
                                     isScanningDuplicates = false
                                     if (extras.isEmpty()) {
                                         Toast.makeText(context, "No se encontraron videos duplicados", Toast.LENGTH_SHORT).show()

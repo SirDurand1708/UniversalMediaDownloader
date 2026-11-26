@@ -6,12 +6,19 @@ import androidx.lifecycle.ViewModelProvider
 import com.amurayada.music.BuildConfig
 import com.amurayada.music.data.repository.AndroidMediaCleanupRepository
 import com.amurayada.music.data.repository.MediaCleanupRepository
+import com.amurayada.music.data.repository.MediaRepository
+import com.amurayada.music.data.repository.PlaylistRepository
 import com.amurayada.music.data.repository.PreferencesRepository
+import com.amurayada.music.data.repository.SearchRepository
+import com.amurayada.music.data.repository.SearchRepositoryImpl
 import com.amurayada.music.data.repository.SharedPreferencesRepositoryImpl
 import com.amurayada.music.data.repository.UpdateRepository
 import com.amurayada.music.data.repository.UpdateRepositoryImpl
 import com.amurayada.music.ui.viewmodel.DownloadViewModel
+import com.amurayada.music.ui.viewmodel.LibraryViewModel
 import com.amurayada.music.ui.viewmodel.PlaybackViewModel
+import com.amurayada.music.ui.viewmodel.PlaylistViewModel
+import com.amurayada.music.ui.viewmodel.SearchViewModel
 import com.amurayada.music.ui.viewmodel.SettingsViewModel
 import com.amurayada.music.ui.viewmodel.VideosViewModel
 import okhttp3.OkHttpClient
@@ -29,6 +36,18 @@ class AppContainer(application: Application) {
 
     val mediaCleanupRepository: MediaCleanupRepository by lazy {
         AndroidMediaCleanupRepository(app)
+    }
+
+    val mediaRepository: MediaRepository by lazy {
+        MediaRepository(app)
+    }
+
+    val playlistRepository: PlaylistRepository by lazy {
+        PlaylistRepository(app)
+    }
+
+    val searchRepository: SearchRepository by lazy {
+        SearchRepositoryImpl(app)
     }
 
     val updateRepository: UpdateRepository by lazy {
@@ -77,6 +96,36 @@ class AppContainer(application: Application) {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(PlaybackViewModel::class.java)) {
                 return PlaybackViewModel(app, preferencesRepository) as T
+            }
+            throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
+        }
+    }
+
+    val libraryViewModelFactory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            if (modelClass.isAssignableFrom(LibraryViewModel::class.java)) {
+                return LibraryViewModel(app, preferencesRepository, mediaRepository, searchRepository) as T
+            }
+            throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
+        }
+    }
+
+    val playlistViewModelFactory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            if (modelClass.isAssignableFrom(PlaylistViewModel::class.java)) {
+                return PlaylistViewModel(app, playlistRepository) as T
+            }
+            throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
+        }
+    }
+
+    val searchViewModelFactory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            if (modelClass.isAssignableFrom(SearchViewModel::class.java)) {
+                return SearchViewModel(app, searchRepository) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }
