@@ -915,325 +915,38 @@ fun VideosScreen(
     }
 
     // Sort Dialog
-    if (showSortDialog) {
-        AlertDialog(
-            onDismissRequest = { showSortDialog = false },
-            containerColor = VideoTitaniumCard,
-            titleContentColor = VideoTextPrimary,
-            textContentColor = VideoTextPrimary,
-            title = { Text("Ordenar videos por", fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    SortOptionRow("Más reciente (Fecha)", currentSort == SortOption.DATE_DESC) {
-                        videosViewModel.setSortOption(SortOption.DATE_DESC)
-                        showSortDialog = false
-                    }
-                    SortOptionRow("Más antiguo", currentSort == SortOption.DATE_ASC) {
-                        videosViewModel.setSortOption(SortOption.DATE_ASC)
-                        showSortDialog = false
-                    }
-                    SortOptionRow("Nombre: A a Z", currentSort == SortOption.NAME_ASC) {
-                        videosViewModel.setSortOption(SortOption.NAME_ASC)
-                        showSortDialog = false
-                    }
-                    SortOptionRow("Nombre: Z a A", currentSort == SortOption.NAME_DESC) {
-                        videosViewModel.setSortOption(SortOption.NAME_DESC)
-                        showSortDialog = false
-                    }
-                    SortOptionRow("Tamaño: Mayor a menor", currentSort == SortOption.SIZE_DESC) {
-                        videosViewModel.setSortOption(SortOption.SIZE_DESC)
-                        showSortDialog = false
-                    }
-                    SortOptionRow("Tamaño: Menor a mayor", currentSort == SortOption.SIZE_ASC) {
-                        videosViewModel.setSortOption(SortOption.SIZE_ASC)
-                        showSortDialog = false
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = { showSortDialog = false },
-                    colors = ButtonDefaults.textButtonColors(contentColor = VideoNeonCyan)
-                ) {
-                    Text("Cerrar")
+    VideoDialogsHost(
+        videosViewModel = videosViewModel,
+        rawVideos = rawVideos,
+        videoPlaylists = videoPlaylists,
+        currentSort = currentSort,
+        showSortDialog = showSortDialog,
+        onDismissSortDialog = { showSortDialog = false },
+        videoStandardizeCandidates = videoStandardizeCandidates,
+        onDismissStandardize = { videoStandardizeCandidates = null },
+        onConfirmStandardize = { batch ->
+            totalVideosRenamed = 0
+            scope.launch {
+                val result = BulkMediaStandardizer.applyBatch(context, batch)
+                totalVideosRenamed += result.renamedCount
+                if (result.pendingPermissionChunks.isNotEmpty()) {
+                    launchNextVideoChunk?.invoke(result.pendingPermissionChunks)
+                } else {
+                    videosViewModel.loadVideos()
+                    Toast.makeText(context, "$totalVideosRenamed videos estandarizados", Toast.LENGTH_LONG).show()
                 }
             }
-        )
-    }
-
-    videoStandardizeCandidates?.let { candidates ->
-        val examples = candidates.take(3)
-        AlertDialog(
-            onDismissRequest = { videoStandardizeCandidates = null },
-            containerColor = VideoTitaniumCard,
-            titleContentColor = VideoTextPrimary,
-            textContentColor = VideoTextPrimary,
-            icon = { Icon(Icons.Rounded.AutoFixHigh, contentDescription = null, tint = VideoNeonCyan) },
-            title = { Text("Estandarizar videos", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Se encontraron ${candidates.size} videos para limpiar etiquetas (se omiten WhatsApp y cámara).",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    examples.forEach { ex ->
-                        Text(
-                            text = "• ${ex.currentBaseName} → ${ex.targetBaseName}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = VideoTextSecondary,
-                            maxLines = 2
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val batch = candidates
-                        videoStandardizeCandidates = null
-                        totalVideosRenamed = 0
-                        scope.launch {
-                            val result = BulkMediaStandardizer.applyBatch(context, batch)
-                            totalVideosRenamed += result.renamedCount
-                            if (result.pendingPermissionChunks.isNotEmpty()) {
-                                launchNextVideoChunk?.invoke(result.pendingPermissionChunks)
-                            } else {
-                                videosViewModel.loadVideos()
-                                Toast.makeText(context, "$totalVideosRenamed videos estandarizados", Toast.LENGTH_LONG).show()
-                            }
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = VideoNeonCyan, contentColor = VideoOnAccent)
-                ) {
-                    Text("Estandarizar (${candidates.size})", fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { videoStandardizeCandidates = null },
-                    colors = ButtonDefaults.textButtonColors(contentColor = VideoTextSecondary)
-                ) {
-                    Text("Cancelar")
-                }
-            }
-        )
-    }
-
-    // Picker: Añadir video(s) a playlist virtual
-    videoIdsPendingPlaylist?.let { pendingIds ->
-        val validRawIds = remember(rawVideos) { rawVideos.mapTo(HashSet()) { it.id } }
-        AlertDialog(
-            onDismissRequest = { videoIdsPendingPlaylist = null },
-            containerColor = VideoTitaniumCard,
-            titleContentColor = VideoTextPrimary,
-            textContentColor = VideoTextPrimary,
-            title = { Text("Añadir a playlist", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = {
-                            pendingPlaylistInitialVideos = pendingIds
-                            videoIdsPendingPlaylist = null
-                            showCreatePlaylistDialog = true
-                        },
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = VideoNeonCyan),
-                        border = BorderStroke(1.dp, VideoNeonCyan.copy(alpha = 0.5f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Rounded.CreateNewFolder, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Crear nueva playlist")
-                    }
-                    if (videoPlaylists.isEmpty()) {
-                        Text(
-                            "Aún no tienes playlists creadas.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = VideoTextSecondary,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                    } else {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 320.dp)
-                                .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            videoPlaylists.forEach { pl ->
-                                val validCount = pl.videoIds.count { it in validRawIds }
-                                Surface(
-                                    onClick = {
-                                        videosViewModel.addVideosToPlaylist(pl.id, pendingIds)
-                                        videoIdsPendingPlaylist = null
-                                        Toast.makeText(context, "Añadido a ${pl.name}", Toast.LENGTH_SHORT).show()
-                                    },
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = VideoTitaniumCard,
-                                    border = BorderStroke(1.dp, VideoBorderSlate),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(Icons.Rounded.Folder, contentDescription = null, tint = VideoNeonCyan)
-                                        Spacer(Modifier.width(10.dp))
-                                        Text(pl.name, modifier = Modifier.weight(1f), fontWeight = FontWeight.Medium, color = VideoTextPrimary)
-                                        Text("$validCount", style = MaterialTheme.typography.labelMedium, color = VideoTextSecondary)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = { videoIdsPendingPlaylist = null },
-                    colors = ButtonDefaults.textButtonColors(contentColor = VideoNeonCyan)
-                ) {
-                    Text("Cerrar")
-                }
-            }
-        )
-    }
-
-    if (showCreatePlaylistDialog) {
-        var newName by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = {
-                showCreatePlaylistDialog = false
-                pendingPlaylistInitialVideos = emptyList()
-            },
-            containerColor = VideoTitaniumCard,
-            titleContentColor = VideoTextPrimary,
-            textContentColor = VideoTextPrimary,
-            title = { Text("Nueva playlist de videos", fontWeight = FontWeight.Bold) },
-            text = {
-                OutlinedTextField(
-                    value = newName,
-                    onValueChange = { newName = it },
-                    label = { Text("Nombre de la carpeta/playlist") },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = VideoNeonCyan,
-                        unfocusedBorderColor = VideoBorderSlate,
-                        focusedLabelColor = VideoNeonCyan,
-                        unfocusedLabelColor = VideoTextSecondary,
-                        focusedTextColor = VideoTextPrimary,
-                        unfocusedTextColor = VideoTextPrimary,
-                        cursorColor = VideoNeonCyan
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val created = videosViewModel.createVideoPlaylist(newName, pendingPlaylistInitialVideos)
-                        if (created != null) {
-                            Toast.makeText(context, "Playlist \"${created.name}\" creada", Toast.LENGTH_SHORT).show()
-                        }
-                        showCreatePlaylistDialog = false
-                        pendingPlaylistInitialVideos = emptyList()
-                    },
-                    enabled = newName.isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(containerColor = VideoNeonCyan, contentColor = VideoOnAccent)
-                ) {
-                    Text("Crear", fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showCreatePlaylistDialog = false
-                        pendingPlaylistInitialVideos = emptyList()
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = VideoTextSecondary)
-                ) {
-                    Text("Cancelar")
-                }
-            }
-        )
-    }
-
-    renameTargetPlaylist?.let { target ->
-        var updatedName by remember(target.id) { mutableStateOf(target.name) }
-        AlertDialog(
-            onDismissRequest = { renameTargetPlaylist = null },
-            containerColor = VideoTitaniumCard,
-            titleContentColor = VideoTextPrimary,
-            textContentColor = VideoTextPrimary,
-            title = { Text("Renombrar playlist", fontWeight = FontWeight.Bold) },
-            text = {
-                OutlinedTextField(
-                    value = updatedName,
-                    onValueChange = { updatedName = it },
-                    label = { Text("Nuevo nombre") },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = VideoNeonCyan,
-                        unfocusedBorderColor = VideoBorderSlate,
-                        focusedLabelColor = VideoNeonCyan,
-                        unfocusedLabelColor = VideoTextSecondary,
-                        focusedTextColor = VideoTextPrimary,
-                        unfocusedTextColor = VideoTextPrimary,
-                        cursorColor = VideoNeonCyan
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        videosViewModel.renameVideoPlaylist(target.id, updatedName)
-                        renameTargetPlaylist = null
-                    },
-                    enabled = updatedName.isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(containerColor = VideoNeonCyan, contentColor = VideoOnAccent)
-                ) {
-                    Text("Guardar", fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { renameTargetPlaylist = null },
-                    colors = ButtonDefaults.textButtonColors(contentColor = VideoTextSecondary)
-                ) {
-                    Text("Cancelar")
-                }
-            }
-        )
-    }
-
-    deleteTargetPlaylist?.let { target ->
-        AlertDialog(
-            onDismissRequest = { deleteTargetPlaylist = null },
-            containerColor = VideoTitaniumCard,
-            titleContentColor = VideoTextPrimary,
-            textContentColor = VideoTextSecondary,
-            title = { Text("Eliminar playlist", fontWeight = FontWeight.Bold) },
-            text = { Text("¿Eliminar \"${target.name}\"? Solo se eliminará la lista virtual; tus videos seguirán en tu dispositivo.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (openedPlaylistId == target.id) openedPlaylistId = null
-                        videosViewModel.deleteVideoPlaylist(target.id)
-                        deleteTargetPlaylist = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = VideoDangerRed, contentColor = Color.White)
-                ) {
-                    Text("Eliminar")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { deleteTargetPlaylist = null },
-                    colors = ButtonDefaults.textButtonColors(contentColor = VideoTextSecondary)
-                ) {
-                    Text("Cancelar")
-                }
-            }
-        )
-    }
+        },
+        videoIdsPendingPlaylist = videoIdsPendingPlaylist,
+        onDismissVideoIdsPendingPlaylist = { videoIdsPendingPlaylist = null },
+        showCreatePlaylistDialog = showCreatePlaylistDialog,
+        onShowCreatePlaylistDialogChange = { showCreatePlaylistDialog = it },
+        pendingPlaylistInitialVideos = pendingPlaylistInitialVideos,
+        onPendingPlaylistInitialVideosChange = { pendingPlaylistInitialVideos = it },
+        renameTargetPlaylist = renameTargetPlaylist,
+        onDismissRenamePlaylist = { renameTargetPlaylist = null },
+        deleteTargetPlaylist = deleteTargetPlaylist,
+        onDismissDeletePlaylist = { deleteTargetPlaylist = null },
+        onClearOpenedPlaylistIfMatches = { id -> if (openedPlaylistId == id) openedPlaylistId = null }
+    )
 }
