@@ -269,7 +269,11 @@ class MainActivity : ComponentActivity() {
                             pendingAlbumUpdate = Triple(albumId, title, artist)
                             pendingAlbumArt = imageUri
                             android.util.Log.d("MainActivity", "Launching IntentSender for permission request")
-                            startIntentSenderForResult(intentSender, 1001, null, 0, 0, 0, null)
+                            try {
+                                startIntentSenderForResult(intentSender, 1001, null, 0, 0, 0, null)
+                            } catch (e: Exception) {
+                                android.util.Log.e("MainActivity", "Error launching IntentSender for album permission", e)
+                            }
                         }
                     )
                 } else {

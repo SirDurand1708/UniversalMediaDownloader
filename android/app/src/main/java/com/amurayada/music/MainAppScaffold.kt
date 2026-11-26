@@ -198,109 +198,15 @@ fun MusicPlayerApp(
         }
     }
 
-    // Dialog 1: 60 Minutes
-    if (showWarning60) {
-        AlertDialog(
-            onDismissRequest = { showWarning60 = false },
-            title = { Text("⏰ Hora de descansar los oídos") },
-            text = { Text("Llevas 1 hora escuchando con auriculares.\n¿Te tomas un descanso de 5-10 minutos?") },
-            confirmButton = {
-                TextButton(onClick = { 
-                    showWarning60 = false
-                    if (playbackViewModel.playbackState is com.amurayada.music.data.model.PlaybackState.Playing) {
-                        playbackViewModel.togglePlayPause()
-                    }
-                }) {
-                    Text("✅ Sí, descansar")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showWarning60 = false }) {
-                    Text("❌ No, seguir")
-                }
-            }
-        )
-    }
-
-    // Dialog 2: 75 Minutes
-    if (showWarning75) {
-        var showPostpone by remember { mutableStateOf(false) }
-        LaunchedEffect(Unit) {
-            kotlinx.coroutines.delay(30000) // 30 seconds delay
-            showPostpone = true
-        }
-        
-        AlertDialog(
-            onDismissRequest = { /* Prevent dismiss without action */ },
-            title = { Text("⚠️ Descanso recomendado (en serio)") },
-            text = { Text("Ya son 1 hora y 15 minutos continuos.\nTu salud auditiva necesita un respiro.") },
-            confirmButton = {
-                Column(horizontalAlignment = Alignment.End) {
-                    TextButton(onClick = { 
-                        showWarning75 = false
-                        if (playbackViewModel.playbackState is com.amurayada.music.data.model.PlaybackState.Playing) {
-                            playbackViewModel.togglePlayPause()
-                        }
-                    }) {
-                        Text("🛑 Pausar y descansar")
-                    }
-                    if (showPostpone) {
-                        TextButton(onClick = { showWarning75 = false }) {
-                            Text("😮‍💨 Posponer 5 min")
-                        }
-                    }
-                }
-            }
-        )
-    }
-
-    // Diálogo 3: 90 Minutos (Límite Crítico)
-    if (showWarning90) {
-        var timeLeft by remember { mutableStateOf(10) }
-        var dailyCancels by remember { mutableStateOf(0) }
-        
-        val prefsRepo = remember {
-            (context.applicationContext as? MusicApplication)?.appContainer?.preferencesRepository
-                ?: com.amurayada.music.data.repository.SharedPreferencesRepositoryImpl(context)
-        }
-        // Cargar cancelaciones diarias
-        LaunchedEffect(Unit) {
-            dailyCancels = prefsRepo.getHeadphoneDailyCancels()
-        }
-
-        LaunchedEffect(timeLeft) {
-            if (timeLeft > 0) {
-                kotlinx.coroutines.delay(1000)
-                timeLeft--
-            } else {
-                // Time's up -> Pause and close
-                if (playbackViewModel.playbackState is com.amurayada.music.data.model.PlaybackState.Playing) {
-                    playbackViewModel.togglePlayPause()
-                }
-                showWarning90 = false
-            }
-        }
-
-        AlertDialog(
-            onDismissRequest = { /* Prevent dismiss */ },
-            title = { Text("🚫 Límite de uso superado") },
-            text = { Text("¡90 minutos con auriculares!\nPor tu bien, la música se pausará en $timeLeft segundos.") },
-            confirmButton = {
-                if (dailyCancels < HeadphoneUsageMonitor.MAX_DAILY_CANCELS) {
-                    TextButton(onClick = {
-                        prefsRepo.incrementHeadphoneDailyCancels()
-                        showWarning90 = false
-                    }) {
-                        Text("🆘 Cancelar pausa (${dailyCancels}/${HeadphoneUsageMonitor.MAX_DAILY_CANCELS})")
-                    }
-                } else {
-                    TextButton(onClick = {}, enabled = false) {
-                        Text("🆘 Sin cancelaciones hoy")
-                    }
-                }
-            }
-        )
-    }
+    MainHeadphoneDialogsHost(
+        playbackViewModel = playbackViewModel,
+        showWarning60 = showWarning60,
+        onDismissWarning60 = { showWarning60 = false },
+        showWarning75 = showWarning75,
+        onDismissWarning75 = { showWarning75 = false },
+        showWarning90 = showWarning90,
+        onDismissWarning90 = { showWarning90 = false }
+    )
     
     val bottomNavItems = remember(navBackStackEntry) {
         val currentArgs = navBackStackEntry?.arguments
