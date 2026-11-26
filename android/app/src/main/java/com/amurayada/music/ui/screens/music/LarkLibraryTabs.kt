@@ -43,7 +43,6 @@ private val MusicNeonGreen @Composable get() = LocalAuraPalette.current.accentGr
 private val MusicTitaniumCard @Composable get() = LocalAuraPalette.current.cardBg
 private val MusicBorderSlate @Composable get() = LocalAuraPalette.current.border
 private val MusicTextSecondary @Composable get() = LocalAuraPalette.current.textSecondary
-private val MusicTextPrimary @Composable get() = LocalAuraPalette.current.textPrimary
 
 private fun formatSongCount(count: Int): String =
     if (count == 1) "1 canción" else "$count canciones"
