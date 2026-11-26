@@ -7,6 +7,8 @@ class SharedPreferencesRepositoryImpl(context: Context) : PreferencesRepository 
     private val appContext = context.applicationContext
     private val musicPrefs = appContext.getSharedPreferences("music_settings", Context.MODE_PRIVATE)
     private val omniPrefs = appContext.getSharedPreferences("omnivault_prefs", Context.MODE_PRIVATE)
+    private val playbackPrefs = appContext.getSharedPreferences("playback_data", Context.MODE_PRIVATE)
+    private val appPrefs = appContext.getSharedPreferences("music_app_prefs", Context.MODE_PRIVATE)
 
     override fun getThemeMode(): String =
         musicPrefs.getString("theme_mode", "system") ?: "system"
@@ -171,5 +173,107 @@ class SharedPreferencesRepositoryImpl(context: Context) : PreferencesRepository 
 
     override fun setVideoGridView(enabled: Boolean) {
         omniPrefs.edit().putBoolean("video_grid_view", enabled).apply()
+    }
+
+    override fun getVideoSortOrder(defaultKey: String): String =
+        omniPrefs.getString("video_sort_order", defaultKey) ?: defaultKey
+
+    override fun setVideoSortOrder(key: String) {
+        omniPrefs.edit().putString("video_sort_order", key).apply()
+    }
+
+    override fun getHideShortVideos(): Boolean =
+        omniPrefs.getBoolean("hide_short_videos", false)
+
+    override fun setHideShortVideos(enabled: Boolean) {
+        omniPrefs.edit().putBoolean("hide_short_videos", enabled).apply()
+    }
+
+    override fun getHideWhatsAppVideos(): Boolean =
+        omniPrefs.getBoolean("hide_whatsapp_videos", true)
+
+    override fun setHideWhatsAppVideos(enabled: Boolean) {
+        omniPrefs.edit().putBoolean("hide_whatsapp_videos", enabled).apply()
+    }
+
+    override fun setDownloadLocation(mode: String, uri: String?) {
+        musicPrefs.edit().apply {
+            putString("download_path_mode", mode)
+            putString("download_path_uri", uri)
+            apply()
+        }
+    }
+
+    override fun getSongSortOrder(defaultName: String): String =
+        omniPrefs.getString("song_sort_order", defaultName) ?: defaultName
+
+    override fun setSongSortOrder(name: String) {
+        omniPrefs.edit().putString("song_sort_order", name).apply()
+    }
+
+    override fun getFilterCallRecordings(): Boolean =
+        omniPrefs.getBoolean("filter_call_recordings", false)
+
+    override fun setFilterCallRecordings(enabled: Boolean) {
+        omniPrefs.edit().putBoolean("filter_call_recordings", enabled).apply()
+    }
+
+    override fun getOnlineSearchHistory(): String =
+        appPrefs.getString("search_history", "") ?: ""
+
+    override fun setOnlineSearchHistory(history: String) {
+        appPrefs.edit().putString("search_history", history).apply()
+    }
+
+    override fun getShuffleEnabled(): Boolean =
+        playbackPrefs.getBoolean("shuffle_enabled", false)
+
+    override fun setShuffleEnabled(enabled: Boolean) {
+        playbackPrefs.edit().putBoolean("shuffle_enabled", enabled).apply()
+    }
+
+    override fun getRepeatModeName(defaultName: String): String =
+        playbackPrefs.getString("repeat_mode", defaultName) ?: defaultName
+
+    override fun setRepeatModeName(name: String) {
+        playbackPrefs.edit().putString("repeat_mode", name).apply()
+    }
+
+    override fun getFavoritesJson(): String? =
+        playbackPrefs.getString("favorites", null)
+
+    override fun setFavoritesJson(json: String) {
+        playbackPrefs.edit().putString("favorites", json).apply()
+    }
+
+    override fun getHistoryJson(): String? =
+        playbackPrefs.getString("history", null)
+
+    override fun setHistoryJson(json: String) {
+        playbackPrefs.edit().putString("history", json).apply()
+    }
+
+    override fun getPlayCountsJson(): String? =
+        playbackPrefs.getString("play_counts", null)
+
+    override fun setPlayCountsJson(json: String) {
+        playbackPrefs.edit().putString("play_counts", json).apply()
+    }
+
+    override fun savePlaybackQueue(queueJson: String, index: Int, positionMs: Long) {
+        playbackPrefs.edit().apply {
+            putString("current_queue", queueJson)
+            putInt("current_index", index)
+            putLong("current_position", positionMs)
+            apply()
+        }
+    }
+
+    override fun savePlaybackPosition(index: Int, positionMs: Long) {
+        playbackPrefs.edit().apply {
+            putInt("current_index", index)
+            putLong("current_position", positionMs)
+            apply()
+        }
     }
 }

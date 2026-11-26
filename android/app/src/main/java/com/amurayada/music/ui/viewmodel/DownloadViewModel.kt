@@ -28,7 +28,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 
 class DownloadViewModel(
-    application: Application
+    application: Application,
+    private val preferencesRepository: com.amurayada.music.data.repository.PreferencesRepository =
+        com.amurayada.music.data.repository.SharedPreferencesRepositoryImpl(application)
 ) : AndroidViewModel(application) {
     
     private val downloadDao = DownloadDatabase.getDatabase(application).downloadDao()
@@ -158,12 +160,7 @@ class DownloadViewModel(
     private val pendingSongs = mutableListOf<Song>()
     
     fun setDownloadLocation(mode: String, uri: String?) {
-        val prefs = context.getSharedPreferences("music_settings", android.content.Context.MODE_PRIVATE)
-        prefs.edit().apply {
-            putString("download_path_mode", mode)
-            putString("download_path_uri", uri)
-            apply()
-        }
+        preferencesRepository.setDownloadLocation(mode, uri)
         _showDownloadLocationDialog.value = false
         
         // Process pending

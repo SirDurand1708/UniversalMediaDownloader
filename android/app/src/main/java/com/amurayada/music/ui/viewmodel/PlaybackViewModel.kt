@@ -48,7 +48,11 @@ import org.json.JSONObject
  * - Gestionar la búsqueda y verificación de videos (Canva) para canciones online.
  * - Administrar la cola de reproducción y la persistencia del estado.
  */
-class PlaybackViewModel(application: Application) : AndroidViewModel(application) {
+class PlaybackViewModel(
+    application: Application,
+    private val preferencesRepository: com.amurayada.music.data.repository.PreferencesRepository =
+        com.amurayada.music.data.repository.SharedPreferencesRepositoryImpl(application)
+) : AndroidViewModel(application) {
     
     /**
      * Estados de la capa de video. Controla la visibilidad del componente PlayerView en la UI.
@@ -68,9 +72,6 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     private var mediaControllerFuture: ListenableFuture<MediaController>? = null
     var mediaController: MediaController? = null
         private set
-    
-    // Persistencia de preferencias de reproducción (modo repetitivo, aleatorio, etc.)
-    private val prefs = context.getSharedPreferences("playback_data", Context.MODE_PRIVATE)
     
     // Repositorio encargado de la obtención y parseo de letras LRC/estáticas
     private val lyricsRepository = LyricsRepository(context)
@@ -113,9 +114,9 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     
     var playbackMode by mutableStateOf(
         PlaybackMode(
-            isShuffleEnabled = prefs.getBoolean("shuffle_enabled", false),
+            isShuffleEnabled = preferencesRepository.getShuffleEnabled(),
             repeatMode = try {
-                RepeatMode.valueOf(prefs.getString("repeat_mode", RepeatMode.OFF.name) ?: RepeatMode.OFF.name)
+                RepeatMode.valueOf(preferencesRepository.getRepeatModeName(RepeatMode.OFF.name))
             } catch (_: Exception) {
                 RepeatMode.OFF
             }
@@ -246,7 +247,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         userWantsVideo = false
         viewModelScope.launch(Dispatchers.IO) {
             val loadedFavorites = mutableListOf<com.amurayada.music.data.model.Song>()
-            val favoritesJson = prefs.getString("favorites", null)
+            val favoritesJson = preferencesRepository.getFavoritesJson()
             if (favoritesJson != null) {
                 try {
                     val jsonArray = JSONArray(favoritesJson)
@@ -257,7 +258,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             }
 
             val loadedHistory = mutableListOf<com.amurayada.music.data.model.Song>()
-            val historyJson = prefs.getString("history", null)
+            val historyJson = preferencesRepository.getHistoryJson()
             if (historyJson != null) {
                 try {
                     val jsonArray = JSONArray(historyJson)
@@ -268,7 +269,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             }
 
             val loadedCounts = mutableMapOf<Long, Int>()
-            val playCountsJson = prefs.getString("play_counts", null)
+            val playCountsJson = preferencesRepository.getPlayCountsJson()
             if (playCountsJson != null) {
                 try {
                     val jsonObject = JSONObject(playCountsJson)
@@ -295,7 +296,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                 _favorites.take(100).forEach { song -> // Limit to 100
                     jsonArray.put(songToJson(song))
                 }
-                prefs.edit().putString("favorites", jsonArray.toString()).apply()
+                preferencesRepository.setFavoritesJson(jsonArray.toString())
             } catch (e: Exception) {
                 // Ignore save errors
             }
@@ -309,7 +310,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                 _recentlyPlayed.take(50).forEach { song -> // Limit to 50
                     jsonArray.put(songToJson(song))
                 }
-                prefs.edit().putString("history", jsonArray.toString()).apply()
+                preferencesRepository.setHistoryJson(jsonArray.toString())
             } catch (e: Exception) {
                 // Ignore save errors
             }
@@ -323,7 +324,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                 playCountMap.entries.take(100).forEach { (id, count) ->
                     jsonObject.put(id.toString(), count)
                 }
-                prefs.edit().putString("play_counts", jsonObject.toString()).apply()
+                preferencesRepository.setPlayCountsJson(jsonObject.toString())
             } catch (e: Exception) {
                 // Ignore save errors
             }
@@ -347,12 +348,11 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                 windowedQueue.forEach { song ->
                     jsonArray.put(songToJson(song))
                 }
-                prefs.edit().apply {
-                    putString("current_queue", jsonArray.toString())
-                    putInt("current_index", relativeIndex)
-                    putLong("current_position", mediaController?.currentPosition ?: 0L)
-                    apply()
-                }
+                preferencesRepository.savePlaybackQueue(
+                    queueJson = jsonArray.toString(),
+                    index = relativeIndex,
+                    positionMs = mediaController?.currentPosition ?: 0L
+                )
                 Log.d("PlaybackViewModel", "Queue saved: ${windowedQueue.size} items (total in memory: ${queue.size})")
             } catch (e: Exception) {
                 Log.e("PlaybackViewModel", "Error saving queue", e)
@@ -362,11 +362,10 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     private fun savePlaybackState() {
         mediaController?.let { controller ->
-            prefs.edit().apply {
-                putInt("current_index", controller.currentMediaItemIndex)
-                putLong("current_position", controller.currentPosition)
-                apply()
-            }
+            preferencesRepository.savePlaybackPosition(
+                index = controller.currentMediaItemIndex,
+                positionMs = controller.currentPosition
+            )
         }
     }
     
@@ -945,7 +944,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         val newMode = playbackMode.copy(isShuffleEnabled = !playbackMode.isShuffleEnabled)
         playbackMode = newMode
         mediaController?.shuffleModeEnabled = newMode.isShuffleEnabled
-        prefs.edit().putBoolean("shuffle_enabled", newMode.isShuffleEnabled).apply()
+        preferencesRepository.setShuffleEnabled(newMode.isShuffleEnabled)
     }
     
     fun toggleRepeatMode() {
@@ -955,7 +954,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             RepeatMode.ONE -> RepeatMode.OFF
         }
         playbackMode = playbackMode.copy(repeatMode = newRepeatMode)
-        prefs.edit().putString("repeat_mode", newRepeatMode.name).apply()
+        preferencesRepository.setRepeatModeName(newRepeatMode.name)
         
         mediaController?.repeatMode = when (newRepeatMode) {
             RepeatMode.OFF -> Player.REPEAT_MODE_OFF

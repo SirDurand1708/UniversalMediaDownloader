@@ -62,4 +62,43 @@ interface PreferencesRepository {
 
     fun getVideoGridView(): Boolean
     fun setVideoGridView(enabled: Boolean)
+
+    fun getVideoSortOrder(defaultKey: String): String
+    fun setVideoSortOrder(key: String)
+
+    fun getHideShortVideos(): Boolean
+    fun setHideShortVideos(enabled: Boolean)
+
+    fun getHideWhatsAppVideos(): Boolean
+    fun setHideWhatsAppVideos(enabled: Boolean)
+
+    fun setDownloadLocation(mode: String, uri: String?)
+
+    fun getSongSortOrder(defaultName: String): String
+    fun setSongSortOrder(name: String)
+
+    fun getFilterCallRecordings(): Boolean
+    fun setFilterCallRecordings(enabled: Boolean)
+
+    fun getOnlineSearchHistory(): String
+    fun setOnlineSearchHistory(history: String)
+
+    // --- playback_data ---
+    fun getShuffleEnabled(): Boolean
+    fun setShuffleEnabled(enabled: Boolean)
+
+    fun getRepeatModeName(defaultName: String): String
+    fun setRepeatModeName(name: String)
+
+    fun getFavoritesJson(): String?
+    fun setFavoritesJson(json: String)
+
+    fun getHistoryJson(): String?
+    fun setHistoryJson(json: String)
+
+    fun getPlayCountsJson(): String?
+    fun setPlayCountsJson(json: String)
+
+    fun savePlaybackQueue(queueJson: String, index: Int, positionMs: Long)
+    fun savePlaybackPosition(index: Int, positionMs: Long)
 }

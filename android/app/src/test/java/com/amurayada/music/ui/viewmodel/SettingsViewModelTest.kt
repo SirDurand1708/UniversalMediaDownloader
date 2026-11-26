@@ -3,8 +3,8 @@ package com.amurayada.music.ui.viewmodel
 import com.amurayada.music.MainDispatcherRule
 import com.amurayada.music.data.model.Song
 import com.amurayada.music.data.repository.DuplicateDeletionResult
+import com.amurayada.music.data.repository.FakePreferencesRepository
 import com.amurayada.music.data.repository.MediaCleanupRepository
-import com.amurayada.music.data.repository.PreferencesRepository
 import com.amurayada.music.data.repository.ReleaseInfo
 import com.amurayada.music.data.repository.UpdateRepository
 import com.omnivault.media.model.DownloadItem
@@ -24,76 +24,6 @@ class SettingsViewModelTest {
 
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
-
-    private class FakePreferencesRepository : PreferencesRepository {
-        var storedThemeMode: String = "system"
-        var storedDynamicColors: Boolean = true
-        var storedSleepTimerMinutes: Int = 0
-        var storedAutoResumeDownloads: Boolean = false
-        var storedCustomPrimaryColor: Int? = null
-        var storedCustomBgUri: String? = null
-        var storedPlayerBgType: String = "auto"
-        var storedPlayerBgColor: Int? = null
-        var storedPlayerArtScale: Float = 1.0f
-        var storedAmoledMode: Boolean = false
-        var storedOnlineMode: Boolean = false
-        var storedApplyBgToPlayer: Boolean = false
-        var storedIsCanvasEnabled: Boolean = false
-        var storedFilterShortAudio: Boolean = true
-        var storedClipboardMonitorEnabled: Boolean = true
-        var storedSearchHistory: List<String> = emptyList()
-        val storedPlaylistSorts = mutableMapOf<Long, String>()
-        var storedVideoGridView: Boolean = false
-
-        override fun getThemeMode() = storedThemeMode
-        override fun setThemeMode(mode: String) { storedThemeMode = mode }
-        override fun getDynamicColors() = storedDynamicColors
-        override fun setDynamicColors(enabled: Boolean) { storedDynamicColors = enabled }
-        override fun getSleepTimerMinutes() = storedSleepTimerMinutes
-        override fun setSleepTimerMinutes(minutes: Int) { storedSleepTimerMinutes = minutes }
-        override fun getAutoResumeDownloads() = storedAutoResumeDownloads
-        override fun setAutoResumeDownloads(enabled: Boolean) { storedAutoResumeDownloads = enabled }
-        override fun getCustomPrimaryColor() = storedCustomPrimaryColor
-        override fun setCustomPrimaryColor(color: Int?) { storedCustomPrimaryColor = color }
-        override fun getCustomBackgroundImageUri() = storedCustomBgUri
-        override fun setCustomBackgroundImageUri(uri: String?) { storedCustomBgUri = uri }
-        override fun getPlayerBackgroundType() = storedPlayerBgType
-        override fun setPlayerBackgroundType(type: String) { storedPlayerBgType = type }
-        override fun getPlayerBackgroundColor() = storedPlayerBgColor
-        override fun setPlayerBackgroundColor(color: Int?) { storedPlayerBgColor = color }
-        override fun getPlayerAlbumArtScale() = storedPlayerArtScale
-        override fun setPlayerAlbumArtScale(scale: Float) { storedPlayerArtScale = scale }
-        override fun getAmoledMode() = storedAmoledMode
-        override fun setAmoledMode(enabled: Boolean) { storedAmoledMode = enabled }
-        override fun getOnlineMode() = storedOnlineMode
-        override fun setOnlineMode(enabled: Boolean) { storedOnlineMode = enabled }
-        override fun getApplyBackgroundToPlayer() = storedApplyBgToPlayer
-        override fun setApplyBackgroundToPlayer(enabled: Boolean) { storedApplyBgToPlayer = enabled }
-        override fun getIsCanvasEnabled() = storedIsCanvasEnabled
-        override fun setIsCanvasEnabled(enabled: Boolean) { storedIsCanvasEnabled = enabled }
-        override fun getFilterShortAudio() = storedFilterShortAudio
-        override fun setFilterShortAudio(enabled: Boolean) { storedFilterShortAudio = enabled }
-        override fun clearMusicSettings() {
-            storedThemeMode = "system"
-            storedDynamicColors = true
-            storedAmoledMode = false
-            storedCustomPrimaryColor = null
-            storedCustomBgUri = null
-        }
-        override fun getClipboardMonitorEnabled() = storedClipboardMonitorEnabled
-        override fun setClipboardMonitorEnabled(enabled: Boolean) { storedClipboardMonitorEnabled = enabled }
-        override fun getMusicSearchHistory() = storedSearchHistory
-        override fun saveMusicSearchQuery(query: String): List<String> {
-            val clean = query.trim()
-            if (clean.length < 2) return storedSearchHistory
-            storedSearchHistory = (listOf(clean) + storedSearchHistory.filterNot { it.equals(clean, ignoreCase = true) }).take(5)
-            return storedSearchHistory
-        }
-        override fun getPlaylistSort(playlistId: Long, defaultName: String) = storedPlaylistSorts[playlistId] ?: defaultName
-        override fun setPlaylistSort(playlistId: Long, sortName: String) { storedPlaylistSorts[playlistId] = sortName }
-        override fun getVideoGridView() = storedVideoGridView
-        override fun setVideoGridView(enabled: Boolean) { storedVideoGridView = enabled }
-    }
 
     private class FakeMediaCleanupRepository : MediaCleanupRepository {
         var nextVideoResult: DuplicateDeletionResult = DuplicateDeletionResult.DeletedDirectly(2, isVideo = true)

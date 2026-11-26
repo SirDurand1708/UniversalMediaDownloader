@@ -32,7 +32,77 @@ data class VideoPlaylist(
     val createdAt: Long = System.currentTimeMillis()
 )
 
-class VideosViewModel(application: Application) : AndroidViewModel(application) {
+internal fun filterAndSortVideos(
+    list: List<DownloadItem>,
+    query: String,
+    sort: SortOption,
+    hideShort: Boolean,
+    hideWa: Boolean,
+    onlyDl: Boolean,
+    onlyCam: Boolean
+): List<DownloadItem> {
+    var filtered = if (query.isBlank()) {
+        list
+    } else {
+        val q = query.lowercase().trim()
+        list.filter { it.title.lowercase().contains(q) }
+    }
+
+    if (onlyDl) {
+        filtered = filtered.filter {
+            it.id.startsWith("db_video_") ||
+                (it.localFilePath?.contains("OmniVault", ignoreCase = true) == true)
+        }
+    }
+
+    if (onlyCam) {
+        filtered = filtered.filter {
+            val p = it.localFilePath ?: ""
+            p.contains("DCIM", ignoreCase = true) || p.contains("Camera", ignoreCase = true)
+        }
+    }
+
+    if (hideShort) {
+        filtered = filtered.filter {
+            it.durationFormatted.isBlank() || parseVideoDurationSeconds(it.durationFormatted) >= 5L
+        }
+    }
+
+    if (hideWa) {
+        filtered = filtered.filterNot { item ->
+            val path = item.localFilePath ?: ""
+            path.contains("WhatsApp", ignoreCase = true) ||
+                (item.title.startsWith("VID-", ignoreCase = true) && item.title.contains("-WA", ignoreCase = true))
+        }
+    }
+
+    return when (sort) {
+        SortOption.DATE_DESC -> filtered.sortedByDescending { it.timestamp }
+        SortOption.DATE_ASC -> filtered.sortedBy { it.timestamp }
+        SortOption.NAME_ASC -> filtered.sortedBy { it.title.lowercase() }
+        SortOption.NAME_DESC -> filtered.sortedByDescending { it.title.lowercase() }
+        SortOption.SIZE_DESC -> filtered.sortedByDescending { it.fileSizeBytes }
+        SortOption.SIZE_ASC -> filtered.sortedBy { it.fileSizeBytes }
+        SortOption.MOST_PLAYED -> filtered.sortedByDescending { it.timestamp }
+    }
+}
+
+private fun parseVideoDurationSeconds(dur: String): Long {
+    if (dur.isBlank()) return 0L
+    val parts = dur.trim().split(":").mapNotNull { it.toLongOrNull() }
+    return when (parts.size) {
+        2 -> parts[0] * 60 + parts[1]
+        3 -> parts[0] * 3600 + parts[1] * 60 + parts[2]
+        1 -> parts[0]
+        else -> 0L
+    }
+}
+
+class VideosViewModel(
+    application: Application,
+    private val preferencesRepository: com.amurayada.music.data.repository.PreferencesRepository =
+        com.amurayada.music.data.repository.SharedPreferencesRepositoryImpl(application)
+) : AndroidViewModel(application) {
 
     private val _rawVideos = MutableStateFlow<List<DownloadItem>>(emptyList())
     val rawVideos: StateFlow<List<DownloadItem>> = _rawVideos.asStateFlow()
@@ -47,30 +117,28 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
     }
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    private val prefs = application.getSharedPreferences("omnivault_prefs", android.content.Context.MODE_PRIVATE)
-
     val searchQuery = MutableStateFlow("")
     val sortOption = MutableStateFlow<SortOption>(
-        SortOption.fromKey(prefs.getString("video_sort_order", SortOption.DATE_DESC.name) ?: SortOption.DATE_DESC.name)
+        SortOption.fromKey(preferencesRepository.getVideoSortOrder(SortOption.DATE_DESC.name))
     )
-    val hideShortClips = MutableStateFlow(prefs.getBoolean("hide_short_videos", false))
-    val hideWhatsAppClips = MutableStateFlow(prefs.getBoolean("hide_whatsapp_videos", true))
+    val hideShortClips = MutableStateFlow(preferencesRepository.getHideShortVideos())
+    val hideWhatsAppClips = MutableStateFlow(preferencesRepository.getHideWhatsAppVideos())
     val onlyDownloaded = MutableStateFlow(false)
     val onlyCamera = MutableStateFlow(false)
 
     fun setSortOption(sort: SortOption) {
         sortOption.value = sort
-        prefs.edit().putString("video_sort_order", sort.name).apply()
+        preferencesRepository.setVideoSortOrder(sort.name)
     }
 
     fun setHideShortClips(enabled: Boolean) {
         hideShortClips.value = enabled
-        prefs.edit().putBoolean("hide_short_videos", enabled).apply()
+        preferencesRepository.setHideShortVideos(enabled)
     }
 
     fun setHideWhatsAppClips(enabled: Boolean) {
         hideWhatsAppClips.value = enabled
-        prefs.edit().putBoolean("hide_whatsapp_videos", enabled).apply()
+        preferencesRepository.setHideWhatsAppVideos(enabled)
     }
 
     fun setOnlyDownloaded(enabled: Boolean) {
@@ -119,53 +187,15 @@ class VideosViewModel(application: Application) : AndroidViewModel(application) 
         onlyCamera
     ) { args ->
         @Suppress("UNCHECKED_CAST")
-        val list = args[0] as List<DownloadItem>
-        val query = args[1] as String
-        val sort = args[2] as SortOption
-        val hideShort = args[3] as Boolean
-        val hideWa = args[4] as Boolean
-        val onlyDl = args[5] as Boolean
-        val onlyCam = args[6] as Boolean
-        var filtered = if (query.isBlank()) {
-            list
-        } else {
-            val q = query.lowercase().trim()
-            list.filter { it.title.lowercase().contains(q) }
-        }
-
-        if (onlyDl) {
-            filtered = filtered.filter {
-                it.id.startsWith("db_video_") ||
-                    (it.localFilePath?.contains("OmniVault", ignoreCase = true) == true)
-            }
-        }
-
-        if (onlyCam) {
-            filtered = filtered.filter {
-                val p = it.localFilePath ?: ""
-                p.contains("DCIM", ignoreCase = true) || p.contains("Camera", ignoreCase = true)
-            }
-        }
-
-        if (hideShort) {
-            filtered = filtered.filter {
-                it.durationFormatted.isBlank() || parseDurationSeconds(it.durationFormatted) >= 5L
-            }
-        }
-
-        if (hideWa) {
-            filtered = filtered.filterNot { isWhatsAppVideo(it) }
-        }
-
-        when (sort) {
-            SortOption.DATE_DESC -> filtered.sortedByDescending { it.timestamp }
-            SortOption.DATE_ASC -> filtered.sortedBy { it.timestamp }
-            SortOption.NAME_ASC -> filtered.sortedBy { it.title.lowercase() }
-            SortOption.NAME_DESC -> filtered.sortedByDescending { it.title.lowercase() }
-            SortOption.SIZE_DESC -> filtered.sortedByDescending { it.fileSizeBytes }
-            SortOption.SIZE_ASC -> filtered.sortedBy { it.fileSizeBytes }
-            SortOption.MOST_PLAYED -> filtered.sortedByDescending { it.timestamp }
-        }
+        filterAndSortVideos(
+            list = args[0] as List<DownloadItem>,
+            query = args[1] as String,
+            sort = args[2] as SortOption,
+            hideShort = args[3] as Boolean,
+            hideWa = args[4] as Boolean,
+            onlyDl = args[5] as Boolean,
+            onlyCam = args[6] as Boolean
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private var videoRefreshDebounceJob: Job? = null
