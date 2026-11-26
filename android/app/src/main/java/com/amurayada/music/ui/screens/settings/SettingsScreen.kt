@@ -1,4 +1,4 @@
-﻿package com.amurayada.music.ui.screens.settings
+package com.amurayada.music.ui.screens.settings
 
 import android.app.Activity
 import android.content.Context
@@ -85,6 +85,9 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    var showCrashLogDialog by remember { mutableStateOf(false) }
+    var crashLogText by remember { mutableStateOf("") }
+    var crashLogSizeKb by remember { mutableStateOf(0L) }
     
 
     
@@ -869,9 +872,6 @@ fun SettingsScreen(
                             Toast.makeText(context, "Diagnóstico copiado al portapapeles", Toast.LENGTH_SHORT).show()
                         }
                     )
-                    var showCrashLogDialog by remember { mutableStateOf(false) }
-                    var crashLogText by remember { mutableStateOf("") }
-                    var crashLogSizeKb by remember { mutableStateOf(0L) }
                     LaunchedEffect(showCrashLogDialog) {
                         val sizeBytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                             com.omnivault.media.utils.LocalCrashLogger.getLogSizeBytes(context)
@@ -894,85 +894,6 @@ fun SettingsScreen(
                         showChevron = true,
                         onClick = { showCrashLogDialog = true }
                     )
-                    if (showCrashLogDialog) {
-                        AlertDialog(
-                            onDismissRequest = { showCrashLogDialog = false },
-                            title = { Text("Registro de errores local") },
-                            text = {
-                                if (crashLogText.isBlank()) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 12.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.CheckCircle,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(36.dp)
-                                        )
-                                        Text(
-                                            text = "No se han registrado errores ni cierres inesperados.",
-                                            style = MaterialTheme.typography.bodyMedium
-                                        )
-                                    }
-                                } else {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .heightIn(max = 320.dp)
-                                            .verticalScroll(rememberScrollState())
-                                    ) {
-                                        Text(
-                                            text = crashLogText,
-                                            style = MaterialTheme.typography.bodySmall.copy(
-                                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                                fontSize = 11.sp
-                                            )
-                                        )
-                                    }
-                                }
-                            },
-                            confirmButton = {
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    if (crashLogText.isNotBlank()) {
-                                        TextButton(
-                                            onClick = {
-                                                com.omnivault.media.utils.LocalCrashLogger.clearLogs(context)
-                                                crashLogText = ""
-                                                crashLogSizeKb = 0L
-                                                Toast.makeText(context, "Registro limpiado", Toast.LENGTH_SHORT).show()
-                                            }
-                                        ) {
-                                            Text("Limpiar")
-                                        }
-                                        Button(
-                                            onClick = {
-                                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                                cm.setPrimaryClip(android.content.ClipData.newPlainText("AuraPlayerCrashLog", crashLogText))
-                                                Toast.makeText(context, "Log copiado al portapapeles", Toast.LENGTH_SHORT).show()
-                                            }
-                                        ) {
-                                            Text("Copiar")
-                                        }
-                                    } else {
-                                        Button(onClick = { showCrashLogDialog = false }) {
-                                            Text("Cerrar")
-                                        }
-                                    }
-                                }
-                            },
-                            dismissButton = if (crashLogText.isNotBlank()) {
-                                {
-                                    TextButton(onClick = { showCrashLogDialog = false }) {
-                                        Text("Cerrar")
-                                    }
-                                }
-                            } else null
-                        )
-                    }
                     SettingsItem(
                         title = "Licencia",
                         subtitle = "Código Abierto (GPL-3.0)",
@@ -984,286 +905,47 @@ fun SettingsScreen(
             }
         }
     }
-    
-    // Theme selection dialog
-    if (showThemeDialog) {
-        AlertDialog(
-            onDismissRequest = { showThemeDialog = false },
-            title = { Text("Seleccionar tema") },
-            text = {
-                Column {
-                    listOf(
-                        "system" to "Sistema",
-                        "light" to "Claro",
-                        "dark" to "Oscuro"
-                    ).forEach { (value, label) ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    settingsViewModel.setThemeMode(value)
-                                    showThemeDialog = false
-                                }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = themeMode == value,
-                                onClick = {
-                                    settingsViewModel.setThemeMode(value)
-                                    showThemeDialog = false
-                                }
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(label)
-                        }
-                    }
-                }
-            },
-            confirmButton = { }
-        )
-    }
-    
-    // Sleep timer dialog
-    if (showSleepTimerDialog) {
-        AlertDialog(
-            onDismissRequest = { showSleepTimerDialog = false },
-            title = { Text("Temporizador de sueño") },
-            text = {
-                Column {
-                    listOf(
-                        0 to "Desactivado",
-                        15 to "15 minutos",
-                        30 to "30 minutos",
-                        45 to "45 minutos",
-                        60 to "1 hora",
-                        90 to "1 hora 30 min",
-                        120 to "2 horas"
-                    ).forEach { (minutes, label) ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    settingsViewModel.setSleepTimer(minutes)
-                                    showSleepTimerDialog = false
-                                }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = sleepTimerMinutes == minutes,
-                                onClick = {
-                                    settingsViewModel.setSleepTimer(minutes)
-                                    showSleepTimerDialog = false
-                                }
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(label)
-                        }
-                    }
-                }
-            },
-            confirmButton = { }
-        )
-    }
-    
-    // Rescan confirmation dialog
-    if (showRescanDialog) {
-        AlertDialog(
-            onDismissRequest = { showRescanDialog = false },
-            icon = { Icon(Icons.Rounded.Refresh, contentDescription = null) },
-            title = { Text("Reescanear biblioteca") },
-            text = { Text("Se buscarán nuevas canciones en tu dispositivo.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onRescanLibrary()
-                        showRescanDialog = false
-                    }
-                ) {
-                    Text("Escanear")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRescanDialog = false }) {
-                    Text("Cancelar")
-                }
-            }
-        )
-    }
 
-    standardizeCandidates?.let { candidates ->
-        val audioCount = candidates.count { !it.isVideo }
-        val videoCount = candidates.count { it.isVideo }
-        val examples = candidates.take(3)
-        AlertDialog(
-            onDismissRequest = { standardizeCandidates = null },
-            icon = { Icon(Icons.Rounded.AutoFixHigh, contentDescription = null) },
-            title = { Text("Estandarizar nombres", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Se encontraron $audioCount audios y $videoCount videos para limpiar y ordenar (se omiten notas de WhatsApp y cámara).",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    if (examples.isNotEmpty()) {
-                        Text(
-                            text = "Ejemplos:",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        examples.forEach { ex ->
-                            Text(
-                                text = "• ${ex.currentBaseName} → ${ex.targetBaseName}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val batch = candidates
-                        standardizeCandidates = null
-                        totalRenamedSoFar = 0
-                        scope.launch {
-                            val result = BulkMediaStandardizer.applyBatch(context, batch)
-                            totalRenamedSoFar += result.renamedCount
-                            if (result.renamedCount > 0) {
-                                lastStandardizedUndoBatch = batch.map { item ->
-                                    val parent = File(item.currentPath).parentFile
-                                    val newPath = if (parent != null) File(parent, "${item.targetBaseName}.${item.extension}").absolutePath else item.currentPath
-                                    item.copy(
-                                        currentPath = newPath,
-                                        currentBaseName = item.targetBaseName,
-                                        targetBaseName = item.currentBaseName,
-                                        newTitle = item.currentBaseName
-                                    )
-                                }
-                            }
-                            if (result.pendingPermissionChunks.isNotEmpty()) {
-                                launchNextPermissionChunk?.invoke(result.pendingPermissionChunks)
-                            } else {
-                                onRescanLibrary()
-                                Toast.makeText(
-                                    context,
-                                    "$totalRenamedSoFar archivos estandarizados correctamente",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            }
-                        }
-                    }
-                ) {
-                    Text("Estandarizar (${candidates.size})")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { standardizeCandidates = null }) {
-                    Text("Cancelar")
-                }
+    SettingsDialogsHost(
+        settingsViewModel = settingsViewModel,
+        scope = scope,
+        themeMode = themeMode,
+        sleepTimerMinutes = sleepTimerMinutes,
+        showCrashLogDialog = showCrashLogDialog,
+        onDismissCrashLog = { showCrashLogDialog = false },
+        crashLogText = crashLogText,
+        onClearCrashLog = {
+            crashLogText = ""
+            crashLogSizeKb = 0L
+        },
+        showThemeDialog = showThemeDialog,
+        onDismissThemeDialog = { showThemeDialog = false },
+        showSleepTimerDialog = showSleepTimerDialog,
+        onDismissSleepTimerDialog = { showSleepTimerDialog = false },
+        showRescanDialog = showRescanDialog,
+        onDismissRescanDialog = { showRescanDialog = false },
+        onRescanLibrary = onRescanLibrary,
+        standardizeCandidates = standardizeCandidates,
+        onDismissStandardize = { standardizeCandidates = null },
+        onStandardizeSuccess = { renamedCount, undoBatch, pendingChunks ->
+            totalRenamedSoFar = renamedCount
+            if (undoBatch.isNotEmpty()) {
+                lastStandardizedUndoBatch = undoBatch
             }
-        )
-    }
-
-    duplicateVideosToDelete?.let { duplicates ->
-        val totalMb = duplicates.sumOf { it.fileSizeBytes } / (1024.0 * 1024.0)
-        AlertDialog(
-            onDismissRequest = { duplicateVideosToDelete = null },
-            icon = { Icon(Icons.Rounded.ContentCopy, contentDescription = null) },
-            title = { Text("Videos duplicados (${duplicates.size})") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = String.format("Se conservará 1 copia de cada video y puedes eliminar ${duplicates.size} copias repetidas para liberar %.1f MB:", totalMb),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    duplicates.take(4).forEach { item ->
-                        Text(
-                            text = "• ${item.title} (${item.fileSizeFormatted})",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2
-                        )
-                    }
-                    if (duplicates.size > 4) {
-                        Text(
-                            text = "… y ${duplicates.size - 4} más.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    onClick = {
-                        val batch = duplicates
-                        duplicateVideosToDelete = null
-                        settingsViewModel.deleteDuplicateVideos(batch)
-                    }
-                ) {
-                    Text("Eliminar copias")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { duplicateVideosToDelete = null }) {
-                    Text("Cancelar")
-                }
+            if (pendingChunks.isNotEmpty()) {
+                launchNextPermissionChunk?.invoke(pendingChunks)
+            } else {
+                onRescanLibrary()
+                Toast.makeText(
+                    context,
+                    "$totalRenamedSoFar archivos estandarizados correctamente",
+                    Toast.LENGTH_LONG
+                ).show()
             }
-        )
-    }
-
-    duplicateSongsToDelete?.let { duplicates ->
-        val totalMb = duplicates.sumOf { it.second } / (1024.0 * 1024.0)
-        AlertDialog(
-            onDismissRequest = { duplicateSongsToDelete = null },
-            icon = { Icon(Icons.Rounded.LibraryMusic, contentDescription = null) },
-            title = { Text("Canciones duplicadas (${duplicates.size})") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = String.format("Se conservará 1 copia de cada canción y puedes eliminar ${duplicates.size} copias repetidas para liberar %.1f MB:", totalMb),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    duplicates.take(4).forEach { (song, len) ->
-                        Text(
-                            text = String.format("• %s (%.1f MB)", song.title, len / (1024.0 * 1024.0)),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2
-                        )
-                    }
-                    if (duplicates.size > 4) {
-                        Text(
-                            text = "… y ${duplicates.size - 4} más.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    onClick = {
-                        val batch = duplicates
-                        duplicateSongsToDelete = null
-                        settingsViewModel.deleteDuplicateAudios(batch.map { it.first })
-                    }
-                ) {
-                    Text("Eliminar copias")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { duplicateSongsToDelete = null }) {
-                    Text("Cancelar")
-                }
-            }
-        )
-    }
+        },
+        duplicateVideosToDelete = duplicateVideosToDelete,
+        onDismissDuplicateVideos = { duplicateVideosToDelete = null },
+        duplicateSongsToDelete = duplicateSongsToDelete,
+        onDismissDuplicateSongs = { duplicateSongsToDelete = null }
+    )
 }

@@ -4,15 +4,10 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.OutOfQuotaPolicy
-import androidx.work.WorkManager
-import androidx.work.workDataOf
 import com.amurayada.music.data.database.DownloadDatabase
 import com.amurayada.music.data.model.DownloadProgress
 import com.amurayada.music.data.model.DownloadStatus as AppDownloadStatus
 import com.amurayada.music.data.model.Song
-import com.amurayada.music.worker.DownloadWorker
 import com.omnivault.media.downloader.MediaExtractor
 import com.omnivault.media.downloader.MediaPreview
 import com.omnivault.media.downloader.UniversalDownloadEngine
@@ -175,7 +170,7 @@ class DownloadViewModel(
         if (pendingSongs.isNotEmpty()) {
             val songsToDownload = pendingSongs.toList()
             pendingSongs.clear()
-            processDownloads(songsToDownload)
+            downloadAlbum(songsToDownload)
         }
     }
     
@@ -513,45 +508,6 @@ class DownloadViewModel(
             val status = com.amurayada.music.MusicApplication.getInstance()?.updateYoutubeDLIfNeeded(force = true)
             onResult?.invoke(status != null)
         }
-    }
-    
-    private fun checkAndDownload(songs: List<Song>) {
-        val prefs = context.getSharedPreferences("music_settings", android.content.Context.MODE_PRIVATE)
-        val mode = prefs.getString("download_path_mode", null)
-        
-        if (mode == null) {
-            // First time - ask user
-            pendingSongs.addAll(songs)
-            _showDownloadLocationDialog.value = true
-        } else {
-            // Already configured
-            processDownloads(songs)
-        }
-    }
-    
-    private fun processDownloads(songs: List<Song>) {
-        songs.forEach { song ->
-            enqueueWorker(song)
-        }
-    }
-    
-    private fun enqueueWorker(song: Song) {
-        val workRequest = OneTimeWorkRequestBuilder<DownloadWorker>()
-            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-            .setInputData(
-                workDataOf(
-                    "songId" to song.id,
-                    "title" to song.title,
-                    "artist" to song.artist,
-                    "album" to song.album,
-                    "duration" to song.duration,
-                    "path" to song.path,
-                    "albumArtUri" to song.albumArtUri?.toString()
-                )
-            )
-            .build()
-        
-        WorkManager.getInstance(context).enqueue(workRequest)
     }
     
     fun cancelDownload(songId: Long) {
