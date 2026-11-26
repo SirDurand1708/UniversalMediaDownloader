@@ -597,29 +597,7 @@ fun VideosScreen(
                 onAddToPlaylist = { video ->
                     videoIdsPendingPlaylist = listOf(video.id)
                 },
-                onShare = { video ->
-                    val path = video.localFilePath ?: return@VideoMediaCollection
-                    try {
-                        val uri = if (path.startsWith("content://")) {
-                            Uri.parse(path)
-                        } else {
-                            val file = File(path)
-                            if (!file.exists()) {
-                                Toast.makeText(context, "Archivo de video no encontrado", Toast.LENGTH_SHORT).show()
-                                return@VideoMediaCollection
-                            }
-                            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                        }
-                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                            type = "video/*"
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        context.startActivity(Intent.createChooser(shareIntent, "Compartir video"))
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "Error al compartir: ${e.message}", Toast.LENGTH_SHORT).show()
-                    }
-                },
+                onShare = { video -> shareVideoItem(context, video) },
                 onDelete = { video ->
                     videosViewModel.deleteVideo(
                         item = video,
@@ -639,281 +617,26 @@ fun VideosScreen(
             )
         }
         } else {
-            // Playlists virtuales de video (subcarpetas virtuales)
-            val videoMap = remember(rawVideos) { rawVideos.associateBy { it.id } }
-            if (openedPlaylist == null) {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    item {
-                        Surface(
-                            onClick = {
-                                pendingPlaylistInitialVideos = emptyList()
-                                showCreatePlaylistDialog = true
-                            },
-                            color = VideoTitaniumCard,
-                            shape = RoundedCornerShape(14.dp),
-                            border = BorderStroke(1.dp, VideoNeonCyan.copy(alpha = 0.45f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(14.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(44.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(VideoNeonCyan.copy(alpha = 0.16f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Rounded.CreateNewFolder, contentDescription = null, tint = VideoNeonCyan)
-                                }
-                                Spacer(Modifier.width(12.dp))
-                                Column {
-                                    Text("Nueva playlist de videos", fontWeight = FontWeight.Bold, color = VideoTextPrimary)
-                                    Text("Organiza tus videos en carpetas virtuales", style = MaterialTheme.typography.bodySmall, color = VideoTextSecondary)
-                                }
-                            }
-                        }
-                    }
-
-                    if (videoPlaylists.isEmpty()) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 48.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        Icons.Rounded.FolderOpen,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(56.dp),
-                                        tint = VideoTextSecondary.copy(alpha = 0.45f)
-                                    )
-                                    Spacer(Modifier.height(10.dp))
-                                    Text(
-                                        "No tienes playlists de videos todavía",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = VideoTextSecondary
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    lazyItems(videoPlaylists, key = { it.id }) { pl ->
-                        val plVideos = pl.videoIds.mapNotNull { videoMap[it] }
-                        val thumb = plVideos.firstOrNull()?.let { it.thumbnailUrl ?: it.localFilePath ?: it.url }
-                        var plMenuExpanded by remember { mutableStateOf(false) }
-
-                        Surface(
-                            onClick = { openedPlaylistId = pl.id },
-                            color = VideoTitaniumCard,
-                            border = BorderStroke(1.dp, VideoBorderSlate),
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (thumb != null) {
-                                    AsyncImage(
-                                        model = thumb,
-                                        contentDescription = pl.name,
-                                        modifier = Modifier
-                                            .size(52.dp)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(Color.Black),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                } else {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(52.dp)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(VideoNeonCyan.copy(alpha = 0.16f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(Icons.Rounded.Folder, contentDescription = null, tint = VideoNeonCyan)
-                                    }
-                                }
-                                Spacer(Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(pl.name, fontWeight = FontWeight.SemiBold, color = VideoTextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(
-                                        "${plVideos.size} ${if (plVideos.size == 1) "video" else "videos"}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = VideoTextSecondary
-                                    )
-                                }
-                                Box {
-                                    IconButton(onClick = { plMenuExpanded = true }) {
-                                        Icon(Icons.Rounded.MoreVert, contentDescription = "Opciones", tint = VideoTextSecondary)
-                                    }
-                                    DropdownMenu(
-                                        expanded = plMenuExpanded,
-                                        onDismissRequest = { plMenuExpanded = false }
-                                    ) {
-                                        DropdownMenuItem(
-                                            text = { Text("Renombrar") },
-                                            leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
-                                            onClick = {
-                                                plMenuExpanded = false
-                                                renameTargetPlaylist = pl
-                                            }
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("Eliminar", color = Color(0xFFFF5252)) },
-                                            leadingIcon = { Icon(Icons.Rounded.Delete, contentDescription = null, tint = Color(0xFFFF5252)) },
-                                            onClick = {
-                                                plMenuExpanded = false
-                                                deleteTargetPlaylist = pl
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+            VideosPlaylistsSection(
+                videosViewModel = videosViewModel,
+                rawVideos = rawVideos,
+                videoPlaylists = videoPlaylists,
+                openedPlaylist = openedPlaylist,
+                isGridView = isGridView,
+                onOpenPlaylist = { openedPlaylistId = it },
+                onShowCreatePlaylist = {
+                    pendingPlaylistInitialVideos = emptyList()
+                    showCreatePlaylistDialog = true
+                },
+                onRenamePlaylist = { renameTargetPlaylist = it },
+                onDeletePlaylist = { deleteTargetPlaylist = it },
+                onAddVideoToPlaylist = { video -> videoIdsPendingPlaylist = listOf(video.id) },
+                onVideoClick = onVideoClick,
+                onRequireDeletePermission = { video, req ->
+                    pendingDeleteVideo = video
+                    deleteLauncher.launch(req)
                 }
-            } else {
-                val plVideos = openedPlaylist.videoIds.mapNotNull { videoMap[it] }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = { openedPlaylistId = null }) {
-                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Volver a playlists", tint = VideoTextPrimary)
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(openedPlaylist.name, fontWeight = FontWeight.Bold, color = VideoTextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            "${plVideos.size} ${if (plVideos.size == 1) "video" else "videos"}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = VideoTextSecondary
-                        )
-                    }
-                    IconButton(onClick = { renameTargetPlaylist = openedPlaylist }) {
-                        Icon(Icons.Rounded.Edit, contentDescription = "Renombrar playlist", tint = VideoTextPrimary)
-                    }
-                    if (plVideos.isNotEmpty()) {
-                        FilledTonalButton(
-                            onClick = {
-                                videosViewModel.setPlaybackQueue(plVideos)
-                                onVideoClick(plVideos.first())
-                            },
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = VideoNeonCyan,
-                                contentColor = VideoOnAccent
-                            ),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                            modifier = Modifier.height(36.dp)
-                        ) {
-                            Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Reproducir", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                        }
-                    }
-                }
-                if (plVideos.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                Icons.Rounded.VideoLibrary,
-                                contentDescription = null,
-                                modifier = Modifier.size(56.dp),
-                                tint = VideoTextSecondary.copy(alpha = 0.45f)
-                            )
-                            Spacer(Modifier.height(10.dp))
-                            Text(
-                                "Esta playlist está vacía.\nAñade videos desde el menú (⋮) o selección múltiple.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = VideoTextSecondary,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                            )
-                        }
-                    }
-                } else {
-                    VideoMediaCollection(
-                        items = plVideos,
-                        isGridView = isGridView,
-                        selectedVideoIds = null,
-                        allowSelection = false,
-                        onVideoClick = { video ->
-                            videosViewModel.setPlaybackQueue(plVideos)
-                            onVideoClick(video)
-                        },
-                        onStandardize = { video ->
-                            videosViewModel.standardizeVideo(video) { success ->
-                                Toast.makeText(
-                                    context,
-                                    if (success) "Nombre estandarizado con éxito" else "No se pudo renombrar el archivo",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        },
-                        onAddToPlaylist = { video ->
-                            videoIdsPendingPlaylist = listOf(video.id)
-                        },
-                        onRemoveFromPlaylist = { video ->
-                            videosViewModel.removeVideoFromPlaylist(openedPlaylist.id, video.id)
-                            Toast.makeText(context, "Quitado de ${openedPlaylist.name}", Toast.LENGTH_SHORT).show()
-                        },
-                        onShare = { video ->
-                            val path = video.localFilePath ?: return@VideoMediaCollection
-                            try {
-                                val uri = if (path.startsWith("content://")) {
-                                    Uri.parse(path)
-                                } else {
-                                    val file = File(path)
-                                    if (!file.exists()) {
-                                        Toast.makeText(context, "Archivo de video no encontrado", Toast.LENGTH_SHORT).show()
-                                        return@VideoMediaCollection
-                                    }
-                                    FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                                }
-                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "video/*"
-                                    putExtra(Intent.EXTRA_STREAM, uri)
-                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                }
-                                context.startActivity(Intent.createChooser(shareIntent, "Compartir video"))
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "Error al compartir: ${e.message}", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        onDelete = { video ->
-                            videosViewModel.deleteVideo(
-                                item = video,
-                                onRequirePermission = { req ->
-                                    pendingDeleteVideo = video
-                                    deleteLauncher.launch(req)
-                                },
-                                onComplete = { success ->
-                                    if (success) {
-                                        Toast.makeText(context, "Video eliminado", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        Toast.makeText(context, "No se pudo eliminar el video", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            )
-                        }
-                    )
-                }
-            }
+            )
         }
     }
 
