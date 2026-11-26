@@ -206,22 +206,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     /**
      * Lógica de comparación de versiones.
      */
-    private fun isNewerVersion(current: String, latest: String): Boolean {
-        return try {
-            val currentParts = current.split(".").map { it.toInt() }
-            val latestParts = latest.split(".").map { it.toInt() }
-            
-            for (i in 0 until maxOf(currentParts.size, latestParts.size)) {
-                val currentPart = currentParts.getOrElse(i) { 0 }
-                val latestPart = latestParts.getOrElse(i) { 0 }
-                if (latestPart > currentPart) return true
-                if (latestPart < currentPart) return false
-            }
-            false
-        } catch (e: Exception) {
-            latest != current // Fallback a comparación de strings
-        }
-    }
+    private fun isNewerVersion(current: String, latest: String): Boolean =
+        com.omnivault.media.utils.VersionUtils.isRemoteNewer(latest, current)
     
     // --- Métodos de Setter con Persistencia ---
 

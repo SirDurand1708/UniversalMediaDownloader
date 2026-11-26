@@ -274,19 +274,6 @@ object UpdateManager {
         }
     }
 
-    private fun isSemverNewer(remote: String, local: String): Boolean {
-        return try {
-            val r = remote.replace(Regex("[^0-9.]"), "").split(".").map { it.toIntOrNull() ?: 0 }
-            val l = local.replace(Regex("[^0-9.]"), "").split(".").map { it.toIntOrNull() ?: 0 }
-            for (i in 0 until maxOf(r.size, l.size)) {
-                val rPart = r.getOrElse(i) { 0 }
-                val lPart = l.getOrElse(i) { 0 }
-                if (rPart > lPart) return true
-                if (rPart < lPart) return false
-            }
-            false
-        } catch (_: Exception) {
-            false
-        }
-    }
+    private fun isSemverNewer(remote: String, local: String): Boolean =
+        VersionUtils.isRemoteNewer(remote, local)
 }
