@@ -480,15 +480,39 @@ class UniversalDownloadEngine private constructor(context: Context) {
                 addOption("--no-playlist")
                 addOption("--flat-playlist")
                 addOption("--skip-download")
-                addOption("--socket-timeout", 4)
+                addOption("--no-update")
+                addOption("--socket-timeout", 6)
                 addOption("--retries", 0)
-                addOption("--extractor-args", "youtube:skip=dash,hls")
-                writeAuthCookiesIfAvailable(tempCookieDir)?.let { cookieFile ->
-                    addOption("--cookies", cookieFile.absolutePath)
-                }
+                addOption("--extractor-args", "youtube:player_client=android_vr,ios,mweb,default;skip=dash,hls")
             }
 
-            val videoInfo = YoutubeDL.getInstance().getInfo(infoRequest)
+            val videoInfo = try {
+                YoutubeDL.getInstance().getInfo(infoRequest)
+            } catch (firstInfoErr: Exception) {
+                val msg = firstInfoErr.message ?: ""
+                val needsAuth = msg.contains("Sign in", ignoreCase = true) ||
+                    msg.contains("confirm your age", ignoreCase = true) ||
+                    msg.contains("age-restricted", ignoreCase = true) ||
+                    msg.contains("not a bot", ignoreCase = true) ||
+                    msg.contains("members-only", ignoreCase = true) ||
+                    msg.contains("Private video", ignoreCase = true)
+                val cookieFile = if (needsAuth) writeAuthCookiesIfAvailable(tempCookieDir) else null
+                if (cookieFile != null) {
+                    val authInfoRequest = YoutubeDLRequest(cleanUrl).apply {
+                        addOption("--no-playlist")
+                        addOption("--flat-playlist")
+                        addOption("--skip-download")
+                        addOption("--no-update")
+                        addOption("--socket-timeout", 8)
+                        addOption("--retries", 0)
+                        addOption("--extractor-args", "youtube:player_client=tv,web,default;skip=dash,hls")
+                        addOption("--cookies", cookieFile.absolutePath)
+                    }
+                    YoutubeDL.getInstance().getInfo(authInfoRequest)
+                } else {
+                    throw firstInfoErr
+                }
+            }
             val rawTitle: String = videoInfo.title?.takeIf { it.isNotBlank() } ?: "OmniVault Media"
             val standardizedTitle = FilenameStandardizer.standardizeTitle(rawTitle)
             val uploader: String = videoInfo.uploader?.takeIf { it.isNotBlank() } ?: "OmniVault"
@@ -619,108 +643,92 @@ class UniversalDownloadEngine private constructor(context: Context) {
                 File(tempCacheDir, "%(title).120B.%(ext)s").absolutePath
             }
 
-            val request = YoutubeDLRequest(cleanUrl).apply {
-                addOption("--no-playlist")
-                addOption("--no-mtime")
-                addOption("--concurrent-fragments", 8)
-                addOption("--buffer-size", "256K")
-                addOption("--extractor-args", "youtube:player_client=android_vr,tv,default")
-                addOption("--retries", 3)
-                addOption("--fragment-retries", 3)
-                addOption("--socket-timeout", 20)
-                addOption("-P", tempCacheDir.absolutePath)
-                addOption("-o", outTemplate)
+            val runDownloadAttempt: (Boolean, String) -> Unit = { useCookies, playerClient ->
+                val request = buildDownloadRequest(
+                    cleanUrl = cleanUrl,
+                    format = format,
+                    tempCacheDir = tempCacheDir,
+                    outTemplate = outTemplate,
+                    useCookies = useCookies,
+                    playerClient = playerClient
+                )
+                var lastCallbackMs = 0L
+                YoutubeDL.getInstance().execute(request, processId) { progress, etaInSeconds, line ->
+                    val now = System.currentTimeMillis()
+                    if (now - lastCallbackMs >= 200L || progress >= 100f) {
+                        lastCallbackMs = now
+                        val normalizedProgress = if (progress > 0f) {
+                            (progress / 100f).coerceIn(0.01f, 0.95f)
+                        } else {
+                            currentState.progress
+                        }
+                        val speedRegex = Regex("""(\d+(?:\.\d+)?\s*[KMGT]?i?B/s)""")
+                        val speedParsed = speedRegex.find(line)?.groupValues?.get(1)
+                        val speedLabel = when {
+                            speedParsed != null -> speedParsed
+                            etaInSeconds > 0 -> "ETA ${etaInSeconds}s"
+                            line.contains("[Merger]", ignoreCase = true) || line.contains("[ExtractAudio]", ignoreCase = true) ->
+                                "Procesando con FFmpeg…"
+                            else -> "Descargando…"
+                        }
 
-                val hasAria2c = File(appContext.applicationInfo.nativeLibraryDir, "libaria2c.so").exists()
-                if (hasAria2c) {
-                    val connCount = if (activeProcesses.size > 1) 4 else 16
-                    addOption("--downloader", "aria2c")
-                    addOption("--downloader-args", "aria2c:-x $connCount -s $connCount --max-connection-per-server=$connCount -k 1M --min-split-size=1M --file-allocation=none --summary-interval=0")
-                }
-
-                writeAuthCookiesIfAvailable(tempCacheDir)?.let { cookieFile ->
-                    addOption("--cookies", cookieFile.absolutePath)
-                }
-
-                when (format) {
-                    MediaFormat.MP3_320 -> {
-                        addOption("-x")
-                        addOption("--audio-format", "mp3")
-                        addOption("--audio-quality", "0")
-                        addOption("--add-metadata")
-                    }
-                    MediaFormat.M4A -> {
-                        addOption("-f", "bestaudio[ext=m4a]/bestaudio/best")
-                        addOption("-x")
-                        addOption("--audio-format", "m4a")
-                        addOption("--add-metadata")
-                    }
-                    MediaFormat.MP4_MAX -> {
-                        addOption(
-                            "-f",
-                            "bestvideo+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
+                        currentState = currentState.copy(
+                            progress = normalizedProgress,
+                            etaInSeconds = etaInSeconds,
+                            speedText = speedLabel,
+                            status = DownloadStatus.DOWNLOADING
                         )
-                        addOption("-S", "res,fps,br")
-                        addOption("--merge-output-format", "mp4")
-                        addOption("--add-metadata")
-                    }
-                    MediaFormat.MP4_1080 -> {
-                        addOption(
-                            "-f",
-                            "bestvideo[height<=1080]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"
-                        )
-                        addOption("-S", "res,fps,br")
-                        addOption("--merge-output-format", "mp4")
-                        addOption("--add-metadata")
-                    }
-                    MediaFormat.MP4_720 -> {
-                        addOption(
-                            "-f",
-                            "bestvideo[height<=720]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best[height<=720]/best"
-                        )
-                        addOption("-S", "res,fps,br")
-                        addOption("--merge-output-format", "mp4")
-                        addOption("--add-metadata")
-                    }
-                    MediaFormat.MP4_480 -> {
-                        addOption(
-                            "-f",
-                            "bestvideo[height<=480]+bestaudio[ext=m4a]/bestvideo[height<=480]+bestaudio/best[height<=480]/best"
-                        )
-                        addOption("-S", "res,fps,br")
-                        addOption("--merge-output-format", "mp4")
-                        addOption("--add-metadata")
+                        publishState(currentState)
                     }
                 }
             }
 
-            var lastCallbackMs = 0L
-            YoutubeDL.getInstance().execute(request, processId) { progress, etaInSeconds, line ->
-                val now = System.currentTimeMillis()
-                if (now - lastCallbackMs >= 200L || progress >= 100f) {
-                    lastCallbackMs = now
-                    val normalizedProgress = if (progress > 0f) {
-                        (progress / 100f).coerceIn(0.01f, 0.95f)
-                    } else {
-                        currentState.progress
-                    }
-                    val speedRegex = Regex("""(\d+(?:\.\d+)?\s*[KMGT]?i?B/s)""")
-                    val speedParsed = speedRegex.find(line)?.groupValues?.get(1)
-                    val speedLabel = when {
-                        speedParsed != null -> speedParsed
-                        etaInSeconds > 0 -> "ETA ${etaInSeconds}s"
-                        line.contains("[Merger]", ignoreCase = true) || line.contains("[ExtractAudio]", ignoreCase = true) ->
-                            "Procesando con FFmpeg…"
-                        else -> "Descargando…"
-                    }
+            try {
+                // Intento 1 sin cookies para que android_vr/ios funcionen directo sin depender de QuickJS
+                runDownloadAttempt(false, "android_vr,ios,mweb,default")
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (firstErr: Exception) {
+                var lastErr: Exception = firstErr
+                var retrySucceeded = false
+                val firstMsg = firstErr.message ?: firstErr.localizedMessage ?: ""
+                val isJsChallengeOrOldEngine = firstMsg.contains("[jsc]", ignoreCase = true) ||
+                    firstMsg.contains("quickjs", ignoreCase = true) ||
+                    firstMsg.contains("TypeError:", ignoreCase = true) ||
+                    firstMsg.contains("older than 90 days", ignoreCase = true) ||
+                    firstMsg.contains("Signature extraction failed", ignoreCase = true) ||
+                    firstMsg.contains("nsig", ignoreCase = true)
 
-                    currentState = currentState.copy(
-                        progress = normalizedProgress,
-                        etaInSeconds = etaInSeconds,
-                        speedText = speedLabel,
-                        status = DownloadStatus.DOWNLOADING
-                    )
+                if (isJsChallengeOrOldEngine) {
+                    currentState = currentState.copy(speedText = "Actualizando motor yt-dlp…")
                     publishState(currentState)
+                    val updated = com.amurayada.music.MusicApplication.getInstance()?.updateYoutubeDLIfNeeded(force = true)
+                    if (updated == com.yausername.youtubedl_android.YoutubeDL.UpdateStatus.DONE) {
+                        try {
+                            runDownloadAttempt(false, "android_vr,ios,mweb,default")
+                            retrySucceeded = true
+                        } catch (ce: CancellationException) {
+                            throw ce
+                        } catch (retryErr: Exception) {
+                            lastErr = retryErr
+                        }
+                    }
+                }
+
+                // Si sigue fallando (o no actualizó), comprobar si el error real requiere cookies de sesión
+                if (!retrySucceeded) {
+                    val errText = lastErr.message ?: lastErr.localizedMessage ?: ""
+                    val needsAuthCookies = errText.contains("Sign in", ignoreCase = true) ||
+                        errText.contains("confirm your age", ignoreCase = true) ||
+                        errText.contains("age-restricted", ignoreCase = true) ||
+                        errText.contains("not a bot", ignoreCase = true) ||
+                        errText.contains("members-only", ignoreCase = true) ||
+                        errText.contains("Private video", ignoreCase = true)
+                    if (needsAuthCookies && com.amurayada.music.data.auth.YouTubeAuthManager.getInstance(appContext).isLoggedIn()) {
+                        runDownloadAttempt(true, "tv,web,default")
+                    } else {
+                        throw lastErr
+                    }
                 }
             }
 
@@ -800,26 +808,34 @@ class UniversalDownloadEngine private constructor(context: Context) {
                 isAudio = format.isAudio
             )
 
-            // Registrar en DownloadDatabase (Room SQLite)
-            val entitySongId = preloadedSongId ?: computeStableSongId(cleanUrl, !format.isAudio)
-            val entity = DownloadEntity(
-                songId = entitySongId,
-                title = metadata.title,
-                artist = metadata.artist,
-                album = if (format.isAudio) metadata.album else "Video",
-                duration = metadata.durationMs,
-                youtubeUrl = cleanUrl,
-                localPath = exported.first,
-                thumbnailUrl = localCoverPath ?: metadata.thumbnailUrl,
-                fileSize = exported.third,
-                isVideo = !format.isAudio,
-                mimeType = finalMimeType
-            )
-            if (format.isAudio) {
-                unmarkDeletedFromPrefs(entitySongId, exported.first, exported.second?.absolutePath)
+            // Registrar en DownloadDatabase (Room SQLite) sin revertir el éxito si el archivo ya fue exportado
+            try {
+                val entitySongId = preloadedSongId ?: computeStableSongId(cleanUrl, !format.isAudio)
+                val entity = DownloadEntity(
+                    songId = entitySongId,
+                    title = metadata.title,
+                    artist = metadata.artist,
+                    album = if (format.isAudio) metadata.album else "Video",
+                    duration = metadata.durationMs,
+                    youtubeUrl = cleanUrl,
+                    localPath = exported.first,
+                    thumbnailUrl = localCoverPath ?: metadata.thumbnailUrl,
+                    fileSize = exported.third,
+                    isVideo = !format.isAudio,
+                    mimeType = finalMimeType
+                )
+                if (format.isAudio) {
+                    unmarkDeletedFromPrefs(entitySongId, exported.first, exported.second?.absolutePath)
+                }
+                downloadDao.insertDownload(entity)
+                downloadQueueDao.deleteById(processId)
+            } catch (dbErr: Exception) {
+                com.omnivault.media.utils.LocalCrashLogger.logError(
+                    "DownloadEngine",
+                    "Archivo exportado pero error registrando en BD ($displayName)",
+                    dbErr
+                )
             }
-            downloadDao.insertDownload(entity)
-            downloadQueueDao.deleteById(processId)
 
             currentState = currentState.copy(
                 progress = 1f,
@@ -847,8 +863,15 @@ class UniversalDownloadEngine private constructor(context: Context) {
             cancelDownload(processId)
             throw e
         } catch (e: Exception) {
-            val errMsg = e.localizedMessage ?: "Error en descarga con yt-dlp"
-            downloadQueueDao.updateStatus(processId, "ERROR", errMsg)
+            val errMsg = extractCleanYtDlpError(e)
+            com.omnivault.media.utils.LocalCrashLogger.logError(
+                "DownloadEngine",
+                "Error descargando (${format.name}) [$cleanUrl]: $errMsg",
+                e
+            )
+            try {
+                downloadQueueDao.updateStatus(processId, "ERROR", errMsg)
+            } catch (_: Exception) {}
             val failedState = currentState.copy(
                 status = DownloadStatus.ERROR,
                 speedText = "Error",
@@ -864,6 +887,116 @@ class UniversalDownloadEngine private constructor(context: Context) {
             } catch (_: Exception) {}
         }
         }
+    }
+
+    private fun buildDownloadRequest(
+        cleanUrl: String,
+        format: MediaFormat,
+        tempCacheDir: File,
+        outTemplate: String,
+        useCookies: Boolean,
+        playerClient: String
+    ): YoutubeDLRequest = YoutubeDLRequest(cleanUrl).apply {
+        addOption("--no-playlist")
+        addOption("--no-mtime")
+        addOption("--no-update")
+        addOption("--concurrent-fragments", 8)
+        addOption("--buffer-size", "256K")
+        addOption("--extractor-args", "youtube:player_client=$playerClient")
+        addOption("--retries", 3)
+        addOption("--fragment-retries", 3)
+        addOption("--socket-timeout", 20)
+        addOption("-P", tempCacheDir.absolutePath)
+        addOption("-o", outTemplate)
+
+        val hasAria2c = File(appContext.applicationInfo.nativeLibraryDir, "libaria2c.so").exists()
+        if (hasAria2c) {
+            val connCount = if (activeProcesses.size > 1) 4 else 16
+            addOption("--downloader", "aria2c")
+            addOption(
+                "--downloader-args",
+                "aria2c:-x $connCount -s $connCount --max-connection-per-server=$connCount -k 1M --min-split-size=1M --file-allocation=none --summary-interval=0"
+            )
+        }
+
+        if (useCookies) {
+            writeAuthCookiesIfAvailable(tempCacheDir)?.let { cookieFile ->
+                addOption("--cookies", cookieFile.absolutePath)
+            }
+        }
+
+        when (format) {
+            MediaFormat.MP3_320 -> {
+                addOption("-x")
+                addOption("--audio-format", "mp3")
+                addOption("--audio-quality", "0")
+                addOption("--add-metadata")
+            }
+            MediaFormat.M4A -> {
+                addOption("-f", "bestaudio[ext=m4a]/bestaudio/best")
+                addOption("-x")
+                addOption("--audio-format", "m4a")
+                addOption("--add-metadata")
+            }
+            MediaFormat.MP4_MAX -> {
+                addOption("-f", "bestvideo+bestaudio[ext=m4a]/bestvideo+bestaudio/best")
+                addOption("-S", "res,fps,br")
+                addOption("--merge-output-format", "mp4")
+                addOption("--add-metadata")
+            }
+            MediaFormat.MP4_1080 -> {
+                addOption(
+                    "-f",
+                    "bestvideo[height<=1080]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"
+                )
+                addOption("-S", "res,fps,br")
+                addOption("--merge-output-format", "mp4")
+                addOption("--add-metadata")
+            }
+            MediaFormat.MP4_720 -> {
+                addOption(
+                    "-f",
+                    "bestvideo[height<=720]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best[height<=720]/best"
+                )
+                addOption("-S", "res,fps,br")
+                addOption("--merge-output-format", "mp4")
+                addOption("--add-metadata")
+            }
+            MediaFormat.MP4_480 -> {
+                addOption(
+                    "-f",
+                    "bestvideo[height<=480]+bestaudio[ext=m4a]/bestvideo[height<=480]+bestaudio/best[height<=480]/best"
+                )
+                addOption("-S", "res,fps,br")
+                addOption("--merge-output-format", "mp4")
+                addOption("--add-metadata")
+            }
+        }
+    }
+
+    private fun extractCleanYtDlpError(e: Throwable): String {
+        val raw = (e.message ?: e.localizedMessage ?: "").trim()
+        if (raw.isBlank()) return "Error en descarga con yt-dlp"
+        val lines = raw.lines().map { it.trim() }.filter { it.isNotBlank() }
+        val errorLines = lines.filter { it.startsWith("ERROR:", ignoreCase = true) }
+        if (errorLines.isNotEmpty()) {
+            val cleaned = errorLines.takeLast(2).map { line ->
+                line.replace(Regex("^ERROR:\\s*(?:\\[[^\\]]+\\]\\s*)*", RegexOption.IGNORE_CASE), "").trim()
+            }.filter { it.isNotBlank() }
+            if (cleaned.isNotEmpty()) {
+                return cleaned.joinToString(" | ").take(260)
+            }
+        }
+        val filtered = lines.filterNot {
+            it.startsWith("WARNING:", ignoreCase = true) ||
+                it.contains("older than 90 days", ignoreCase = true) ||
+                it.contains("--no-update", ignoreCase = true) ||
+                it.contains("Skipping client", ignoreCase = true) ||
+                it.startsWith("It is strongly recommended", ignoreCase = true) ||
+                it.startsWith("Run \"yt-dlp", ignoreCase = true) ||
+                it.startsWith("To suppress this warning", ignoreCase = true)
+        }
+        return (filtered.lastOrNull() ?: lines.lastOrNull() ?: raw).take(260)
     }
 
     private fun cleanupOrphanCacheDirs() {
