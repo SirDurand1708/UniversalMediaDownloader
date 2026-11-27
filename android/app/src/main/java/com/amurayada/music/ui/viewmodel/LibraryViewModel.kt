@@ -53,7 +53,12 @@ class LibraryViewModel(
         }
     }
 
+    @Volatile
+    private var hasFreshLibrary = false
+    private val snapshotWriteLock = Any()
+
     init {
+        loadSnapshotAsync()
         // Observe downloads database changes to auto-refresh library
         viewModelScope.launch {
             downloadRepository.observeDownloadedSongs()
@@ -62,6 +67,76 @@ class LibraryViewModel(
                     android.util.Log.d("LibraryViewModel", "Downloads changed (size: ${songs.size}), refreshing library...")
                     loadLibrary()
                 }
+        }
+    }
+
+    private fun snapshotFile(): java.io.File =
+        java.io.File(getApplication<Application>().filesDir, "library_snapshot_v1.json")
+
+    private fun loadSnapshotAsync() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val file = snapshotFile()
+                if (!file.exists() || file.length() == 0L) return@launch
+                val arr = org.json.JSONArray(file.readText())
+                val cached = ArrayList<Song>(arr.length())
+                for (i in 0 until arr.length()) {
+                    val obj = arr.optJSONObject(i) ?: continue
+                    val artStr = obj.optString("albumArtUri", "")
+                    cached.add(
+                        Song(
+                            id = obj.optLong("id", 0L),
+                            title = obj.optString("title", "Unknown"),
+                            artist = obj.optString("artist", "Unknown Artist"),
+                            album = obj.optString("album", "Unknown Album"),
+                            duration = obj.optLong("duration", 0L),
+                            albumArtUri = if (artStr.isNotBlank()) Uri.parse(artStr) else null,
+                            path = obj.optString("path", ""),
+                            dateAdded = obj.optLong("dateAdded", 0L),
+                            albumId = obj.optLong("albumId", 0L),
+                            mimeType = obj.optString("mimeType", "").ifBlank { null },
+                            fileSize = obj.optLong("fileSize", 0L)
+                        )
+                    )
+                }
+                if (cached.isNotEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        if (!hasFreshLibrary && songs.isEmpty()) {
+                            songs = cached
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun saveSnapshotAsync(list: List<Song>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            synchronized(snapshotWriteLock) {
+                try {
+                    val arr = org.json.JSONArray()
+                    list.forEach { s ->
+                        arr.put(
+                            org.json.JSONObject().apply {
+                                put("id", s.id)
+                                put("title", s.title)
+                                put("artist", s.artist)
+                                put("album", s.album)
+                                put("duration", s.duration)
+                                put("albumArtUri", s.albumArtUri?.toString() ?: "")
+                                put("path", s.path)
+                                put("dateAdded", s.dateAdded)
+                                put("albumId", s.albumId)
+                                put("mimeType", s.mimeType ?: "")
+                                put("fileSize", s.fileSize)
+                            }
+                        )
+                    }
+                    val tmp = java.io.File(getApplication<Application>().filesDir, "library_snapshot_v1.json.tmp")
+                    tmp.writeText(arr.toString())
+                    tmp.renameTo(snapshotFile())
+                } catch (_: Exception) {}
+            }
         }
     }
 
@@ -537,12 +612,14 @@ class LibraryViewModel(
                 }
                 
                 // Update State on Main Thread
+                hasFreshLibrary = true
                 songs = result.songs
                 albums = result.albums
                 artists = result.artists
                 genres = result.genres
                 hiddenSongs = result.hiddenSongs
                 lrcKeys = result.lrcKeys
+                saveSnapshotAsync(result.songs)
                 
                 // Update version to force UI refresh (especially images)
                 libraryVersion = System.currentTimeMillis()

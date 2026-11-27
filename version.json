@@ -1,19 +1,19 @@
 {
-  "version": "2.5.63",
-  "version_code": 313,
-  "release_date": "2026-11-26",
-  "title": "OmniVault v2.5.63 — Windows PC & Android",
-  "changelog": "🔧 Android v2.5.63: Auto-actualización de yt-dlp (Nightly/Stable), resolución de retos QuickJS/YouTube sin conflicto con cookies, registro de errores de descarga en LocalCrashLogger y notificaciones limpias",
+  "version": "2.5.64",
+  "version_code": 314,
+  "release_date": "2026-11-27",
+  "title": "OmniVault v2.5.64 — Windows PC & Android",
+  "changelog": "⚡ Android v2.5.64: Carga instantánea de biblioteca con caché local + Skeleton Loading, y barra flotante de volumen con saltos directos a 200% y 300% usando botones físicos",
   "android": {
-    "version": "2.5.63",
-    "version_code": 313,
-    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.63/OmniVault-v2.5.63-Android.apk",
+    "version": "2.5.64",
+    "version_code": 314,
+    "apk_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.64/OmniVault-v2.5.64-Android.apk",
     "min_version_code": 201
   },
   "windows": {
-    "version": "2.5.63",
-    "version_code": 313,
-    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.63/OmniVault-v2.5.63-Windows-x64-Setup.exe",
-    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.63/OmniVault-v2.5.63-Windows-x64-Portable.zip"
+    "version": "2.5.64",
+    "version_code": 314,
+    "setup_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.64/OmniVault-v2.5.64-Windows-x64-Setup.exe",
+    "portable_url": "https://github.com/SirDurand1708/UniversalMediaDownloader/releases/download/v2.5.64/OmniVault-v2.5.64-Windows-x64-Portable.zip"
   }
 }

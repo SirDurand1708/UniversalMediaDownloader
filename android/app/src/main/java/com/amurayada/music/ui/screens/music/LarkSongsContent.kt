@@ -2,11 +2,13 @@ package com.amurayada.music.ui.screens.music
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -61,6 +63,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -80,6 +83,7 @@ internal fun SongsListContent(
     currentSort: SongSort = SongSort.RECENT,
     lrcKeys: Set<String> = emptySet(),
     hiddenSongsCount: Int = 0,
+    isInitialLoading: Boolean = false,
     isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {},
     onShowHiddenSongs: () -> Unit = {},
@@ -100,7 +104,64 @@ internal fun SongsListContent(
     onHide: (Song) -> Unit,
     onDelete: (Song) -> Unit
 ) {
-    if (songs.isEmpty()) {
+    if (songs.isEmpty() && isInitialLoading) {
+        val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "skeleton")
+        val pulseAlpha by infiniteTransition.animateFloat(
+            initialValue = 0.28f,
+            targetValue = 0.65f,
+            animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                animation = androidx.compose.animation.core.tween(750),
+                repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+            ),
+            label = "skeleton_alpha"
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            repeat(10) {
+                Surface(
+                    color = MusicCardBg,
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, MusicBorder)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MusicBorder.copy(alpha = pulseAlpha))
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.68f)
+                                    .height(14.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(MusicBorder.copy(alpha = pulseAlpha))
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.42f)
+                                    .height(10.dp)
+                                    .clip(RoundedCornerShape(5.dp))
+                                    .background(MusicBorder.copy(alpha = pulseAlpha * 0.8f))
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        return
+    } else if (songs.isEmpty()) {
         PullToRefreshBox(
             isRefreshing = isRefreshing,
             onRefresh = onRefresh,

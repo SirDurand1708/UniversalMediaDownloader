@@ -389,6 +389,7 @@ fun LarkStyleMusicScreen(
                     currentSort = currentSort,
                     lrcKeys = libraryViewModel.lrcKeys,
                     hiddenSongsCount = libraryViewModel.hiddenSongs.size,
+                    isInitialLoading = libraryViewModel.isLoading && displayedSongs.isEmpty() && searchQuery.isBlank(),
                     isRefreshing = isRefreshing,
                     onRefresh = {
                         isRefreshing = true

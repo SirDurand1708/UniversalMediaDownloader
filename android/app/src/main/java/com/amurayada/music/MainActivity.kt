@@ -115,6 +115,77 @@ class MainActivity : ComponentActivity() {
     private var pendingAlbumUpdate: Triple<Long, String, String>? = null
     private var pendingAlbumArt: android.net.Uri? = null
 
+    private val volumeHudVisible = mutableStateOf(false)
+    private val volumeHudPercent = mutableIntStateOf(100)
+    private val volumeHudTick = mutableLongStateOf(0L)
+
+    private fun readTotalVolumePercent(): Int {
+        val am = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+            ?: return 100
+        val currentVol = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+        val maxVol = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        val systemPct = ((currentVol * 100f) / maxVol).let { kotlin.math.round(it).toInt() }.coerceIn(0, 100)
+        val boost = com.amurayada.music.utils.AudioEffectsManager.volumeBoost.value
+        return if (currentVol >= maxVol && boost > 100) boost else systemPct
+    }
+
+    private fun applyTotalVolumePercent(targetPct: Int) {
+        val clamped = targetPct.coerceIn(0, 300)
+        val am = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+        if (am != null) {
+            val maxVol = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+            if (clamped <= 100) {
+                val targetStream = kotlin.math.round((clamped / 100f) * maxVol).toInt().coerceIn(0, maxVol)
+                am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, targetStream, 0)
+                com.amurayada.music.utils.AudioEffectsManager.setVolumeBoost(100, this)
+            } else {
+                am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, maxVol, 0)
+                com.amurayada.music.utils.AudioEffectsManager.setVolumeBoost(clamped, this)
+            }
+        }
+        volumeHudPercent.intValue = clamped
+        volumeHudVisible.value = true
+        volumeHudTick.longValue = System.currentTimeMillis()
+    }
+
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent?): Boolean {
+        if (keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP || keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN) {
+            val am = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+            if (am != null && am.mode == android.media.AudioManager.MODE_NORMAL) {
+                val maxVol = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+                val currentVol = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+                val boost = com.amurayada.music.utils.AudioEffectsManager.volumeBoost.value
+
+                if (keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP) {
+                    if (currentVol < maxVol) {
+                        am.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.ADJUST_RAISE, 0)
+                        if (boost != 100) {
+                            com.amurayada.music.utils.AudioEffectsManager.setVolumeBoost(100, this)
+                        }
+                    } else {
+                        val nextBoost = when {
+                            boost < 200 -> 200
+                            boost < 300 -> 300
+                            else -> 300
+                        }
+                        com.amurayada.music.utils.AudioEffectsManager.setVolumeBoost(nextBoost, this)
+                    }
+                } else {
+                    when {
+                        boost > 200 -> com.amurayada.music.utils.AudioEffectsManager.setVolumeBoost(200, this)
+                        boost > 100 -> com.amurayada.music.utils.AudioEffectsManager.setVolumeBoost(100, this)
+                        else -> am.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.ADJUST_LOWER, 0)
+                    }
+                }
+                volumeHudPercent.intValue = readTotalVolumePercent()
+                volumeHudVisible.value = true
+                volumeHudTick.longValue = System.currentTimeMillis()
+                return true
+            }
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         android.util.Log.d("MainActivity", "onActivityResult: requestCode=$requestCode, resultCode=$resultCode")
@@ -250,7 +321,9 @@ class MainActivity : ComponentActivity() {
                         } catch (_: Exception) {
                             // En Android 12+ si la Activity aún está transicionando a background, MediaController vinculará el servicio al reproducir
                         }
-                        libraryViewModel.loadLibrary()
+                        if (libraryViewModel.songs.isEmpty() || !libraryViewModel.isLoading) {
+                            libraryViewModel.loadLibrary()
+                        }
                     }
                     
                     MusicPlayerApp(
@@ -290,6 +363,20 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 }
+
+                LaunchedEffect(volumeHudTick.longValue, volumeHudVisible.value) {
+                    if (volumeHudVisible.value) {
+                        kotlinx.coroutines.delay(2600L)
+                        volumeHudVisible.value = false
+                    }
+                }
+
+                com.amurayada.music.ui.components.VolumeBoostHud(
+                    visible = volumeHudVisible.value,
+                    percent = volumeHudPercent.intValue,
+                    onPercentChange = { newPct -> applyTotalVolumePercent(newPct) },
+                    onDismiss = { volumeHudVisible.value = false }
+                )
             }
         }
     }
